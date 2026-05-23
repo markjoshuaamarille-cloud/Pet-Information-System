@@ -1,0 +1,25 @@
+Need to improve:
+			Improvements
+-/pets = in "add health record" the medication need to add quantity and must reflect in inventory
+-/medicines = medicine inventory in the add medicine add category:
+Category:
+→ Medicine
+→ Vaccine
+→ Supplement / Vitamin
+→ Consumable / Supply
+→ Parasite Control
+→ Grooming / Hygiene
+→ Pet Food
+
+and quantity and unit must seperate
+
+-add consultation module
+-in vaccinations must not reflect in the appointment when the status is completed
+-in grooming must not reflect in the appointment when the status is completed
+-/appointments can change the status of appointments when they change status in their specific module
+
+PLAN:
+What is still not yet implemented (from your full workflow spec)
+OTP-based authentication
+SMS/Push notification delivery
+Separate mobile app client
