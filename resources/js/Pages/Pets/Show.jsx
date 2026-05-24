@@ -10,8 +10,14 @@ const categoryLabels = {
     medicine: 'Medicine',
     supplement_vitamin: 'Supplement / Vitamin',
 };
+const vaccinationStatusLabels = {
+    up_to_date: 'Up to Date',
+    partial: 'Partial',
+    not_vaccinated: 'Not Vaccinated',
+    unknown: 'Unknown',
+};
 
-export default function PetShow({ pet, medicines }) {
+export default function PetShow({ pet, medicines, can_manage_health_records }) {
     const healthForm = useForm({
         type: 'consultation', title: '', description: '', medicine_id: '', dosage: '', medication_quantity: '',
         record_date: new Date().toISOString().slice(0, 10), next_due_date: '', veterinarian_notes: '',
@@ -40,68 +46,75 @@ export default function PetShow({ pet, medicines }) {
                                 <div><dt className="text-gray-500">Owner</dt><dd>{pet.client?.name} — {pet.client?.contact}</dd></div>
                                 <div><dt className="text-gray-500">Species / Breed</dt><dd>{pet.species} {pet.breed && `/ ${pet.breed}`}</dd></div>
                                 <div><dt className="text-gray-500">Age / Gender</dt><dd>{pet.age ?? '—'} / {pet.gender ?? '—'}</dd></div>
+                                <div><dt className="text-gray-500">Birth Date</dt><dd>{pet.birth_date || '—'}</dd></div>
+                                <div><dt className="text-gray-500">Weight</dt><dd>{pet.weight ? `${pet.weight} kg` : '—'}</dd></div>
+                                <div><dt className="text-gray-500">Color</dt><dd>{pet.color || '—'}</dd></div>
+                                <div><dt className="text-gray-500">Microchip No</dt><dd>{pet.microchip_no || '—'}</dd></div>
+                                <div><dt className="text-gray-500">Vaccination Status</dt><dd>{vaccinationStatusLabels[pet.vaccination_status] ?? 'Unknown'}</dd></div>
                                 <div><dt className="text-gray-500">Medical History</dt><dd>{pet.medical_history || 'None recorded'}</dd></div>
                             </dl>
                         </div>
 
-                        <form onSubmit={addHealth} className="rounded-lg bg-white p-6 shadow">
-                            <h3 className="mb-3 font-semibold">Add Health Record</h3>
-                            <div className="grid gap-3 sm:grid-cols-2">
-                                <div>
-                                    <InputLabel value="Type" />
-                                    <select
-                                        className="mt-1 w-full rounded-md border-gray-300"
-                                        value={healthForm.data.type}
-                                        onChange={(e) => {
-                                            const value = e.target.value;
-                                            if (value !== 'medication') {
-                                                healthForm.setData({
-                                                    ...healthForm.data,
-                                                    type: value,
-                                                    medicine_id: '',
-                                                    dosage: '',
-                                                    medication_quantity: '',
-                                                });
-                                            } else {
-                                                healthForm.setData('type', value);
-                                            }
-                                        }}
-                                    >
-                                        {types.map((t) => <option key={t} value={t}>{t}</option>)}
-                                    </select>
+                        {can_manage_health_records && (
+                            <form onSubmit={addHealth} className="rounded-lg bg-white p-6 shadow">
+                                <h3 className="mb-3 font-semibold">Add Health Record</h3>
+                                <div className="grid gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <InputLabel value="Type" />
+                                        <select
+                                            className="mt-1 w-full rounded-md border-gray-300"
+                                            value={healthForm.data.type}
+                                            onChange={(e) => {
+                                                const value = e.target.value;
+                                                if (value !== 'medication') {
+                                                    healthForm.setData({
+                                                        ...healthForm.data,
+                                                        type: value,
+                                                        medicine_id: '',
+                                                        dosage: '',
+                                                        medication_quantity: '',
+                                                    });
+                                                } else {
+                                                    healthForm.setData('type', value);
+                                                }
+                                            }}
+                                        >
+                                            {types.map((t) => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </div>
+                                    <div><InputLabel value="Title" /><TextInput className="mt-1 block w-full" value={healthForm.data.title} onChange={(e) => healthForm.setData('title', e.target.value)} required /></div>
+                                    <div><InputLabel value="Date" /><TextInput type="date" className="mt-1 block w-full" value={healthForm.data.record_date} onChange={(e) => healthForm.setData('record_date', e.target.value)} required /></div>
+                                    <div><InputLabel value="Next Due" /><TextInput type="date" className="mt-1 block w-full" value={healthForm.data.next_due_date} onChange={(e) => healthForm.setData('next_due_date', e.target.value)} /></div>
+                                    {healthForm.data.type === 'medication' && (
+                                        <>
+                                            <div>
+                                                <InputLabel value="Medicine" />
+                                                <select className="mt-1 w-full rounded-md border-gray-300" value={healthForm.data.medicine_id} onChange={(e) => healthForm.setData('medicine_id', e.target.value)}>
+                                                    <option value="">Select</option>
+                                                    {medicines
+                                                        .filter((m) => Number(m.quantity) > 0)
+                                                        .map((m) => <option key={m.id} value={m.id}>{m.name} ({categoryLabels[m.category] ?? 'Medicine'})</option>)}
+                                                </select>
+                                            </div>
+                                            <div><InputLabel value="Dosage" /><TextInput className="mt-1 block w-full" value={healthForm.data.dosage} onChange={(e) => healthForm.setData('dosage', e.target.value)} /></div>
+                                            <div>
+                                                <InputLabel value="Quantity Used" />
+                                                <TextInput
+                                                    type="number"
+                                                    min="1"
+                                                    className="mt-1 block w-full"
+                                                    value={healthForm.data.medication_quantity}
+                                                    onChange={(e) => healthForm.setData('medication_quantity', e.target.value)}
+                                                    required
+                                                />
+                                            </div>
+                                        </>
+                                    )}
                                 </div>
-                                <div><InputLabel value="Title" /><TextInput className="mt-1 block w-full" value={healthForm.data.title} onChange={(e) => healthForm.setData('title', e.target.value)} required /></div>
-                                <div><InputLabel value="Date" /><TextInput type="date" className="mt-1 block w-full" value={healthForm.data.record_date} onChange={(e) => healthForm.setData('record_date', e.target.value)} required /></div>
-                                <div><InputLabel value="Next Due" /><TextInput type="date" className="mt-1 block w-full" value={healthForm.data.next_due_date} onChange={(e) => healthForm.setData('next_due_date', e.target.value)} /></div>
-                                {healthForm.data.type === 'medication' && (
-                                    <>
-                                        <div>
-                                            <InputLabel value="Medicine" />
-                                            <select className="mt-1 w-full rounded-md border-gray-300" value={healthForm.data.medicine_id} onChange={(e) => healthForm.setData('medicine_id', e.target.value)}>
-                                                <option value="">Select</option>
-                                                {medicines
-                                                    .filter((m) => Number(m.quantity) > 0)
-                                                    .map((m) => <option key={m.id} value={m.id}>{m.name} ({categoryLabels[m.category] ?? 'Medicine'})</option>)}
-                                            </select>
-                                        </div>
-                                        <div><InputLabel value="Dosage" /><TextInput className="mt-1 block w-full" value={healthForm.data.dosage} onChange={(e) => healthForm.setData('dosage', e.target.value)} /></div>
-                                        <div>
-                                            <InputLabel value="Quantity Used" />
-                                            <TextInput
-                                                type="number"
-                                                min="1"
-                                                className="mt-1 block w-full"
-                                                value={healthForm.data.medication_quantity}
-                                                onChange={(e) => healthForm.setData('medication_quantity', e.target.value)}
-                                                required
-                                            />
-                                        </div>
-                                    </>
-                                )}
-                            </div>
-                            <textarea className="mt-3 w-full rounded-md border-gray-300 text-sm" placeholder="Notes" rows={2} value={healthForm.data.veterinarian_notes} onChange={(e) => healthForm.setData('veterinarian_notes', e.target.value)} />
-                            <PrimaryButton className="mt-3" disabled={healthForm.processing}>Add Record</PrimaryButton>
-                        </form>
+                                <textarea className="mt-3 w-full rounded-md border-gray-300 text-sm" placeholder="Notes" rows={2} value={healthForm.data.veterinarian_notes} onChange={(e) => healthForm.setData('veterinarian_notes', e.target.value)} />
+                                <PrimaryButton className="mt-3" disabled={healthForm.processing}>Add Record</PrimaryButton>
+                            </form>
+                        )}
                     </div>
 
                     <div className="rounded-lg bg-white p-6 shadow">
@@ -125,7 +138,9 @@ export default function PetShow({ pet, medicines }) {
                                             )}
                                             {r.veterinarian_notes && <p>{r.veterinarian_notes}</p>}
                                         </div>
-                                        <button onClick={() => confirm('Delete?') && router.delete(route('health-records.destroy', [pet.id, r.id]))} className="text-red-600 hover:underline">Delete</button>
+                                        {can_manage_health_records && (
+                                            <button onClick={() => confirm('Delete?') && router.delete(route('health-records.destroy', [pet.id, r.id]))} className="text-red-600 hover:underline">Delete</button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

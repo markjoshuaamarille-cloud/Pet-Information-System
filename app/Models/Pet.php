@@ -18,8 +18,21 @@ class Pet extends Model
         'breed',
         'age',
         'gender',
+        'birth_date',
+        'weight',
+        'color',
+        'microchip_no',
+        'vaccination_status',
         'medical_history',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'birth_date' => 'date',
+            'weight' => 'decimal:2',
+        ];
+    }
 
     public function client(): BelongsTo
     {

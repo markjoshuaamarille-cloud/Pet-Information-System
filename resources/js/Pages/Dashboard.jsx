@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, router } from '@inertiajs/react';
 
 export default function Dashboard({
     stats,
@@ -9,6 +9,8 @@ export default function Dashboard({
     expiringSoon,
     upcomingAppointments,
     dueHealthRecords,
+    appointmentsSectionTitle = 'Upcoming Appointments',
+    canManageAppointmentStatus = false,
 }) {
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Pet Care Management Dashboard</h2>}>
@@ -50,7 +52,7 @@ export default function Dashboard({
 
                     <div className="grid gap-6 lg:grid-cols-2">
                         <div className="rounded-lg bg-white p-5 shadow">
-                            <h3 className="mb-3 font-semibold">Upcoming Appointments</h3>
+                            <h3 className="mb-3 font-semibold">{appointmentsSectionTitle}</h3>
                             {upcomingAppointments.length === 0 ? (
                                 <p className="text-sm text-gray-500">No upcoming appointments.</p>
                             ) : (
@@ -60,6 +62,23 @@ export default function Dashboard({
                                             <strong>{a.pet?.pet_name}</strong> — {a.type} with {a.client?.name}
                                             <br />
                                             <span className="text-gray-500">{new Date(a.scheduled_at).toLocaleString()}</span>
+                                            <span className="ml-2 text-xs font-medium uppercase text-gray-600">[{a.status}]</span>
+                                            {canManageAppointmentStatus && a.status !== 'completed' && (
+                                                <button
+                                                    type="button"
+                                                    className="ml-3 text-xs font-medium text-emerald-700 hover:underline"
+                                                    onClick={() => router.put(route('appointments.update', a.id), {
+                                                        pet_id: a.pet_id,
+                                                        client_id: a.client_id,
+                                                        scheduled_at: a.scheduled_at,
+                                                        type: a.type,
+                                                        status: 'completed',
+                                                        notes: a.notes ?? '',
+                                                    })}
+                                                >
+                                                    Mark completed
+                                                </button>
+                                            )}
                                         </li>
                                     ))}
                                 </ul>

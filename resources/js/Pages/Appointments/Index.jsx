@@ -5,7 +5,7 @@ import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
 import { Head, useForm, router } from '@inertiajs/react';
 
-export default function AppointmentsIndex({ appointments, pets, clients }) {
+export default function AppointmentsIndex({ appointments, pets, clients, can_manage_status }) {
     const form = useForm({
         pet_id: '', client_id: '', scheduled_at: '', type: 'checkup', status: 'scheduled', notes: '',
     });
@@ -62,8 +62,12 @@ export default function AppointmentsIndex({ appointments, pets, clients }) {
                                         <td className="px-4 py-3">{a.type}</td>
                                         <td className="px-4 py-3">{a.status}</td>
                                         <td className="px-4 py-3 text-right">
-                                            <button onClick={() => router.put(route('appointments.update', a.id), { ...a, status: 'completed' })} className="text-green-600 hover:underline">Complete</button>
-                                            <button onClick={() => confirm('Cancel?') && router.delete(route('appointments.destroy', a.id))} className="ms-3 text-red-600 hover:underline">Delete</button>
+                                            {can_manage_status && a.status !== 'completed' && (
+                                                <button onClick={() => router.put(route('appointments.update', a.id), { ...a, status: 'completed' })} className="text-green-600 hover:underline">Complete</button>
+                                            )}
+                                            {a.status !== 'completed' && (
+                                                <button onClick={() => confirm('Cancel?') && router.delete(route('appointments.destroy', a.id))} className="ms-3 text-red-600 hover:underline">{can_manage_status ? 'Delete' : 'Cancel'}</button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

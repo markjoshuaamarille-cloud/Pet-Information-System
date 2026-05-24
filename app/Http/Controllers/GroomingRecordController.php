@@ -7,6 +7,7 @@ use App\Models\GroomingRecord;
 use App\Models\Pet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -62,10 +63,14 @@ class GroomingRecordController extends Controller
     {
         return $request->validate([
             'pet_id' => 'required|exists:pets,id',
-            'appointment_id' => 'nullable|exists:appointments,id',
+            'appointment_id' => [
+                'required',
+                Rule::exists('appointments', 'id')->where(
+                    fn ($query) => $query->where('type', 'grooming')
+                ),
+            ],
             'service_type' => 'required|string|max:255',
             'service_date' => 'required|date',
-            'price' => 'required|numeric|min:0',
             'status' => 'required|in:scheduled,completed,cancelled',
             'notes' => 'nullable|string',
         ]);

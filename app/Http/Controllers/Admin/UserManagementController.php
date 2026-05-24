@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Client;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,10 +32,24 @@ class UserManagementController extends Controller
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
 
+        $clientId = null;
+        if ($validated['role'] === 'customer') {
+            $client = Client::firstOrCreate(
+                ['email' => $validated['email']],
+                [
+                    'name' => $validated['name'],
+                    'contact' => 'N/A',
+                    'address' => null,
+                ]
+            );
+            $clientId = $client->id;
+        }
+
         User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
             'role' => $validated['role'],
+            'client_id' => $clientId,
             'password' => Hash::make($validated['password']),
         ]);
 
@@ -47,7 +62,25 @@ class UserManagementController extends Controller
             'role' => ['required', Rule::in($this->roles())],
         ]);
 
-        $user->update(['role' => $validated['role']]);
+        $updates = ['role' => $validated['role']];
+
+        if ($validated['role'] === 'customer' && ! $user->client_id) {
+            $client = Client::firstOrCreate(
+                ['email' => $user->email],
+                [
+                    'name' => $user->name,
+                    'contact' => 'N/A',
+                    'address' => null,
+                ]
+            );
+            $updates['client_id'] = $client->id;
+        }
+
+        if ($validated['role'] !== 'customer') {
+            $updates['client_id'] = null;
+        }
+
+        $user->update($updates);
 
         return redirect()->back()->with('success', 'User role updated.');
     }

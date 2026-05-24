@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Medicine;
 use App\Models\SystemNotification;
+use App\Models\User;
 use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -12,6 +13,34 @@ class NotificationController extends Controller
 {
     public function index(): Response
     {
+        $user = auth()->user();
+        $user = $user instanceof User ? $user : null;
+
+        if ($user?->isCustomer()) {
+            if (! $user->client_id) {
+                return Inertia::render('Notifications/Index', [
+                    'notifications' => [],
+                ]);
+            }
+
+            $notifications = SystemNotification::with(['pet', 'client'])
+                ->where('client_id', $user->client_id)
+                ->latest()
+                ->limit(50)
+                ->get()
+                ->map(fn (SystemNotification $notification) => [
+                    'type' => $notification->type,
+                    'severity' => $notification->severity,
+                    'message' => $notification->message,
+                    'title' => $notification->title,
+                    'created_at' => $notification->created_at?->toIso8601String(),
+                ]);
+
+            return Inertia::render('Notifications/Index', [
+                'notifications' => $notifications,
+            ]);
+        }
+
         $expired = Medicine::expired()->orderBy('expiry_date')->get();
         $critical = Medicine::criticalStock()->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
         $expiringSoon = Medicine::expiringSoon()->whereDate('expiry_date', '>=', now())->get();

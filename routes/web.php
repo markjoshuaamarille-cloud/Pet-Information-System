@@ -30,30 +30,40 @@ Route::get('/', function () {
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
-    Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
-    Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
-    Route::put('/clients/{client}', [ClientController::class, 'update'])->name('clients.update');
-    Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
+    Route::middleware('role:super_admin,receptionist')->group(function () {
+        Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
+        Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
+        Route::put('/clients/{client}', [ClientController::class, 'update'])->name('clients.update');
+        Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
+    });
 
-    Route::get('/pets', [PetController::class, 'index'])->name('pets.index');
-    Route::post('/pets', [PetController::class, 'store'])->name('pets.store');
-    Route::get('/pets/{pet}', [PetController::class, 'show'])->name('pets.show');
-    Route::get('/pets/{pet}/client-record', [PetController::class, 'clientRecord'])->name('pets.client-record');
-    Route::put('/pets/{pet}', [PetController::class, 'update'])->name('pets.update');
-    Route::delete('/pets/{pet}', [PetController::class, 'destroy'])->name('pets.destroy');
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer')->group(function () {
+        Route::get('/pets', [PetController::class, 'index'])->name('pets.index');
+        Route::post('/pets', [PetController::class, 'store'])->name('pets.store');
+        Route::get('/pets/{pet}', [PetController::class, 'show'])->name('pets.show');
+        Route::get('/pets/{pet}/client-record', [PetController::class, 'clientRecord'])->name('pets.client-record');
+        Route::put('/pets/{pet}', [PetController::class, 'update'])->name('pets.update');
+        Route::delete('/pets/{pet}', [PetController::class, 'destroy'])->name('pets.destroy');
+    });
 
-    Route::post('/pets/{pet}/health-records', [HealthRecordController::class, 'store'])->name('health-records.store');
-    Route::delete('/pets/{pet}/health-records/{healthRecord}', [HealthRecordController::class, 'destroy'])->name('health-records.destroy');
+    Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
+        Route::post('/pets/{pet}/health-records', [HealthRecordController::class, 'store'])->name('health-records.store');
+        Route::delete('/pets/{pet}/health-records/{healthRecord}', [HealthRecordController::class, 'destroy'])->name('health-records.destroy');
+    });
 
-    Route::get('/medicines', [MedicineController::class, 'index'])->name('medicines.index');
-    Route::post('/medicines', [MedicineController::class, 'store'])->name('medicines.store');
-    Route::put('/medicines/{medicine}', [MedicineController::class, 'update'])->name('medicines.update');
-    Route::delete('/medicines/{medicine}', [MedicineController::class, 'destroy'])->name('medicines.destroy');
+    Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
+        Route::get('/medicines', [MedicineController::class, 'index'])->name('medicines.index');
+        Route::post('/medicines', [MedicineController::class, 'store'])->name('medicines.store');
+        Route::put('/medicines/{medicine}', [MedicineController::class, 'update'])->name('medicines.update');
+        Route::delete('/medicines/{medicine}', [MedicineController::class, 'destroy'])->name('medicines.destroy');
+    });
 
-    Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
-    Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
-    Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
-    Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer')->group(function () {
+        Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
+        Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
+        Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
+        Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
+    });
 
     Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
         Route::get('/vaccinations', [VaccinationController::class, 'index'])->name('vaccinations.index');
@@ -77,7 +87,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/billing/{billing}/payments', [BillingController::class, 'storePayment'])->name('billing.payments.store');
     });
 
-    Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer')->group(function () {
+        Route::get('/notifications', [NotificationController::class, 'index'])->name('notifications.index');
+    });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier')->group(function () {
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');

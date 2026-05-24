@@ -22,6 +22,19 @@ export default function ClientRecord({ pet }) {
                     <p><strong>Name:</strong> {pet.pet_name}</p>
                     <p><strong>Species:</strong> {pet.species} · <strong>Breed:</strong> {pet.breed || '—'}</p>
                     <p><strong>Age:</strong> {pet.age ?? '—'} · <strong>Gender:</strong> {pet.gender || '—'}</p>
+                    <p><strong>Birth Date:</strong> {pet.birth_date || '—'}</p>
+                    <p><strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : '—'}</p>
+                    <p><strong>Color:</strong> {pet.color || '—'}</p>
+                    <p><strong>Microchip No:</strong> {pet.microchip_no || '—'}</p>
+                    <p>
+                        <strong>Vaccination Status:</strong>{' '}
+                        {{
+                            up_to_date: 'Up to Date',
+                            partial: 'Partial',
+                            not_vaccinated: 'Not Vaccinated',
+                            unknown: 'Unknown',
+                        }[pet.vaccination_status] || 'Unknown'}
+                    </p>
                     <p><strong>General Notes:</strong> {pet.medical_history || 'None'}</p>
                 </section>
 
