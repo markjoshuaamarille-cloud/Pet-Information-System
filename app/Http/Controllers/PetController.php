@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -54,11 +55,18 @@ class PetController extends Controller
             'microchip_no' => 'nullable|string|max:100|unique:pets,microchip_no',
             'vaccination_status' => ['nullable', Rule::in(['up_to_date', 'partial', 'not_vaccinated', 'unknown'])],
             'medical_history' => 'nullable|string',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
 
         if ($user?->isCustomer()) {
             $validated['client_id'] = $this->customerClientId($user);
         }
+
+        if ($request->hasFile('photo')) {
+            $validated['photo_path'] = $request->file('photo')->store('pets', 's3');
+        }
+
+        unset($validated['photo']);
 
         Pet::create($validated);
 
@@ -109,11 +117,21 @@ class PetController extends Controller
             ],
             'vaccination_status' => ['nullable', Rule::in(['up_to_date', 'partial', 'not_vaccinated', 'unknown'])],
             'medical_history' => 'nullable|string',
+            'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
         ]);
 
         if ($user?->isCustomer()) {
             $validated['client_id'] = $this->customerClientId($user);
         }
+
+        if ($request->hasFile('photo')) {
+            if ($pet->photo_path) {
+                Storage::disk('s3')->delete($pet->photo_path);
+            }
+            $validated['photo_path'] = $request->file('photo')->store('pets', 's3');
+        }
+
+        unset($validated['photo']);
 
         $pet->update($validated);
 
@@ -124,6 +142,10 @@ class PetController extends Controller
     {
         $user = $this->currentUser();
         $this->ensureCustomerOwnsPet($user, $pet);
+
+        if ($pet->photo_path) {
+            Storage::disk('s3')->delete($pet->photo_path);
+        }
 
         $pet->delete();
 

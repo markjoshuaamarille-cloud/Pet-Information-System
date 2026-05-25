@@ -1,5 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
+import InputError from '@/Components/InputError';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
@@ -30,22 +31,46 @@ export default function PetsIndex({ pets, clients }) {
         microchip_no: '',
         vaccination_status: 'unknown',
         medical_history: '',
+        photo: null,
     };
     const form = useForm(initialFormData);
 
     const submit = (e) => {
         e.preventDefault();
-        if (editingId) {
-            form.put(route('pets.update', editingId), {
-                onSuccess: () => {
-                    form.reset();
-                    setEditingId(null);
-                },
+
+        const submitOptions = {
+            preserveScroll: true,
+            onSuccess: () => {
+                form.transform((data) => data);
+                form.reset();
+                setEditingId(null);
+            },
+            onFinish: () => form.transform((data) => data),
+        };
+
+        const hasPhoto = form.data.photo instanceof File;
+
+        // PHP does not parse multipart bodies on PUT; use POST + _method when uploading files.
+        if (hasPhoto) {
+            form.transform((data) => ({
+                ...data,
+                ...(editingId ? { _method: 'put' } : {}),
+            }));
+            form.post(editingId ? route('pets.update', editingId) : route('pets.store'), {
+                ...submitOptions,
+                forceFormData: true,
             });
             return;
         }
 
-        form.post(route('pets.store'), { onSuccess: () => form.reset() });
+        form.transform(({ photo, ...data }) => data);
+
+        if (editingId) {
+            form.put(route('pets.update', editingId), submitOptions);
+            return;
+        }
+
+        form.post(route('pets.store'), submitOptions);
     };
 
     const startEdit = (pet) => {
@@ -57,12 +82,13 @@ export default function PetsIndex({ pets, clients }) {
             breed: pet.breed ?? '',
             age: pet.age ?? '',
             gender: pet.gender ?? '',
-            birth_date: pet.birth_date ?? '',
+            birth_date: pet.birth_date ? String(pet.birth_date).slice(0, 10) : '',
             weight: pet.weight ?? '',
             color: pet.color ?? '',
             microchip_no: pet.microchip_no ?? '',
             vaccination_status: pet.vaccination_status ?? 'unknown',
             medical_history: pet.medical_history ?? '',
+            photo: null,
         });
     };
 
@@ -90,8 +116,16 @@ export default function PetsIndex({ pets, clients }) {
                                     </select>
                                 </div>
                             )}
-                            <div><InputLabel value="Pet Name" /><TextInput className="mt-1 block w-full" value={form.data.pet_name} onChange={(e) => form.setData('pet_name', e.target.value)} required /></div>
-                            <div><InputLabel value="Species" /><TextInput className="mt-1 block w-full" value={form.data.species} onChange={(e) => form.setData('species', e.target.value)} required /></div>
+                            <div>
+                                <InputLabel value="Pet Name" />
+                                <TextInput className="mt-1 block w-full" value={form.data.pet_name} onChange={(e) => form.setData('pet_name', e.target.value)} required />
+                                <InputError message={form.errors.pet_name} className="mt-1" />
+                            </div>
+                            <div>
+                                <InputLabel value="Species" />
+                                <TextInput className="mt-1 block w-full" value={form.data.species} onChange={(e) => form.setData('species', e.target.value)} required />
+                                <InputError message={form.errors.species} className="mt-1" />
+                            </div>
                             <div><InputLabel value="Breed" /><TextInput className="mt-1 block w-full" value={form.data.breed} onChange={(e) => form.setData('breed', e.target.value)} /></div>
                             <div><InputLabel value="Age" /><TextInput type="number" className="mt-1 block w-full" value={form.data.age} onChange={(e) => form.setData('age', e.target.value)} /></div>
                             <div><InputLabel value="Gender" /><TextInput className="mt-1 block w-full" value={form.data.gender} onChange={(e) => form.setData('gender', e.target.value)} /></div>
@@ -107,10 +141,22 @@ export default function PetsIndex({ pets, clients }) {
                                     ))}
                                 </select>
                             </div>
+                            <div>
+                                <InputLabel value="Pet Photo (optional)" />
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/webp"
+                                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                    onChange={(e) => form.setData('photo', e.target.files?.[0] ?? null)}
+                                />
+                                <InputError message={form.errors.photo} className="mt-1" />
+                            </div>
                         </div>
                         <div className="mt-4"><InputLabel value="Medical History Notes" /><textarea className="mt-1 w-full rounded-md border-gray-300" rows={2} value={form.data.medical_history} onChange={(e) => form.setData('medical_history', e.target.value)} /></div>
                         <div className="mt-4 flex items-center gap-3">
-                            <PrimaryButton disabled={form.processing}>{editingId ? 'Update Pet' : 'Save Pet'}</PrimaryButton>
+                            <PrimaryButton disabled={form.processing}>
+                                {form.processing ? (editingId ? 'Updating…' : 'Saving…') : (editingId ? 'Update Pet' : 'Save Pet')}
+                            </PrimaryButton>
                             {editingId && (
                                 <button
                                     type="button"
@@ -124,10 +170,17 @@ export default function PetsIndex({ pets, clients }) {
                     </form>
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Name</th><th className="px-4 py-3 text-left">Species</th><th className="px-4 py-3 text-left">Microchip</th><th className="px-4 py-3 text-left">Vaccination</th><th className="px-4 py-3 text-left">Owner</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                            <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Photo</th><th className="px-4 py-3 text-left">Name</th><th className="px-4 py-3 text-left">Species</th><th className="px-4 py-3 text-left">Microchip</th><th className="px-4 py-3 text-left">Vaccination</th><th className="px-4 py-3 text-left">Owner</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
                                 {pets.map((p) => (
                                     <tr key={p.id}>
+                                        <td className="px-4 py-3">
+                                            {p.photo_url ? (
+                                                <img src={p.photo_url} alt={p.pet_name} className="h-10 w-10 rounded object-cover" />
+                                            ) : (
+                                                <span className="text-xs text-gray-400">No photo</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">{p.pet_name}</td>
                                         <td className="px-4 py-3">{p.species}</td>
                                         <td className="px-4 py-3">{p.microchip_no || '—'}</td>
