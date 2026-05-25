@@ -42,6 +42,19 @@ export default function PetShow({ pet, medicines, can_manage_health_records }) {
                     <div className="grid gap-6 lg:grid-cols-2">
                         <div className="rounded-lg bg-white p-6 shadow">
                             <h3 className="mb-3 font-semibold">Pet Information</h3>
+                            <div className="mb-4 flex items-start gap-4">
+                                {pet.photo_url ? (
+                                    <img
+                                        src={pet.photo_url}
+                                        alt={pet.pet_name}
+                                        className="h-32 w-32 shrink-0 rounded-lg border border-gray-200 object-cover shadow-sm"
+                                    />
+                                ) : (
+                                    <div className="flex h-32 w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400">
+                                        No photo
+                                    </div>
+                                )}
+                            </div>
                             <dl className="space-y-2 text-sm">
                                 <div><dt className="text-gray-500">Owner</dt><dd>{pet.client?.name} — {pet.client?.contact}</dd></div>
                                 <div><dt className="text-gray-500">Species / Breed</dt><dd>{pet.species} {pet.breed && `/ ${pet.breed}`}</dd></div>

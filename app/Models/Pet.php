@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Pet extends Model
 {
@@ -23,7 +24,12 @@ class Pet extends Model
         'color',
         'microchip_no',
         'vaccination_status',
+        'photo_path',
         'medical_history',
+    ];
+
+    protected $appends = [
+        'photo_url',
     ];
 
     protected function casts(): array
@@ -32,6 +38,22 @@ class Pet extends Model
             'birth_date' => 'date',
             'weight' => 'decimal:2',
         ];
+    }
+
+    public function getPhotoUrlAttribute(): ?string
+    {
+        if (! $this->photo_path) {
+            return null;
+        }
+
+        try {
+            /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+            $disk = Storage::disk('s3');
+
+            return $disk->temporaryUrl($this->photo_path, now()->addHour());
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function client(): BelongsTo
