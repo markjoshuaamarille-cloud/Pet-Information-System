@@ -20,14 +20,14 @@ export default function SurveyCreate({ questions }) {
     };
 
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">System Usability Survey (SUS)</h2>}>
-            <Head title="Usability Survey" />
+        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Clinic Service Satisfaction Survey</h2>}>
+            <Head title="Clinic Service Survey" />
             <div className="py-8">
                 <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
                     <div className="mb-6 rounded-lg border border-indigo-100 bg-indigo-50 p-4 text-sm text-indigo-900">
-                        <p><strong>Instrument:</strong> System Usability Scale (SUS) based on Lewis, J.R. (1995).</p>
-                        <p className="mt-1">Rate each statement from 1 (Strongly Disagree) to 5 (Strongly Agree). Score is computed automatically (0–100).</p>
+                        <p><strong>About this survey:</strong> Help us improve our pet care services by rating your experience with appointments, staff, treatment, billing, and clinic facilities.</p>
+                        <p className="mt-1">Rate each statement from 1 (Strongly Disagree) to 5 (Strongly Agree). Your satisfaction score is computed automatically (0–100).</p>
                         <Link href={route('survey.results')} className="mt-2 inline-block font-medium underline">View survey results</Link>
                     </div>
                     <form onSubmit={submit} className="space-y-6 rounded-lg bg-white p-6 shadow">

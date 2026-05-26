@@ -85,6 +85,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/billing/{billing}', [BillingController::class, 'update'])->name('billing.update');
         Route::delete('/billing/{billing}', [BillingController::class, 'destroy'])->name('billing.destroy');
         Route::post('/billing/{billing}/payments', [BillingController::class, 'storePayment'])->name('billing.payments.store');
+        Route::get('/billing/{billing}/receipt', [BillingController::class, 'receipt'])->name('billing.receipt');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer')->group(function () {

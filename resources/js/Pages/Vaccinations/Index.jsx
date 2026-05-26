@@ -1,32 +1,38 @@
-import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
-import FlashMessage from '@/Components/FlashMessage';
-import PrimaryButton from '@/Components/PrimaryButton';
-import TextInput from '@/Components/TextInput';
-import InputLabel from '@/Components/InputLabel';
-import { Head, useForm, router } from '@inertiajs/react';
-import { useState } from 'react';
+import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import FlashMessage from "@/Components/FlashMessage";
+import InputError from "@/Components/InputError";
+import PrimaryButton from "@/Components/PrimaryButton";
+import TextInput from "@/Components/TextInput";
+import InputLabel from "@/Components/InputLabel";
+import { Head, useForm, router } from "@inertiajs/react";
+import { useMemo, useState } from "react";
 
-const statuses = ['scheduled', 'completed', 'missed'];
+const statuses = ["scheduled", "completed", "missed"];
 
-export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppointments, vaccines }) {
+export default function VaccinationsIndex({
+    vaccinations,
+    pets,
+    vaccinationAppointments,
+    vaccines,
+}) {
     const [editing, setEditing] = useState(null);
     const form = useForm({
-        pet_id: '',
-        appointment_id: '',
-        medicine_id: '',
-        dose: '',
-        quantity_used: '1',
-        administered_on: '',
-        next_due_date: '',
-        status: 'completed',
-        notes: '',
+        pet_id: "",
+        appointment_id: "",
+        medicine_id: "",
+        dose: "",
+        quantity_used: "1",
+        administered_on: "",
+        next_due_date: "",
+        status: "completed",
+        notes: "",
     });
 
     const submit = (e) => {
         e.preventDefault();
 
         if (editing) {
-            form.put(route('vaccinations.update', editing), {
+            form.put(route("vaccinations.update", editing), {
                 onSuccess: () => {
                     resetForm();
                 },
@@ -34,7 +40,7 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
             return;
         }
 
-        form.post(route('vaccinations.store'), {
+        form.post(route("vaccinations.store"), {
             onSuccess: () => {
                 resetForm();
             },
@@ -43,8 +49,8 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
 
     const resetForm = () => {
         form.reset();
-        form.setData('quantity_used', '1');
-        form.setData('status', 'completed');
+        form.setData("quantity_used", "1");
+        form.setData("status", "completed");
         setEditing(null);
     };
 
@@ -52,61 +58,138 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
         setEditing(record.id);
         form.setData({
             pet_id: String(record.pet_id),
-            appointment_id: record.appointment_id ? String(record.appointment_id) : '',
-            medicine_id: record.medicine_id ? String(record.medicine_id) : '',
-            dose: record.dose || '',
+            appointment_id: record.appointment_id
+                ? String(record.appointment_id)
+                : "",
+            medicine_id: record.medicine_id ? String(record.medicine_id) : "",
+            dose: record.dose || "",
             quantity_used: String(record.quantity_used ?? 1),
-            administered_on: record.administered_on?.slice(0, 10) || '',
-            next_due_date: record.next_due_date?.slice(0, 10) || '',
+            administered_on: record.administered_on?.slice(0, 10) || "",
+            next_due_date: record.next_due_date?.slice(0, 10) || "",
             status: record.status,
-            notes: record.notes || '',
+            notes: record.notes || "",
         });
     };
 
     const onAppointmentChange = (appointmentId) => {
-        form.setData('appointment_id', appointmentId);
-
         if (!appointmentId) {
+            form.setData({
+                ...form.data,
+                appointment_id: "",
+                pet_id: "",
+            });
             return;
         }
 
-        const selected = vaccinationAppointments.find((appt) => String(appt.id) === appointmentId);
+        const selected = appointmentOptions.find(
+            (appt) => String(appt.id) === appointmentId,
+        );
         if (selected) {
-            form.setData('pet_id', String(selected.pet_id));
+            form.setData({
+                ...form.data,
+                appointment_id: appointmentId,
+                pet_id: String(selected.pet_id),
+            });
+            return;
         }
+
+        form.setData("appointment_id", appointmentId);
     };
 
+    const appointmentOptions = useMemo(() => {
+        const list = [...vaccinationAppointments];
+
+        if (editing) {
+            const record = vaccinations.find((entry) => entry.id === editing);
+            if (
+                record?.appointment &&
+                !list.some((appt) => appt.id === record.appointment.id)
+            ) {
+                list.unshift(record.appointment);
+            }
+        }
+
+        return list;
+    }, [vaccinationAppointments, editing, vaccinations]);
+
+    const selectedAppointment = useMemo(
+        () =>
+            form.data.appointment_id
+                ? (appointmentOptions.find(
+                      (appt) => String(appt.id) === form.data.appointment_id,
+                  ) ?? null)
+                : null,
+        [appointmentOptions, form.data.appointment_id],
+    );
+
+    const canCreateRecord = editing || appointmentOptions.length > 0;
+
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Vaccination Management</h2>}>
+        <AuthenticatedLayout
+            header={
+                <h2 className="text-xl font-semibold text-gray-800">
+                    Vaccination Management
+                </h2>
+            }
+        >
             <Head title="Vaccinations" />
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
-                    <form onSubmit={submit} className="mb-6 rounded-lg bg-white p-6 shadow">
-                        <h3 className="mb-4 font-semibold">{editing ? 'Edit Vaccination Record' : 'Add Vaccination Record'}</h3>
+                    <form
+                        onSubmit={submit}
+                        className="mb-6 rounded-lg bg-white p-6 shadow"
+                    >
+                        <h3 className="mb-4 font-semibold">
+                            {editing
+                                ? "Edit Vaccination Record"
+                                : "Add Vaccination Record"}
+                        </h3>
+                        {/* {!editing && vaccinationAppointments.length === 0 && (
+                            <p className="mb-4 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                Schedule a vaccination appointment first before
+                                creating a record.
+                            </p>
+                        )} */}
                         <div className="grid gap-4 sm:grid-cols-3">
                             <div>
-                                <InputLabel value="Vaccination Appointment (optional)" />
+                                <InputLabel value="Vaccination Appointment" />
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={form.data.appointment_id}
-                                    onChange={(e) => onAppointmentChange(e.target.value)}
+                                    onChange={(e) =>
+                                        onAppointmentChange(e.target.value)
+                                    }
+                                    required
                                 >
-                                    <option value="">No linked appointment</option>
-                                    {vaccinationAppointments.map((appt) => (
+                                    <option value="">
+                                        Select vaccination appointment
+                                    </option>
+                                    {appointmentOptions.map((appt) => (
                                         <option key={appt.id} value={appt.id}>
-                                            {appt.pet?.pet_name} ({appt.client?.name}) - {new Date(appt.scheduled_at).toLocaleDateString()}
+                                            {appt.pet?.pet_name} (
+                                            {appt.client?.name}) -{" "}
+                                            {new Date(
+                                                appt.scheduled_at,
+                                            ).toLocaleDateString()}
                                         </option>
                                     ))}
                                 </select>
+                                <InputError
+                                    message={form.errors.appointment_id}
+                                    className="mt-1"
+                                />
                             </div>
                             <div>
                                 <InputLabel value="Pet" />
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={form.data.pet_id}
-                                    onChange={(e) => form.setData('pet_id', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData("pet_id", e.target.value)
+                                    }
+                                    disabled={Boolean(selectedAppointment)}
                                     required
                                 >
                                     <option value="">Select pet</option>
@@ -122,13 +205,22 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={form.data.medicine_id}
-                                    onChange={(e) => form.setData('medicine_id', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "medicine_id",
+                                            e.target.value,
+                                        )
+                                    }
                                     required
                                 >
                                     <option value="">Select vaccine</option>
                                     {vaccines.map((vaccine) => (
-                                        <option key={vaccine.id} value={vaccine.id}>
-                                            {vaccine.name} ({vaccine.quantity} {vaccine.unit} available)
+                                        <option
+                                            key={vaccine.id}
+                                            value={vaccine.id}
+                                        >
+                                            {vaccine.name} ({vaccine.quantity}{" "}
+                                            {vaccine.unit} available)
                                         </option>
                                     ))}
                                 </select>
@@ -138,7 +230,9 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                 <TextInput
                                     className="mt-1 block w-full"
                                     value={form.data.dose}
-                                    onChange={(e) => form.setData('dose', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData("dose", e.target.value)
+                                    }
                                     placeholder="e.g. 1 mL"
                                 />
                             </div>
@@ -149,7 +243,12 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                     min="1"
                                     className="mt-1 block w-full"
                                     value={form.data.quantity_used}
-                                    onChange={(e) => form.setData('quantity_used', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "quantity_used",
+                                            e.target.value,
+                                        )
+                                    }
                                     required
                                 />
                             </div>
@@ -159,7 +258,12 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                     type="date"
                                     className="mt-1 block w-full"
                                     value={form.data.administered_on}
-                                    onChange={(e) => form.setData('administered_on', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "administered_on",
+                                            e.target.value,
+                                        )
+                                    }
                                     required
                                 />
                             </div>
@@ -169,7 +273,12 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                     type="date"
                                     className="mt-1 block w-full"
                                     value={form.data.next_due_date}
-                                    onChange={(e) => form.setData('next_due_date', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "next_due_date",
+                                            e.target.value,
+                                        )
+                                    }
                                 />
                             </div>
                             <div>
@@ -177,7 +286,9 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={form.data.status}
-                                    onChange={(e) => form.setData('status', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData("status", e.target.value)
+                                    }
                                 >
                                     {statuses.map((status) => (
                                         <option key={status} value={status}>
@@ -191,14 +302,20 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                                 <textarea
                                     className="mt-1 block w-full rounded-md border-gray-300"
                                     value={form.data.notes}
-                                    onChange={(e) => form.setData('notes', e.target.value)}
+                                    onChange={(e) =>
+                                        form.setData("notes", e.target.value)
+                                    }
                                     rows={3}
                                 />
                             </div>
                         </div>
 
                         <div className="mt-4 flex items-center gap-3">
-                            <PrimaryButton disabled={form.processing}>Save</PrimaryButton>
+                            <PrimaryButton
+                                disabled={form.processing || !canCreateRecord}
+                            >
+                                Save
+                            </PrimaryButton>
                             {editing && (
                                 <button
                                     type="button"
@@ -216,31 +333,81 @@ export default function VaccinationsIndex({ vaccinations, pets, vaccinationAppoi
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-4 py-3 text-left">Pet</th>
-                                    <th className="px-4 py-3 text-left">Vaccine</th>
-                                    <th className="px-4 py-3 text-left">Qty Used</th>
-                                    <th className="px-4 py-3 text-left">Dose</th>
-                                    <th className="px-4 py-3 text-left">Given</th>
-                                    <th className="px-4 py-3 text-left">Next Due</th>
-                                    <th className="px-4 py-3 text-left">Status</th>
-                                    <th className="px-4 py-3 text-right">Actions</th>
+                                    <th className="px-4 py-3 text-left">
+                                        Vaccine
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Qty Used
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Dose
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Given
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Next Due
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Status
+                                    </th>
+                                    <th className="px-4 py-3 text-right">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
                                 {vaccinations.map((record) => (
                                     <tr key={record.id}>
-                                        <td className="px-4 py-3">{record.pet?.pet_name}</td>
-                                        <td className="px-4 py-3">{record.medicine?.name ?? record.vaccine_name}</td>
-                                        <td className="px-4 py-3">{record.quantity_used ?? 1}</td>
-                                        <td className="px-4 py-3">{record.dose || '-'}</td>
-                                        <td className="px-4 py-3">{record.administered_on?.slice(0, 10)}</td>
-                                        <td className="px-4 py-3">{record.next_due_date?.slice(0, 10) || '-'}</td>
-                                        <td className="px-4 py-3 capitalize">{record.status}</td>
+                                        <td className="px-4 py-3">
+                                            {record.pet?.pet_name}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.medicine?.name ??
+                                                record.vaccine_name}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.quantity_used ?? 1}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.dose || "-"}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.administered_on?.slice(
+                                                0,
+                                                10,
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.next_due_date?.slice(
+                                                0,
+                                                10,
+                                            ) || "-"}
+                                        </td>
+                                        <td className="px-4 py-3 capitalize">
+                                            {record.status}
+                                        </td>
                                         <td className="px-4 py-3 text-right">
-                                            <button onClick={() => startEdit(record)} className="text-indigo-600 hover:underline">
+                                            <button
+                                                onClick={() =>
+                                                    startEdit(record)
+                                                }
+                                                className="text-indigo-600 hover:underline"
+                                            >
                                                 Edit
                                             </button>
                                             <button
-                                                onClick={() => confirm('Delete vaccination record?') && router.delete(route('vaccinations.destroy', record.id))}
+                                                onClick={() =>
+                                                    confirm(
+                                                        "Delete vaccination record?",
+                                                    ) &&
+                                                    router.delete(
+                                                        route(
+                                                            "vaccinations.destroy",
+                                                            record.id,
+                                                        ),
+                                                    )
+                                                }
                                                 className="ms-3 text-red-600 hover:underline"
                                             >
                                                 Delete

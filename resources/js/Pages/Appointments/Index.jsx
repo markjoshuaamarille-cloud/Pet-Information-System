@@ -5,7 +5,7 @@ import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
 import { Head, useForm, router } from '@inertiajs/react';
 
-export default function AppointmentsIndex({ appointments, pets, clients, can_manage_status }) {
+export default function AppointmentsIndex({ appointments, pets, clients, can_manage_status, serviceTypes }) {
     const form = useForm({
         pet_id: '', client_id: '', scheduled_at: '', type: 'checkup', status: 'scheduled', notes: '',
     });
@@ -20,6 +20,8 @@ export default function AppointmentsIndex({ appointments, pets, clients, can_man
         const pet = pets.find((p) => String(p.id) === petId);
         if (pet) form.setData('client_id', String(pet.client_id));
     };
+
+    const labelFor = (type) => serviceTypes?.[type] ?? type;
 
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Scheduling</h2>}>
@@ -42,9 +44,11 @@ export default function AppointmentsIndex({ appointments, pets, clients, can_man
                                 <TextInput type="datetime-local" className="mt-1 block w-full" value={form.data.scheduled_at} onChange={(e) => form.setData('scheduled_at', e.target.value)} required />
                             </div>
                             <div>
-                                <InputLabel value="Type" />
+                                <InputLabel value="Service Type" />
                                 <select className="mt-1 w-full rounded-md border-gray-300" value={form.data.type} onChange={(e) => form.setData('type', e.target.value)}>
-                                    {['checkup', 'vaccination', 'grooming', 'consultation', 'other'].map((t) => <option key={t} value={t}>{t}</option>)}
+                                    {Object.entries(serviceTypes).map(([value, label]) => (
+                                        <option key={value} value={value}>{label}</option>
+                                    ))}
                                 </select>
                             </div>
                         </div>
@@ -52,14 +56,14 @@ export default function AppointmentsIndex({ appointments, pets, clients, can_man
                     </form>
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Pet</th><th className="px-4 py-3 text-left">Client</th><th className="px-4 py-3 text-left">When</th><th className="px-4 py-3 text-left">Type</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                            <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Pet</th><th className="px-4 py-3 text-left">Client</th><th className="px-4 py-3 text-left">When</th><th className="px-4 py-3 text-left">Service</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
                                 {appointments.map((a) => (
                                     <tr key={a.id}>
                                         <td className="px-4 py-3">{a.pet?.pet_name}</td>
                                         <td className="px-4 py-3">{a.client?.name}</td>
                                         <td className="px-4 py-3">{new Date(a.scheduled_at).toLocaleString()}</td>
-                                        <td className="px-4 py-3">{a.type}</td>
+                                        <td className="px-4 py-3">{labelFor(a.type)}</td>
                                         <td className="px-4 py-3">{a.status}</td>
                                         <td className="px-4 py-3 text-right">
                                             {can_manage_status && a.status !== 'completed' && (

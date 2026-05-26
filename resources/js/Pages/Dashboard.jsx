@@ -2,6 +2,48 @@ import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
 import { Head, Link, router } from '@inertiajs/react';
 
+const formatDate = (value) => {
+    if (!value) {
+        return '—';
+    }
+
+    const iso = String(value);
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${Number(month)}/${Number(day)}/${year}`;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '—';
+    }
+
+    return date.toLocaleDateString();
+};
+
+const categoryStyles = {
+    vaccine: 'bg-sky-100 text-sky-800',
+    vaccination: 'bg-blue-100 text-blue-800',
+    medication: 'bg-purple-100 text-purple-800',
+    consultation: 'bg-gray-100 text-gray-800',
+    grooming: 'bg-emerald-100 text-emerald-800',
+    surgery: 'bg-rose-100 text-rose-800',
+    boarding: 'bg-amber-100 text-amber-800',
+    emergency_care: 'bg-red-100 text-red-800',
+};
+
+const serviceLabels = {
+    checkup: 'Checkup',
+    vaccination: 'Vaccination',
+    grooming: 'Grooming',
+    consultation: 'Consultation',
+    surgery: 'Surgery',
+    boarding: 'Boarding / Hotel',
+    emergency_care: 'Emergency Care',
+    other: 'Other',
+};
+
 export default function Dashboard({
     stats,
     expiredMedicines,
@@ -59,7 +101,7 @@ export default function Dashboard({
                                 <ul className="space-y-2 text-sm">
                                     {upcomingAppointments.map((a) => (
                                         <li key={a.id} className="border-b pb-2">
-                                            <strong>{a.pet?.pet_name}</strong> — {a.type} with {a.client?.name}
+                                            <strong>{a.pet?.pet_name}</strong> — {serviceLabels[a.type] ?? a.type} with {a.client?.name}
                                             <br />
                                             <span className="text-gray-500">{new Date(a.scheduled_at).toLocaleString()}</span>
                                             <span className="ml-2 text-xs font-medium uppercase text-gray-600">[{a.status}]</span>
@@ -86,16 +128,60 @@ export default function Dashboard({
                         </div>
 
                         <div className="rounded-lg bg-white p-5 shadow">
-                            <h3 className="mb-3 font-semibold">Health Monitoring (Due Soon)</h3>
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                                <div>
+                                    <h3 className="font-semibold">Health Monitoring (Due Soon)</h3>
+                                    <p className="text-xs text-gray-500">
+                                        Vaccines, medications, and follow-ups within 30 days
+                                    </p>
+                                </div>
+                                <Link
+                                    href={route('notifications.index')}
+                                    className="text-xs font-medium text-indigo-600 hover:underline"
+                                >
+                                    All alerts
+                                </Link>
+                            </div>
                             {dueHealthRecords.length === 0 ? (
                                 <p className="text-sm text-gray-500">No upcoming due dates.</p>
                             ) : (
-                                <ul className="space-y-2 text-sm">
-                                    {dueHealthRecords.map((r) => (
-                                        <li key={r.id} className="border-b pb-2">
-                                            {r.pet?.pet_name} — {r.type}: {r.title}
-                                            <br />
-                                            <span className="text-gray-500">Due: {r.next_due_date}</span>
+                                <ul className="space-y-3 text-sm">
+                                    {dueHealthRecords.map((event) => (
+                                        <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <span
+                                                    className={`rounded px-2 py-0.5 text-xs font-medium ${
+                                                        categoryStyles[event.category] ?? 'bg-gray-100 text-gray-800'
+                                                    }`}
+                                                >
+                                                    {event.category_label}
+                                                </span>
+                                                {event.is_overdue && (
+                                                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                                        Overdue
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p className="mt-1">
+                                                {event.pet_id ? (
+                                                    <Link
+                                                        href={route('pets.show', event.pet_id)}
+                                                        className="font-medium text-indigo-600 hover:underline"
+                                                    >
+                                                        {event.pet_name ?? 'Unknown pet'}
+                                                    </Link>
+                                                ) : (
+                                                    <strong>{event.pet_name ?? 'Unknown pet'}</strong>
+                                                )}
+                                                {' — '}
+                                                {event.title}
+                                                {event.detail && (
+                                                    <span className="text-gray-600"> ({event.detail})</span>
+                                                )}
+                                            </p>
+                                            <p className="text-gray-500">
+                                                Due: {formatDate(event.due_date)}
+                                            </p>
                                         </li>
                                     ))}
                                 </ul>

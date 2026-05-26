@@ -1,11 +1,14 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
+import Modal from '@/Components/Modal';
 import PrimaryButton from '@/Components/PrimaryButton';
+import SecondaryButton from '@/Components/SecondaryButton';
 import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
 import { Head, Link, useForm, router } from '@inertiajs/react';
+import { useState } from 'react';
 
-const types = ['consultation', 'vaccination', 'grooming', 'medication'];
+const types = ['consultation', 'vaccination', 'grooming', 'medication', 'surgery', 'boarding', 'emergency_care'];
 const categoryLabels = {
     medicine: 'Medicine',
     supplement_vitamin: 'Supplement / Vitamin',
@@ -17,7 +20,57 @@ const vaccinationStatusLabels = {
     unknown: 'Unknown',
 };
 
+const formatDate = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    const iso = String(value);
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${Number(month)}/${Number(day)}/${year}`;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toLocaleDateString();
+};
+
+const formatDateTime = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toLocaleString(undefined, {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+};
+
+const typeLabels = {
+    consultation: 'Consultation',
+    vaccination: 'Vaccination',
+    grooming: 'Grooming',
+    medication: 'Medication',
+    surgery: 'Surgery',
+    boarding: 'Boarding / Hotel',
+    emergency_care: 'Emergency Care',
+};
+
 export default function PetShow({ pet, medicines, can_manage_health_records }) {
+    const [viewingRecord, setViewingRecord] = useState(null);
     const healthForm = useForm({
         type: 'consultation', title: '', description: '', medicine_id: '', dosage: '', medication_quantity: '',
         record_date: new Date().toISOString().slice(0, 10), next_due_date: '', veterinarian_notes: '',
@@ -59,7 +112,7 @@ export default function PetShow({ pet, medicines, can_manage_health_records }) {
                                 <div><dt className="text-gray-500">Owner</dt><dd>{pet.client?.name} — {pet.client?.contact}</dd></div>
                                 <div><dt className="text-gray-500">Species / Breed</dt><dd>{pet.species} {pet.breed && `/ ${pet.breed}`}</dd></div>
                                 <div><dt className="text-gray-500">Age / Gender</dt><dd>{pet.age ?? '—'} / {pet.gender ?? '—'}</dd></div>
-                                <div><dt className="text-gray-500">Birth Date</dt><dd>{pet.birth_date || '—'}</dd></div>
+                                <div><dt className="text-gray-500">Birth Date</dt><dd>{formatDate(pet.birth_date) ?? '—'}</dd></div>
                                 <div><dt className="text-gray-500">Weight</dt><dd>{pet.weight ? `${pet.weight} kg` : '—'}</dd></div>
                                 <div><dt className="text-gray-500">Color</dt><dd>{pet.color || '—'}</dd></div>
                                 <div><dt className="text-gray-500">Microchip No</dt><dd>{pet.microchip_no || '—'}</dd></div>
@@ -141,7 +194,11 @@ export default function PetShow({ pet, medicines, can_manage_health_records }) {
                                         <div>
                                             <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">{r.type}</span>
                                             <strong className="ms-2">{r.title}</strong>
-                                            <p className="text-gray-500">{r.record_date} {r.next_due_date && `· Next due: ${r.next_due_date}`}</p>
+                                            <p className="text-gray-500">
+                                                {formatDate(r.record_date)}
+                                                {r.next_due_date && ` · Next due: ${formatDate(r.next_due_date)}`}
+                                                {r.created_at && ` · Logged ${formatDateTime(r.created_at)}`}
+                                            </p>
                                             {r.medicine && (
                                                 <p>
                                                     Medicine: {r.medicine.name}
@@ -151,14 +208,84 @@ export default function PetShow({ pet, medicines, can_manage_health_records }) {
                                             )}
                                             {r.veterinarian_notes && <p>{r.veterinarian_notes}</p>}
                                         </div>
-                                        {can_manage_health_records && (
-                                            <button onClick={() => confirm('Delete?') && router.delete(route('health-records.destroy', [pet.id, r.id]))} className="text-red-600 hover:underline">Delete</button>
-                                        )}
+                                        <div className="flex shrink-0 items-center gap-3">
+                                            <button
+                                                type="button"
+                                                onClick={() => setViewingRecord(r)}
+                                                className="text-indigo-600 hover:underline"
+                                            >
+                                                View
+                                            </button>
+                                            {can_manage_health_records && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => confirm('Delete?') && router.delete(route('health-records.destroy', [pet.id, r.id]))}
+                                                    className="text-red-600 hover:underline"
+                                                >
+                                                    Delete
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         )}
                     </div>
+
+                    <Modal show={!!viewingRecord} onClose={() => setViewingRecord(null)} maxWidth="lg">
+                        {viewingRecord && (
+                            <div className="p-6">
+                                <div className="mb-4 flex items-start justify-between gap-4">
+                                    <div>
+                                        <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                                            {typeLabels[viewingRecord.type] ?? viewingRecord.type}
+                                        </span>
+                                        <h3 className="mt-2 text-lg font-semibold text-gray-900">{viewingRecord.title}</h3>
+                                    </div>
+                                    <SecondaryButton type="button" onClick={() => setViewingRecord(null)}>
+                                        Close
+                                    </SecondaryButton>
+                                </div>
+
+                                <dl className="space-y-3 text-sm">
+                                    <div>
+                                        <dt className="text-gray-500">Record Date</dt>
+                                        <dd>{formatDate(viewingRecord.record_date) ?? '—'}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Next Due</dt>
+                                        <dd>{formatDate(viewingRecord.next_due_date) ?? '—'}</dd>
+                                    </div>
+                                    {viewingRecord.description && (
+                                        <div>
+                                            <dt className="text-gray-500">Description</dt>
+                                            <dd className="whitespace-pre-wrap">{viewingRecord.description}</dd>
+                                        </div>
+                                    )}
+                                    {viewingRecord.medicine && (
+                                        <div>
+                                            <dt className="text-gray-500">Medicine</dt>
+                                            <dd>
+                                                {viewingRecord.medicine.name}
+                                                {viewingRecord.dosage && ` (${viewingRecord.dosage})`}
+                                                {viewingRecord.medication_quantity && ` · Qty: ${viewingRecord.medication_quantity} ${viewingRecord.medicine.unit ?? ''}`}
+                                            </dd>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <dt className="text-gray-500">Veterinarian Notes</dt>
+                                        <dd className="whitespace-pre-wrap">{viewingRecord.veterinarian_notes || '—'}</dd>
+                                    </div>
+                                    {viewingRecord.created_at && (
+                                        <div>
+                                            <dt className="text-gray-500">Logged</dt>
+                                            <dd>{formatDateTime(viewingRecord.created_at)}</dd>
+                                        </div>
+                                    )}
+                                </dl>
+                            </div>
+                        )}
+                    </Modal>
                 </div>
             </div>
         </AuthenticatedLayout>

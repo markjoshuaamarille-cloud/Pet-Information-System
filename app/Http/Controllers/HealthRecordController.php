@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
+use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -16,7 +17,7 @@ class HealthRecordController extends Controller
     public function store(Request $request, Pet $pet): RedirectResponse
     {
         $validated = $request->validate([
-            'type' => 'required|in:consultation,vaccination,grooming,medication',
+            'type' => ClinicServices::healthRecordTypeValidationRule(),
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'medicine_id' => [
