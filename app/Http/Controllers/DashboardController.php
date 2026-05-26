@@ -8,11 +8,23 @@ use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\User;
+use App\Models\Vaccination;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class DashboardController extends Controller
 {
+    private const HEALTH_CATEGORY_LABELS = [
+        'vaccine' => 'Vaccine',
+        'vaccination' => 'Vaccination',
+        'medication' => 'Medication',
+        'consultation' => 'Consultation',
+        'grooming' => 'Grooming',
+        'surgery' => 'Surgery',
+        'boarding' => 'Boarding / Hotel',
+        'emergency_care' => 'Emergency Care',
+    ];
+
     public function __invoke(): Response
     {
         $user = auth()->user();
@@ -31,13 +43,7 @@ class DashboardController extends Controller
                 ->limit(5)
                 ->get();
 
-            $dueHealthRecords = HealthRecord::with('pet')
-                ->whereHas('pet', fn ($query) => $query->where('client_id', $clientId))
-                ->whereNotNull('next_due_date')
-                ->whereDate('next_due_date', '<=', now()->addDays(14))
-                ->orderBy('next_due_date')
-                ->limit(5)
-                ->get();
+            $dueHealthRecords = $this->upcomingHealthEvents(clientId: $clientId);
 
             return Inertia::render('Dashboard', [
                 'stats' => [
@@ -85,12 +91,7 @@ class DashboardController extends Controller
         }
         $upcomingAppointments = $upcomingAppointmentsQuery->get();
 
-        $dueHealthRecords = HealthRecord::with('pet')
-            ->whereNotNull('next_due_date')
-            ->whereDate('next_due_date', '<=', now()->addDays(14))
-            ->orderBy('next_due_date')
-            ->limit(5)
-            ->get();
+        $dueHealthRecords = $this->upcomingHealthEvents();
 
         return Inertia::render('Dashboard', [
             'stats' => [
@@ -107,5 +108,66 @@ class DashboardController extends Controller
             'appointmentsSectionTitle' => $isVeterinarian ? "Today's & Pending Recent Appointments" : 'Upcoming Appointments',
             'canManageAppointmentStatus' => $canManageAppointmentStatus,
         ]);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function upcomingHealthEvents(?int $clientId = null, int $daysAhead = 30, int $limit = 8): array
+    {
+        $healthRecordsQuery = HealthRecord::with(['pet', 'medicine'])
+            ->whereNotNull('next_due_date')
+            ->whereDate('next_due_date', '<=', now()->addDays($daysAhead));
+
+        $vaccinationsQuery = Vaccination::with('pet')
+            ->whereNotNull('next_due_date')
+            ->whereDate('next_due_date', '<=', now()->addDays($daysAhead));
+
+        if ($clientId) {
+            $healthRecordsQuery->whereHas('pet', fn ($query) => $query->where('client_id', $clientId));
+            $vaccinationsQuery->whereHas('pet', fn ($query) => $query->where('client_id', $clientId));
+        }
+
+        $events = collect();
+
+        foreach ($healthRecordsQuery->get() as $record) {
+            $detail = $record->type === 'medication' && $record->medicine
+                ? $record->medicine->name
+                : null;
+
+            $events->push([
+                'id' => 'health-'.$record->id,
+                'source' => 'health_record',
+                'category' => $record->type,
+                'category_label' => self::HEALTH_CATEGORY_LABELS[$record->type] ?? ucfirst($record->type),
+                'pet_id' => $record->pet_id,
+                'pet_name' => $record->pet?->pet_name,
+                'title' => $record->title,
+                'detail' => $detail,
+                'due_date' => $record->next_due_date?->toDateString(),
+                'is_overdue' => $record->next_due_date?->isPast() ?? false,
+            ]);
+        }
+
+        foreach ($vaccinationsQuery->get() as $vaccination) {
+            $events->push([
+                'id' => 'vaccination-'.$vaccination->id,
+                'source' => 'vaccination',
+                'category' => 'vaccine',
+                'category_label' => self::HEALTH_CATEGORY_LABELS['vaccine'],
+                'pet_id' => $vaccination->pet_id,
+                'pet_name' => $vaccination->pet?->pet_name,
+                'title' => $vaccination->vaccine_name,
+                'detail' => $vaccination->dose,
+                'due_date' => $vaccination->next_due_date?->toDateString(),
+                'is_overdue' => $vaccination->next_due_date?->isPast() ?? false,
+            ]);
+        }
+
+        return $events
+            ->sortBy('due_date')
+            ->take($limit)
+            ->values()
+            ->all();
     }
 }

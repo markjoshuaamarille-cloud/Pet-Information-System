@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\GroomingRecord;
 use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
+use App\Models\Vaccination;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Inertia\Inertia;
@@ -14,14 +16,34 @@ class ReportController extends Controller
 {
     public function index(): Response
     {
+        $healthRecordCounts = HealthRecord::query()
+            ->selectRaw('type, COUNT(*) as total')
+            ->groupBy('type')
+            ->pluck('total', 'type');
+
+        $vaccinationModuleCount = Vaccination::count();
+        $groomingModuleCount = GroomingRecord::count();
+
+        $consultations = (int) ($healthRecordCounts['consultation'] ?? 0);
+        $vaccinations = (int) ($healthRecordCounts['vaccination'] ?? 0) + $vaccinationModuleCount;
+        $grooming = (int) ($healthRecordCounts['grooming'] ?? 0) + $groomingModuleCount;
+        $medications = (int) ($healthRecordCounts['medication'] ?? 0);
+        $surgeries = (int) ($healthRecordCounts['surgery'] ?? 0);
+        $boarding = (int) ($healthRecordCounts['boarding'] ?? 0);
+        $emergencyCare = (int) ($healthRecordCounts['emergency_care'] ?? 0);
+        $healthRecordTotal = HealthRecord::count();
+
         return Inertia::render('Reports/Index', [
             'summary' => [
                 'total_pets' => Pet::count(),
-                'total_health_records' => HealthRecord::count(),
-                'consultations' => HealthRecord::where('type', 'consultation')->count(),
-                'vaccinations' => HealthRecord::where('type', 'vaccination')->count(),
-                'grooming' => HealthRecord::where('type', 'grooming')->count(),
-                'medications' => HealthRecord::where('type', 'medication')->count(),
+                'total_health_records' => $healthRecordTotal + $vaccinationModuleCount + $groomingModuleCount,
+                'consultations' => $consultations,
+                'vaccinations' => $vaccinations,
+                'grooming' => $grooming,
+                'medications' => $medications,
+                'surgeries' => $surgeries,
+                'boarding_stays' => $boarding,
+                'emergency_care' => $emergencyCare,
                 'inventory_items' => Medicine::count(),
                 'expired_items' => Medicine::expired()->count(),
                 'critical_items' => Medicine::criticalStock()->count(),

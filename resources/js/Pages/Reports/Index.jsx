@@ -10,7 +10,7 @@ export default function ReportsIndex({ summary }) {
                     <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                         {[
                             ['Total Pets', summary.total_pets],
-                            ['Health Records', summary.total_health_records],
+                            ['Health Activity Records', summary.total_health_records],
                             ['Inventory Items', summary.inventory_items],
                             ['Expired Items', summary.expired_items],
                         ].map(([label, val]) => (
@@ -31,14 +31,23 @@ export default function ReportsIndex({ summary }) {
                         </Link>
                     </div>
                     <div className="mt-6 rounded-lg bg-white p-6 shadow">
-                        <h3 className="mb-3 font-semibold">Health Activity Breakdown</h3>
+                        <h3 className="mb-1 font-semibold">Health Activity Breakdown</h3>
+                        <p className="mb-3 text-xs text-gray-500">
+                            Includes pet health records plus vaccination and grooming module entries.
+                        </p>
                         <ul className="grid gap-2 text-sm sm:grid-cols-2">
                             <li>Consultations: {summary.consultations}</li>
                             <li>Vaccinations: {summary.vaccinations}</li>
                             <li>Grooming: {summary.grooming}</li>
                             <li>Medications: {summary.medications}</li>
+                            <li>Surgery records: {summary.surgeries}</li>
+                            <li>Boarding stays: {summary.boarding_stays}</li>
+                            <li>Emergency care: {summary.emergency_care}</li>
                             <li>Critical Stock Items: {summary.critical_items}</li>
                         </ul>
+                        <p className="mt-3 text-xs text-gray-500">
+                            Activity total: {summary.consultations + summary.vaccinations + summary.grooming + summary.medications + summary.surgeries + summary.boarding_stays + summary.emergency_care} records
+                        </p>
                     </div>
                 </div>
             </div>

@@ -31,6 +31,7 @@ class VaccinationController extends Controller
             'vaccinationAppointments' => Appointment::with(['pet', 'client'])
                 ->where('type', 'vaccination')
                 ->where('status', 'scheduled')
+                ->whereDoesntHave('vaccinations')
                 ->orderByDesc('scheduled_at')
                 ->get(),
         ]);
@@ -57,7 +58,7 @@ class VaccinationController extends Controller
                 'vaccine_name' => $vaccine->name,
             ]);
 
-            $this->syncAppointmentStatus($validated['appointment_id'] ?? null, $validated['status']);
+            $this->syncAppointmentStatus($validated['appointment_id'], $validated['status']);
             $vaccine->decrement('quantity', $validated['quantity_used']);
         });
 
@@ -66,7 +67,7 @@ class VaccinationController extends Controller
 
     public function update(Request $request, Vaccination $vaccination): RedirectResponse
     {
-        $validated = $this->validatePayload($request);
+        $validated = $this->validatePayload($request, $vaccination);
 
         DB::transaction(function () use ($vaccination, $validated): void {
             $vaccination->refresh();
@@ -125,11 +126,16 @@ class VaccinationController extends Controller
         return redirect()->back()->with('success', 'Vaccination record deleted.');
     }
 
-    private function validatePayload(Request $request): array
+    private function validatePayload(Request $request, ?Vaccination $vaccination = null): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'pet_id' => 'required|exists:pets,id',
-            'appointment_id' => 'nullable|exists:appointments,id',
+            'appointment_id' => [
+                'required',
+                Rule::exists('appointments', 'id')->where(
+                    fn ($query) => $query->where('type', 'vaccination')
+                ),
+            ],
             'medicine_id' => [
                 'required',
                 Rule::exists('medicines', 'id')->where(
@@ -143,6 +149,42 @@ class VaccinationController extends Controller
             'status' => 'required|in:scheduled,completed,missed',
             'notes' => 'nullable|string',
         ]);
+
+        $appointment = Appointment::query()
+            ->whereKey($validated['appointment_id'])
+            ->where('type', 'vaccination')
+            ->first();
+
+        if (! $appointment) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'Select a valid vaccination appointment.',
+            ]);
+        }
+
+        if ((int) $appointment->pet_id !== (int) $validated['pet_id']) {
+            throw ValidationException::withMessages([
+                'pet_id' => 'The selected pet must match the vaccination appointment.',
+            ]);
+        }
+
+        $alreadyLinked = Vaccination::query()
+            ->where('appointment_id', $validated['appointment_id'])
+            ->when($vaccination, fn ($query) => $query->whereKeyNot($vaccination->id))
+            ->exists();
+
+        if ($alreadyLinked) {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'This appointment is already linked to another vaccination record.',
+            ]);
+        }
+
+        if ($vaccination === null && $appointment->status !== 'scheduled') {
+            throw ValidationException::withMessages([
+                'appointment_id' => 'Only scheduled vaccination appointments can be used for new records.',
+            ]);
+        }
+
+        return $validated;
     }
 
     private function syncAppointmentStatus(?int $appointmentId, string $status): void

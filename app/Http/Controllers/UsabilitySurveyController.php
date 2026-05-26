@@ -14,16 +14,16 @@ class UsabilitySurveyController extends Controller
     public static function questions(): array
     {
         return [
-            ['id' => 'q1', 'text' => 'I think that I would like to use this system frequently.', 'positive' => true],
-            ['id' => 'q2', 'text' => 'I found the system unnecessarily complex.', 'positive' => false],
-            ['id' => 'q3', 'text' => 'I thought the system was easy to use.', 'positive' => true],
-            ['id' => 'q4', 'text' => 'I think that I would need the support of a technical person to use this system.', 'positive' => false],
-            ['id' => 'q5', 'text' => 'I found the various functions in this system were well integrated.', 'positive' => true],
-            ['id' => 'q6', 'text' => 'I thought there was too much inconsistency in this system.', 'positive' => false],
-            ['id' => 'q7', 'text' => 'I would imagine that most people would learn to use this system very quickly.', 'positive' => true],
-            ['id' => 'q8', 'text' => 'I found the system very cumbersome to use.', 'positive' => false],
-            ['id' => 'q9', 'text' => 'I felt very confident using the system.', 'positive' => true],
-            ['id' => 'q10', 'text' => 'I needed to learn a lot of things before I could get going with this system.', 'positive' => false],
+            ['id' => 'q1', 'text' => 'I am satisfied with the overall quality of pet care provided by this clinic.', 'positive' => true],
+            ['id' => 'q2', 'text' => 'Scheduling appointments or reaching the clinic was difficult.', 'positive' => false],
+            ['id' => 'q3', 'text' => 'The staff were courteous and helpful during my visit.', 'positive' => true],
+            ['id' => 'q4', 'text' => 'I experienced long wait times before being attended to.', 'positive' => false],
+            ['id' => 'q5', 'text' => 'The veterinarian explained my pet\'s condition and treatment clearly.', 'positive' => true],
+            ['id' => 'q6', 'text' => 'I found billing and service fees confusing or unexpected.', 'positive' => false],
+            ['id' => 'q7', 'text' => 'The clinic environment was clean, safe, and comfortable for my pet.', 'positive' => true],
+            ['id' => 'q8', 'text' => 'My concerns about my pet were not taken seriously by the staff.', 'positive' => false],
+            ['id' => 'q9', 'text' => 'I would recommend this clinic to friends and family.', 'positive' => true],
+            ['id' => 'q10', 'text' => 'I am unlikely to return to this clinic for future pet care.', 'positive' => false],
         ];
     }
 
@@ -50,7 +50,7 @@ class UsabilitySurveyController extends Controller
             'sus_score' => $susScore,
         ]);
 
-        return redirect()->route('survey.results')->with('success', 'Thank you! Your usability response has been recorded.');
+        return redirect()->route('survey.results')->with('success', 'Thank you! Your clinic service feedback has been recorded.');
     }
 
     public function results(): Response

@@ -2,7 +2,7 @@ import { defineConfig } from "vite";
 import laravel from "laravel-vite-plugin";
 import react from "@vitejs/plugin-react";
 
-const laravelUrl = "http://localhost:8000/login";
+const laravelUrl = "http://127.0.0.1:8000";
 
 function isViteRequest(url) {
     return (
@@ -25,7 +25,7 @@ export default defineConfig({
         host: "localhost",
         port: 5173,
         strictPort: true,
-        open: true,
+        open: "/login",
         proxy: {
             "/": {
                 target: laravelUrl,

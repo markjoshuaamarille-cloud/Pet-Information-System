@@ -10,19 +10,12 @@ use App\Models\Pet;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use App\Support\ClinicServices;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class BillingController extends Controller
 {
-    private const SERVICE_LABELS = [
-        'checkup' => 'Checkup',
-        'vaccination' => 'Vaccination',
-        'grooming' => 'Grooming',
-        'consultation' => 'Consultation',
-        'other' => 'Other',
-    ];
-
     public function index(): Response
     {
         return Inertia::render('Billing/Index', [
@@ -39,7 +32,7 @@ class BillingController extends Controller
                     'scheduled_at' => $appointment->scheduled_at,
                     'status' => $appointment->status,
                     'service_type' => $appointment->getAttribute('type'),
-                    'service_label' => self::SERVICE_LABELS[$appointment->getAttribute('type')] ?? 'Other',
+                    'service_label' => ClinicServices::label($appointment->getAttribute('type')),
                     'pet' => $appointment->pet,
                     'client' => $appointment->client,
                 ])
@@ -143,6 +136,31 @@ class BillingController extends Controller
         });
 
         return redirect()->back()->with('success', 'Payment posted successfully.');
+    }
+
+    public function receipt(Billing $billing): Response
+    {
+        $billing->load(['client', 'pet', 'appointment', 'payments' => fn ($query) => $query->orderBy('paid_at')]);
+
+        $appointment = $billing->appointment;
+        $serviceLabel = $appointment
+            ? ClinicServices::label($appointment->getAttribute('type'))
+            : null;
+
+        return Inertia::render('Billing/Receipt', [
+            'billing' => [
+                ...$billing->toArray(),
+                'client' => $billing->client,
+                'pet' => $billing->pet,
+                'appointment' => $appointment ? [
+                    'id' => $appointment->id,
+                    'scheduled_at' => $appointment->scheduled_at,
+                    'service_type' => $appointment->getAttribute('type'),
+                    'service_label' => $serviceLabel,
+                ] : null,
+                'payments' => $billing->payments,
+            ],
+        ]);
     }
 
     private function generateInvoiceNumber(): string

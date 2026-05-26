@@ -5,8 +5,7 @@ namespace App\Services;
 class SusScoreCalculator
 {
     /**
-     * Calculate System Usability Scale (SUS) score per Lewis (1995).
-     * Each question is rated 1–5. Score range: 0–100.
+     * Calculate clinic service satisfaction score (0–100) from 10 rated items.
      */
     public static function calculate(array $responses): float
     {
@@ -23,10 +22,10 @@ class SusScoreCalculator
     public static function interpretation(float $score): string
     {
         return match (true) {
-            $score >= 80 => 'Excellent',
-            $score >= 68 => 'Good',
-            $score >= 50 => 'OK',
-            default => 'Poor',
+            $score >= 80 => 'Excellent service',
+            $score >= 68 => 'Good service',
+            $score >= 50 => 'Fair service',
+            default => 'Needs improvement',
         };
     }
 }

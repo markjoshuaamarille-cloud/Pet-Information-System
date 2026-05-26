@@ -3,7 +3,7 @@ import FlashMessage from "@/Components/FlashMessage";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
-import { Head, router, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
@@ -14,6 +14,9 @@ const SERVICE_LABELS = {
     vaccination: "Vaccination",
     grooming: "Grooming",
     consultation: "Consultation",
+    surgery: "Surgery",
+    boarding: "Boarding / Hotel",
+    emergency_care: "Emergency Care",
     other: "Other",
 };
 
@@ -608,8 +611,18 @@ export default function BillingIndex({
                                                 {billing.status}
                                             </td>
                                             <td className="px-4 py-3 text-right">
+                                                <Link
+                                                    href={route(
+                                                        "billing.receipt",
+                                                        billing.id,
+                                                    )}
+                                                    className="text-gray-700 hover:underline"
+                                                    target="_blank"
+                                                >
+                                                    Receipt
+                                                </Link>
                                                 <button
-                                                    className="text-indigo-600 hover:underline"
+                                                    className="ms-3 text-indigo-600 hover:underline"
                                                     onClick={() =>
                                                         startEdit(billing)
                                                     }

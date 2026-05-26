@@ -1,5 +1,25 @@
 import { Head } from '@inertiajs/react';
 
+const formatDate = (value) => {
+    if (!value) {
+        return '—';
+    }
+
+    const iso = String(value);
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${Number(month)}/${Number(day)}/${year}`;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return '—';
+    }
+
+    return date.toLocaleDateString();
+};
+
 export default function ClientRecord({ pet }) {
     return (
         <div className="min-h-screen bg-white p-8 print:p-4">
@@ -22,7 +42,7 @@ export default function ClientRecord({ pet }) {
                     <p><strong>Name:</strong> {pet.pet_name}</p>
                     <p><strong>Species:</strong> {pet.species} · <strong>Breed:</strong> {pet.breed || '—'}</p>
                     <p><strong>Age:</strong> {pet.age ?? '—'} · <strong>Gender:</strong> {pet.gender || '—'}</p>
-                    <p><strong>Birth Date:</strong> {pet.birth_date || '—'}</p>
+                    <p><strong>Birth Date:</strong> {formatDate(pet.birth_date)}</p>
                     <p><strong>Weight:</strong> {pet.weight ? `${pet.weight} kg` : '—'}</p>
                     <p><strong>Color:</strong> {pet.color || '—'}</p>
                     <p><strong>Microchip No:</strong> {pet.microchip_no || '—'}</p>
@@ -45,10 +65,10 @@ export default function ClientRecord({ pet }) {
                         <tbody>
                             {pet.health_records?.map((r) => (
                                 <tr key={r.id}>
-                                    <td className="border p-2">{r.record_date}</td>
+                                    <td className="border p-2">{formatDate(r.record_date)}</td>
                                     <td className="border p-2 capitalize">{r.type}</td>
                                     <td className="border p-2">{r.title}{r.medicine ? ` — ${r.medicine.name}` : ''}{r.dosage ? ` (${r.dosage})` : ''}</td>
-                                    <td className="border p-2">{r.next_due_date || '—'}</td>
+                                    <td className="border p-2">{formatDate(r.next_due_date)}</td>
                                 </tr>
                             ))}
                         </tbody>

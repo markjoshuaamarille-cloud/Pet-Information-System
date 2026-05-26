@@ -6,6 +6,7 @@ use App\Models\Appointment;
 use App\Models\Client;
 use App\Models\Pet;
 use App\Models\User;
+use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -17,7 +18,7 @@ class AppointmentController extends Controller
     {
         $user = $this->currentUser();
 
-        $appointmentsQuery = Appointment::with(['pet', 'client'])->orderBy('scheduled_at');
+        $appointmentsQuery = Appointment::with(['pet', 'client'])->orderByDesc('scheduled_at');
         $petsQuery = Pet::with('client')->orderBy('pet_name');
         $clientsQuery = Client::orderBy('name');
 
@@ -33,6 +34,7 @@ class AppointmentController extends Controller
             'pets' => $petsQuery->get(),
             'clients' => $clientsQuery->get(['id', 'name']),
             'can_manage_status' => $user && $user->hasAnyRole(['super_admin', 'receptionist', 'veterinarian']),
+            'serviceTypes' => ClinicServices::appointmentTypeLabels(),
         ]);
     }
 
@@ -45,7 +47,7 @@ class AppointmentController extends Controller
             'pet_id' => 'required|exists:pets,id',
             'client_id' => $isCustomer ? 'nullable|exists:clients,id' : 'required|exists:clients,id',
             'scheduled_at' => 'required|date',
-            'type' => 'required|in:checkup,vaccination,grooming,consultation,other',
+            'type' => ClinicServices::appointmentTypeValidationRule(),
             'status' => 'required|in:scheduled,completed,cancelled',
             'notes' => 'nullable|string',
         ]);
@@ -75,7 +77,7 @@ class AppointmentController extends Controller
             'pet_id' => 'required|exists:pets,id',
             'client_id' => $isCustomer ? 'nullable|exists:clients,id' : 'required|exists:clients,id',
             'scheduled_at' => 'required|date',
-            'type' => 'required|in:checkup,vaccination,grooming,consultation,other',
+            'type' => ClinicServices::appointmentTypeValidationRule(),
             'status' => 'required|in:scheduled,completed,cancelled',
             'notes' => 'nullable|string',
         ]);
