@@ -4,7 +4,7 @@ import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
 import { Head, useForm, router } from '@inertiajs/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const statusBadge = {
     expired: 'bg-red-100 text-red-800',
@@ -25,8 +25,19 @@ const categories = [
 
 const units = ['pcs', 'bottle', 'vial', 'tablet', 'capsule', 'pack', 'box', 'ml', 'g', 'kg'];
 
+const stockStatuses = [
+    { value: '', label: 'All statuses' },
+    { value: 'ok', label: 'OK' },
+    { value: 'expiring_soon', label: 'Expiring soon' },
+    { value: 'critical', label: 'Critical stock' },
+    { value: 'expired', label: 'Expired' },
+];
+
 export default function MedicinesIndex({ medicines }) {
     const [editing, setEditing] = useState(null);
+    const [search, setSearch] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState('');
     const form = useForm({ name: '', category: 'medicine', description: '', quantity: 0, unit: 'pcs', expiry_date: '', reorder_level: 10 });
 
     const submit = (e) => {
@@ -50,6 +61,36 @@ export default function MedicinesIndex({ medicines }) {
             reorder_level: m.reorder_level,
         });
     };
+
+    const filteredMedicines = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        return medicines.filter((m) => {
+            if (categoryFilter && m.category !== categoryFilter) {
+                return false;
+            }
+            if (statusFilter && m.stock_status !== statusFilter) {
+                return false;
+            }
+            if (!query) {
+                return true;
+            }
+
+            const categoryLabel =
+                categories.find((c) => c.value === m.category)?.label ?? '';
+            return [m.name, m.unit, categoryLabel]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query));
+        });
+    }, [medicines, search, categoryFilter, statusFilter]);
+
+    const clearFilters = () => {
+        setSearch('');
+        setCategoryFilter('');
+        setStatusFilter('');
+    };
+
+    const hasActiveFilters = Boolean(search || categoryFilter || statusFilter);
 
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Medicine Inventory</h2>}>
@@ -83,11 +124,74 @@ export default function MedicinesIndex({ medicines }) {
                         </div>
                         <PrimaryButton className="mt-4" disabled={form.processing}>Save</PrimaryButton>
                     </form>
+                    <div className="mb-4 rounded-lg bg-white p-4 shadow">
+                        <div className="grid gap-4 sm:grid-cols-4">
+                            <div className="sm:col-span-2">
+                                <InputLabel value="Search" />
+                                <TextInput
+                                    className="mt-1 block w-full"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Search by name, unit, or category..."
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Category" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={categoryFilter}
+                                    onChange={(e) => setCategoryFilter(e.target.value)}
+                                >
+                                    <option value="">All categories</option>
+                                    {categories.map((category) => (
+                                        <option key={category.value} value={category.value}>
+                                            {category.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Status" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                >
+                                    {stockStatuses.map((status) => (
+                                        <option key={status.value || 'all'} value={status.value}>
+                                            {status.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="mt-3 flex items-center justify-between text-sm">
+                            <p className="text-gray-500">
+                                Showing {filteredMedicines.length} of {medicines.length} items
+                            </p>
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="text-indigo-600 hover:underline"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Name</th><th className="px-4 py-3 text-left">Category</th><th className="px-4 py-3 text-left">Qty</th><th className="px-4 py-3 text-left">Unit</th><th className="px-4 py-3 text-left">Expiry</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
-                                {medicines.map((m) => (
+                                {filteredMedicines.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
+                                            No medicines match your filters.
+                                        </td>
+                                    </tr>
+                                ) : filteredMedicines.map((m) => (
                                     <tr key={m.id}>
                                         <td className="px-4 py-3">{m.name}</td>
                                         <td className="px-4 py-3">{categories.find((category) => category.value === m.category)?.label ?? 'Medicine'}</td>

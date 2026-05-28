@@ -12,6 +12,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PetController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\ServiceCatalogController;
 use App\Http\Controllers\UsabilitySurveyController;
 use App\Http\Controllers\VaccinationController;
 use Illuminate\Foundation\Application;
@@ -37,17 +38,22 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
     });
 
-    Route::middleware('role:super_admin,veterinarian,receptionist,customer')->group(function () {
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer,cashier')->group(function () {
         Route::get('/pets', [PetController::class, 'index'])->name('pets.index');
-        Route::post('/pets', [PetController::class, 'store'])->name('pets.store');
         Route::get('/pets/{pet}', [PetController::class, 'show'])->name('pets.show');
         Route::get('/pets/{pet}/client-record', [PetController::class, 'clientRecord'])->name('pets.client-record');
+    });
+
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer')->group(function () {
+        Route::post('/pets', [PetController::class, 'store'])->name('pets.store');
         Route::put('/pets/{pet}', [PetController::class, 'update'])->name('pets.update');
         Route::delete('/pets/{pet}', [PetController::class, 'destroy'])->name('pets.destroy');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
         Route::post('/pets/{pet}/health-records', [HealthRecordController::class, 'store'])->name('health-records.store');
+        Route::put('/pets/{pet}/health-records/{healthRecord}', [HealthRecordController::class, 'update'])->name('health-records.update');
+        Route::delete('/pets/{pet}/health-records/{healthRecord}/sticker', [HealthRecordController::class, 'destroySticker'])->name('health-records.sticker.destroy');
         Route::delete('/pets/{pet}/health-records/{healthRecord}', [HealthRecordController::class, 'destroy'])->name('health-records.destroy');
     });
 
@@ -65,15 +71,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
     });
 
-    Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
+    Route::middleware('role:super_admin,veterinarian,receptionist,cashier')->group(function () {
         Route::get('/vaccinations', [VaccinationController::class, 'index'])->name('vaccinations.index');
+    });
+
+    Route::middleware('role:super_admin,veterinarian,receptionist')->group(function () {
         Route::post('/vaccinations', [VaccinationController::class, 'store'])->name('vaccinations.store');
         Route::put('/vaccinations/{vaccination}', [VaccinationController::class, 'update'])->name('vaccinations.update');
         Route::delete('/vaccinations/{vaccination}', [VaccinationController::class, 'destroy'])->name('vaccinations.destroy');
     });
 
-    Route::middleware('role:super_admin,groomer,receptionist')->group(function () {
+    Route::middleware('role:super_admin,groomer,receptionist,cashier')->group(function () {
         Route::get('/grooming', [GroomingRecordController::class, 'index'])->name('grooming.index');
+    });
+
+    Route::middleware('role:super_admin,groomer,receptionist')->group(function () {
         Route::post('/grooming', [GroomingRecordController::class, 'store'])->name('grooming.store');
         Route::put('/grooming/{grooming}', [GroomingRecordController::class, 'update'])->name('grooming.update');
         Route::delete('/grooming/{grooming}', [GroomingRecordController::class, 'destroy'])->name('grooming.destroy');
@@ -93,6 +105,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier')->group(function () {
+        Route::get('/service-catalog', [ServiceCatalogController::class, 'index'])->name('service-catalog.index');
+        Route::post('/service-catalog', [ServiceCatalogController::class, 'store'])->name('service-catalog.store');
+        Route::put('/service-catalog/{serviceCatalog}', [ServiceCatalogController::class, 'update'])->name('service-catalog.update');
+        Route::delete('/service-catalog/{serviceCatalog}', [ServiceCatalogController::class, 'destroy'])->name('service-catalog.destroy');
+
         Route::get('/reports', [ReportController::class, 'index'])->name('reports.index');
         Route::get('/reports/pets', [ReportController::class, 'pets'])->name('reports.pets');
         Route::get('/reports/inventory', [ReportController::class, 'inventory'])->name('reports.inventory');

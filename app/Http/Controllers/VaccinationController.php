@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Medicine;
 use App\Models\Pet;
+use App\Models\User;
 use App\Models\Vaccination;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,6 +21,8 @@ class VaccinationController extends Controller
 
     public function index(): Response
     {
+        $user = auth()->user();
+
         return Inertia::render('Vaccinations/Index', [
             'vaccinations' => Vaccination::with(['pet.client', 'appointment', 'medicine:id,name,unit,quantity'])
                 ->orderByDesc('administered_on')
@@ -34,6 +37,8 @@ class VaccinationController extends Controller
                 ->whereDoesntHave('vaccinations')
                 ->orderByDesc('scheduled_at')
                 ->get(),
+            'can_manage_records' => $user instanceof User
+                && $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']),
         ]);
     }
 

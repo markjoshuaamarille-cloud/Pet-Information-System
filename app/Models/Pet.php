@@ -63,7 +63,9 @@ class Pet extends Model
 
     public function healthRecords(): HasMany
     {
-        return $this->hasMany(HealthRecord::class)->orderByDesc('record_date');
+        return $this->hasMany(HealthRecord::class)
+            ->orderByDesc('record_date')
+            ->orderByDesc('id');
     }
 
     public function appointments(): HasMany

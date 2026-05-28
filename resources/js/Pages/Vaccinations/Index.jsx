@@ -14,6 +14,7 @@ export default function VaccinationsIndex({
     pets,
     vaccinationAppointments,
     vaccines,
+    can_manage_records = true,
 }) {
     const [editing, setEditing] = useState(null);
     const form = useForm({
@@ -137,6 +138,7 @@ export default function VaccinationsIndex({
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
+                    {can_manage_records && (
                     <form
                         onSubmit={submit}
                         className="mb-6 rounded-lg bg-white p-6 shadow"
@@ -327,6 +329,12 @@ export default function VaccinationsIndex({
                             )}
                         </div>
                     </form>
+                    )}
+                    {!can_manage_records && (
+                        <p className="mb-6 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                            View-only access. Review vaccination and medicine records here when preparing billing.
+                        </p>
+                    )}
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -351,9 +359,11 @@ export default function VaccinationsIndex({
                                     <th className="px-4 py-3 text-left">
                                         Status
                                     </th>
-                                    <th className="px-4 py-3 text-right">
-                                        Actions
-                                    </th>
+                                    {can_manage_records && (
+                                        <th className="px-4 py-3 text-right">
+                                            Actions
+                                        </th>
+                                    )}
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -387,32 +397,34 @@ export default function VaccinationsIndex({
                                         <td className="px-4 py-3 capitalize">
                                             {record.status}
                                         </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <button
-                                                onClick={() =>
-                                                    startEdit(record)
-                                                }
-                                                className="text-indigo-600 hover:underline"
-                                            >
-                                                Edit
-                                            </button>
-                                            <button
-                                                onClick={() =>
-                                                    confirm(
-                                                        "Delete vaccination record?",
-                                                    ) &&
-                                                    router.delete(
-                                                        route(
-                                                            "vaccinations.destroy",
-                                                            record.id,
-                                                        ),
-                                                    )
-                                                }
-                                                className="ms-3 text-red-600 hover:underline"
-                                            >
-                                                Delete
-                                            </button>
-                                        </td>
+                                        {can_manage_records && (
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    onClick={() =>
+                                                        startEdit(record)
+                                                    }
+                                                    className="text-indigo-600 hover:underline"
+                                                >
+                                                    Edit
+                                                </button>
+                                                <button
+                                                    onClick={() =>
+                                                        confirm(
+                                                            "Delete vaccination record?",
+                                                        ) &&
+                                                        router.delete(
+                                                            route(
+                                                                "vaccinations.destroy",
+                                                                record.id,
+                                                            ),
+                                                        )
+                                                    }
+                                                    className="ms-3 text-red-600 hover:underline"
+                                                >
+                                                    Delete
+                                                </button>
+                                            </td>
+                                        )}
                                     </tr>
                                 ))}
                             </tbody>

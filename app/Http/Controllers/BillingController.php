@@ -7,10 +7,12 @@ use App\Models\Billing;
 use App\Models\Client;
 use App\Models\Payment;
 use App\Models\Pet;
+use App\Models\ServiceCatalog;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use App\Support\ClinicServices;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -19,10 +21,14 @@ class BillingController extends Controller
     public function index(): Response
     {
         return Inertia::render('Billing/Index', [
-            'billings' => Billing::with(['client', 'pet', 'appointment', 'payments'])->latest()->get(),
+            'billings' => Billing::with(['client', 'pet', 'appointment', 'serviceCatalog', 'payments'])->latest()->get(),
             'clients' => Client::orderBy('name')->get(['id', 'name']),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
+            'serviceCatalogs' => ServiceCatalog::query()
+                ->orderBy('name')
+                ->get(['id', 'code', 'name', 'category', 'default_price']),
             'appointments' => Appointment::with(['pet:id,pet_name,client_id', 'client:id,name'])
+                ->where('status', 'completed')
                 ->orderByDesc('scheduled_at')
                 ->get()
                 ->map(fn (Appointment $appointment) => [
@@ -45,7 +51,15 @@ class BillingController extends Controller
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'pet_id' => 'nullable|exists:pets,id',
-            'appointment_id' => 'nullable|exists:appointments,id',
+            'appointment_id' => [
+                'nullable',
+                Rule::exists('appointments', 'id')->where(
+                    fn ($query) => $query->where('status', 'completed')
+                ),
+            ],
+            'service_catalog_id' => 'nullable|exists:service_catalogs,id',
+            'service_unit_price' => 'required|numeric|min:0',
+            'service_quantity' => 'required|integer|min:1',
             'subtotal' => 'required|numeric|min:0',
             'tax' => 'nullable|numeric|min:0',
             'discount' => 'nullable|numeric|min:0',
@@ -55,7 +69,7 @@ class BillingController extends Controller
 
         $tax = (float) ($validated['tax'] ?? 0);
         $discount = (float) ($validated['discount'] ?? 0);
-        $subtotal = (float) $validated['subtotal'];
+        $subtotal = $this->resolvedSubtotal($validated);
         $total = max($subtotal + $tax - $discount, 0);
 
         Billing::create([
@@ -76,7 +90,15 @@ class BillingController extends Controller
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'pet_id' => 'nullable|exists:pets,id',
-            'appointment_id' => 'nullable|exists:appointments,id',
+            'appointment_id' => [
+                'nullable',
+                Rule::exists('appointments', 'id')->where(
+                    fn ($query) => $query->where('status', 'completed')
+                ),
+            ],
+            'service_catalog_id' => 'nullable|exists:service_catalogs,id',
+            'service_unit_price' => 'required|numeric|min:0',
+            'service_quantity' => 'required|integer|min:1',
             'subtotal' => 'required|numeric|min:0',
             'tax' => 'nullable|numeric|min:0',
             'discount' => 'nullable|numeric|min:0',
@@ -87,7 +109,7 @@ class BillingController extends Controller
 
         $tax = (float) ($validated['tax'] ?? 0);
         $discount = (float) ($validated['discount'] ?? 0);
-        $subtotal = (float) $validated['subtotal'];
+        $subtotal = $this->resolvedSubtotal($validated);
         $total = max($subtotal + $tax - $discount, 0);
 
         $status = $this->statusFromAmounts((float) $billing->amount_paid, $total, $validated['status']);
@@ -140,7 +162,7 @@ class BillingController extends Controller
 
     public function receipt(Billing $billing): Response
     {
-        $billing->load(['client', 'pet', 'appointment', 'payments' => fn ($query) => $query->orderBy('paid_at')]);
+        $billing->load(['client', 'pet', 'appointment', 'serviceCatalog', 'payments' => fn ($query) => $query->orderBy('paid_at')]);
 
         $appointment = $billing->appointment;
         $serviceLabel = $appointment
@@ -158,6 +180,7 @@ class BillingController extends Controller
                     'service_type' => $appointment->getAttribute('type'),
                     'service_label' => $serviceLabel,
                 ] : null,
+                'service_catalog' => $billing->serviceCatalog,
                 'payments' => $billing->payments,
             ],
         ]);
@@ -186,5 +209,20 @@ class BillingController extends Controller
         }
 
         return 'paid';
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolvedSubtotal(array $validated): float
+    {
+        if (! empty($validated['service_catalog_id'])) {
+            return max(
+                ((float) $validated['service_unit_price']) * ((int) $validated['service_quantity']),
+                0
+            );
+        }
+
+        return max((float) ($validated['subtotal'] ?? 0), 0);
     }
 }

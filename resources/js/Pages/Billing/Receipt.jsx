@@ -82,6 +82,12 @@ export default function BillingReceipt({ billing }) {
                                 {formatDate(billing.appointment.scheduled_at)} — {billing.appointment.service_label}
                             </p>
                         )}
+                        {billing.service_catalog && (
+                            <p>
+                                <strong>Service:</strong> {billing.service_catalog.name}
+                                {' '}({billing.service_quantity} x {formatMoney(billing.service_unit_price)})
+                            </p>
+                        )}
                     </div>
                 </section>
 

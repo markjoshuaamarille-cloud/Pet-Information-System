@@ -1,54 +1,188 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import FlashMessage from "@/Components/FlashMessage";
+import Modal from "@/Components/Modal";
 import PrimaryButton from "@/Components/PrimaryButton";
+import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
-import { Head, router, useForm } from "@inertiajs/react";
+import { Head, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
-const statuses = ["scheduled", "completed", "cancelled"];
+const statuses = ["completed", "cancelled"];
 
-export default function GroomingIndex({ records, pets, groomingAppointments }) {
-    const [editing, setEditing] = useState(null);
+const groomingServiceOptions = [
+    "Haircut / Style",
+    "Bath - Normal",
+    "Bath - Medicated",
+    "Bath - Flea & Tick",
+    "Nail Trim",
+    "Ear Cleaning",
+    "Eye Clean",
+    "Dematting / Brushing",
+    "Paw Balm / Cologne",
+    "Others",
+];
+
+const parseServices = (value) => {
+    if (!value?.trim()) {
+        return [];
+    }
+
+    const parts = value
+        .split(/[,\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+    const matched = new Set(
+        parts.filter((part) => groomingServiceOptions.includes(part)),
+    );
+
+    return groomingServiceOptions.filter((option) => matched.has(option));
+};
+
+const servicesToText = (services) => services.join(", ");
+
+const getCustomNotes = (notes) => {
+    if (!notes?.trim()) {
+        return "";
+    }
+
+    const parts = notes
+        .split(/[,\n]/)
+        .map((part) => part.trim())
+        .filter(Boolean);
+
+    return parts
+        .filter((part) => !groomingServiceOptions.includes(part))
+        .join(", ");
+};
+
+const buildNotes = (services, customNotes) => {
+    const lines = [];
+
+    if (services.length > 0) {
+        lines.push(services.join(", "));
+    }
+
+    if (customNotes?.trim()) {
+        lines.push(customNotes.trim());
+    }
+
+    return lines.join("\n");
+};
+
+const syncServiceFields = (services, customNotes) => ({
+    service_type: servicesToText(services),
+    notes: buildNotes(services, customNotes),
+});
+
+const formatDate = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    const iso = String(value);
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${Number(month)}/${Number(day)}/${year}`;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toLocaleDateString();
+};
+
+const formatDateTime = (value) => {
+    if (!value) {
+        return null;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return null;
+    }
+
+    return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
+};
+
+export default function GroomingIndex({
+    records,
+    pets,
+    groomingAppointments,
+    can_manage_records = true,
+}) {
+    const [viewingRecord, setViewingRecord] = useState(null);
     const form = useForm({
         pet_id: "",
         appointment_id: "",
-        service_type: "General Grooming",
+        service_type: "",
         service_date: "",
-        status: "scheduled",
+        status: "completed",
         notes: "",
     });
 
+    const selectedServices = useMemo(
+        () => parseServices(form.data.service_type),
+        [form.data.service_type],
+    );
+
+    const toggleService = (option, checked) => {
+        const current = parseServices(form.data.service_type);
+        const next = checked
+            ? groomingServiceOptions.filter(
+                  (service) =>
+                      current.includes(service) || service === option,
+              )
+            : current.filter((service) => service !== option);
+
+        const customNotes = getCustomNotes(form.data.notes);
+
+        form.setData({
+            ...form.data,
+            ...syncServiceFields(next, customNotes),
+        });
+        form.clearErrors("service_type");
+    };
+
+    const onNotesChange = (value) => {
+        const services = parseServices(value);
+        const customNotes = getCustomNotes(value);
+
+        form.setData({
+            ...form.data,
+            ...syncServiceFields(services, customNotes),
+        });
+        form.clearErrors("service_type");
+    };
+
     const submit = (e) => {
         e.preventDefault();
-        if (editing) {
-            form.put(route("grooming.update", editing), {
-                onSuccess: resetForm,
-            });
+
+        if (selectedServices.length === 0) {
+            form.setError(
+                "service_type",
+                "Select at least one grooming service.",
+            );
             return;
         }
+
+        form.clearErrors("service_type");
         form.post(route("grooming.store"), { onSuccess: resetForm });
     };
 
     const resetForm = () => {
         form.reset();
-        form.setData("status", "scheduled");
-        form.setData("service_type", "General Grooming");
-        setEditing(null);
-    };
-
-    const startEdit = (record) => {
-        setEditing(record.id);
-        form.setData({
-            pet_id: String(record.pet_id),
-            appointment_id: record.appointment_id
-                ? String(record.appointment_id)
-                : "",
-            service_type: record.service_type,
-            service_date: record.service_date?.slice(0, 10) || "",
-            status: record.status,
-            notes: record.notes || "",
-        });
+        form.setData("status", "completed");
+        form.setData("service_type", "");
     };
 
     const onAppointmentChange = (appointmentId) => {
@@ -95,15 +229,12 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
+                    {can_manage_records && (
                     <form
                         onSubmit={submit}
                         className="mb-6 rounded-lg bg-white p-6 shadow"
                     >
-                        <h3 className="mb-4 font-semibold">
-                            {editing
-                                ? "Edit Grooming Record"
-                                : "Add Grooming Record"}
-                        </h3>
+                        <h3 className="mb-4 font-semibold">Add Grooming Record</h3>
                         <div className="grid gap-4 sm:grid-cols-3">
                             <div>
                                 <InputLabel value="Grooming Appointment" />
@@ -146,20 +277,6 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                                 </select>
                             </div>
                             <div>
-                                <InputLabel value="Service Type" />
-                                <TextInput
-                                    className="mt-1 block w-full"
-                                    value={form.data.service_type}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            "service_type",
-                                            e.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </div>
-                            <div>
                                 <InputLabel value="Service Date" />
                                 <TextInput
                                     type="date"
@@ -185,10 +302,44 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                                 >
                                     {statuses.map((status) => (
                                         <option key={status} value={status}>
-                                            {status}
+                                            {status.charAt(0).toUpperCase() +
+                                                status.slice(1)}
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div className="sm:col-span-3">
+                                <InputLabel value="Service Type" />
+                                <div className="mt-1 grid grid-cols-1 gap-2 rounded-md border border-gray-300 p-3 text-sm sm:grid-cols-2">
+                                    {groomingServiceOptions.map((option) => {
+                                        const selected =
+                                            selectedServices.includes(option);
+
+                                        return (
+                                            <label
+                                                key={option}
+                                                className="flex items-center gap-2"
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selected}
+                                                    onChange={(e) =>
+                                                        toggleService(
+                                                            option,
+                                                            e.target.checked,
+                                                        )
+                                                    }
+                                                />
+                                                <span>{option}</span>
+                                            </label>
+                                        );
+                                    })}
+                                </div>
+                                {form.errors.service_type && (
+                                    <p className="mt-1 text-sm text-red-600">
+                                        {form.errors.service_type}
+                                    </p>
+                                )}
                             </div>
                             <div className="sm:col-span-3">
                                 <InputLabel value="Notes" />
@@ -196,9 +347,8 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                                     className="mt-1 block w-full rounded-md border-gray-300"
                                     rows={3}
                                     value={form.data.notes}
-                                    onChange={(e) =>
-                                        form.setData("notes", e.target.value)
-                                    }
+                                    onChange={(e) => onNotesChange(e.target.value)}
+                                    placeholder="Selected services appear here automatically. Add extra notes on a new line."
                                 />
                             </div>
                         </div>
@@ -206,17 +356,14 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                             <PrimaryButton disabled={form.processing}>
                                 Save
                             </PrimaryButton>
-                            {editing && (
-                                <button
-                                    type="button"
-                                    className="text-sm text-gray-600 hover:underline"
-                                    onClick={resetForm}
-                                >
-                                    Cancel edit
-                                </button>
-                            )}
                         </div>
                     </form>
+                    )}
+                    {!can_manage_records && (
+                        <p className="mb-6 rounded-lg border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                            View-only access. Review grooming services here when preparing billing.
+                        </p>
+                    )}
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
@@ -260,28 +407,13 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                                         </td>
                                         <td className="px-4 py-3 text-right">
                                             <button
+                                                type="button"
                                                 className="text-indigo-600 hover:underline"
                                                 onClick={() =>
-                                                    startEdit(record)
+                                                    setViewingRecord(record)
                                                 }
                                             >
-                                                Edit
-                                            </button>
-                                            <button
-                                                className="ms-3 text-red-600 hover:underline"
-                                                onClick={() =>
-                                                    confirm(
-                                                        "Delete grooming record?",
-                                                    ) &&
-                                                    router.delete(
-                                                        route(
-                                                            "grooming.destroy",
-                                                            record.id,
-                                                        ),
-                                                    )
-                                                }
-                                            >
-                                                Delete
+                                                View
                                             </button>
                                         </td>
                                     </tr>
@@ -289,6 +421,108 @@ export default function GroomingIndex({ records, pets, groomingAppointments }) {
                             </tbody>
                         </table>
                     </div>
+
+                    <Modal
+                        show={!!viewingRecord}
+                        onClose={() => setViewingRecord(null)}
+                        maxWidth="lg"
+                    >
+                        {viewingRecord && (
+                            <div className="p-6">
+                                <div className="mb-4 flex items-start justify-between gap-4">
+                                    <div>
+                                        <span className="rounded bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">
+                                            Grooming Record
+                                        </span>
+                                        <h3 className="mt-2 text-lg font-semibold text-gray-900">
+                                            {viewingRecord.pet?.pet_name ??
+                                                "Pet record"}
+                                        </h3>
+                                    </div>
+                                    <SecondaryButton
+                                        type="button"
+                                        onClick={() => setViewingRecord(null)}
+                                    >
+                                        Close
+                                    </SecondaryButton>
+                                </div>
+
+                                <dl className="space-y-3 text-sm">
+                                    <div>
+                                        <dt className="text-gray-500">Pet</dt>
+                                        <dd>
+                                            {viewingRecord.pet?.pet_name ?? "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Owner</dt>
+                                        <dd>
+                                            {viewingRecord.pet?.client?.name ??
+                                                "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Service Date
+                                        </dt>
+                                        <dd>
+                                            {formatDate(
+                                                viewingRecord.service_date,
+                                            ) ?? "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Status</dt>
+                                        <dd className="capitalize">
+                                            {viewingRecord.status ?? "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Service Type
+                                        </dt>
+                                        <dd>
+                                            {parseServices(
+                                                viewingRecord.service_type,
+                                            ).length > 0 ? (
+                                                <ul className="mt-1 list-inside list-disc">
+                                                    {parseServices(
+                                                        viewingRecord.service_type,
+                                                    ).map((service) => (
+                                                        <li key={service}>
+                                                            {service}
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            ) : (
+                                                viewingRecord.service_type ||
+                                                "—"
+                                            )}
+                                        </dd>
+                                    </div>
+                                    {viewingRecord.appointment && (
+                                        <div>
+                                            <dt className="text-gray-500">
+                                                Linked Appointment
+                                            </dt>
+                                            <dd>
+                                                {formatDateTime(
+                                                    viewingRecord.appointment
+                                                        .scheduled_at,
+                                                ) ?? "—"}
+                                            </dd>
+                                        </div>
+                                    )}
+                                    <div>
+                                        <dt className="text-gray-500">Notes</dt>
+                                        <dd className="whitespace-pre-wrap">
+                                            {viewingRecord.notes || "—"}
+                                        </dd>
+                                    </div>
+                                </dl>
+                            </div>
+                        )}
+                    </Modal>
                 </div>
             </div>
         </AuthenticatedLayout>

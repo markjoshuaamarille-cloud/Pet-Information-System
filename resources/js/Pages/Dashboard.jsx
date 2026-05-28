@@ -1,6 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 
 const formatDate = (value) => {
     if (!value) {
@@ -52,8 +52,22 @@ export default function Dashboard({
     upcomingAppointments,
     dueHealthRecords,
     appointmentsSectionTitle = 'Upcoming Appointments',
+    appointmentsStatLabel = 'Appointments Today & Recent',
     canManageAppointmentStatus = false,
 }) {
+    const isCustomer = usePage().props.auth.user?.role === 'customer';
+
+    const statCards = [
+        { label: 'Pets', value: stats.pets },
+        ...(isCustomer
+            ? []
+            : [{ label: 'Clients', value: stats.clients }]),
+        { label: appointmentsStatLabel, value: stats.appointments_today },
+        ...(isCustomer
+            ? []
+            : [{ label: 'Medicines', value: stats.medicines }]),
+    ];
+
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Pet Care Management Dashboard</h2>}>
             <Head title="Dashboard" />
@@ -61,13 +75,8 @@ export default function Dashboard({
                 <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                        {[
-                            { label: 'Pets', value: stats.pets },
-                            { label: 'Clients', value: stats.clients },
-                            { label: 'Appointments Today', value: stats.appointments_today },
-                            { label: 'Medicines', value: stats.medicines },
-                        ].map((s) => (
+                    <div className={`grid gap-4 sm:grid-cols-2 ${isCustomer ? 'lg:grid-cols-2' : 'lg:grid-cols-4'}`}>
+                        {statCards.map((s) => (
                             <div key={s.label} className="rounded-lg bg-white p-5 shadow">
                                 <p className="text-sm text-gray-500">{s.label}</p>
                                 <p className="text-3xl font-bold text-indigo-600">{s.value}</p>
