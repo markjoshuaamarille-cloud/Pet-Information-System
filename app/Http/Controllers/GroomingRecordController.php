@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\GroomingRecord;
 use App\Models\Pet;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,8 @@ class GroomingRecordController extends Controller
 {
     public function index(): Response
     {
+        $user = auth()->user();
+
         return Inertia::render('Grooming/Index', [
             'records' => GroomingRecord::with(['pet.client', 'appointment'])->orderByDesc('service_date')->get(),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
@@ -23,6 +26,8 @@ class GroomingRecordController extends Controller
                 ->where('status', 'scheduled')
                 ->orderByDesc('scheduled_at')
                 ->get(),
+            'can_manage_records' => $user instanceof User
+                && $user->hasAnyRole(['super_admin', 'groomer', 'receptionist']),
         ]);
     }
 
@@ -71,7 +76,7 @@ class GroomingRecordController extends Controller
             ],
             'service_type' => 'required|string|max:255',
             'service_date' => 'required|date',
-            'status' => 'required|in:scheduled,completed,cancelled',
+            'status' => 'required|in:completed,cancelled',
             'notes' => 'nullable|string',
         ]);
     }

@@ -56,4 +56,34 @@ class ClinicServices
     {
         return self::appointmentTypeLabels()[$type] ?? ucfirst(str_replace('_', ' ', $type));
     }
+
+    /**
+     * @return list<array{code: string, name: string, category: string}>
+     */
+    public static function catalogDefaults(): array
+    {
+        $services = [];
+
+        foreach (self::appointmentTypeLabels() as $code => $name) {
+            $services[$code] = [
+                'code' => $code,
+                'name' => $name,
+                'category' => 'appointment',
+            ];
+        }
+
+        foreach (self::HEALTH_RECORD_TYPES as $type) {
+            if (isset($services[$type])) {
+                continue;
+            }
+
+            $services[$type] = [
+                'code' => $type,
+                'name' => self::label($type),
+                'category' => 'health_record',
+            ];
+        }
+
+        return array_values($services);
+    }
 }

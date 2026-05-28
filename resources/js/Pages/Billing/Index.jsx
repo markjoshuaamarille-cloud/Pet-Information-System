@@ -57,6 +57,7 @@ export default function BillingIndex({
     clients,
     pets,
     appointments,
+    serviceCatalogs,
 }) {
     const [editing, setEditing] = useState(null);
     const [payingBillingId, setPayingBillingId] = useState(null);
@@ -65,6 +66,9 @@ export default function BillingIndex({
         client_id: "",
         pet_id: "",
         appointment_id: "",
+        service_catalog_id: "",
+        service_unit_price: "0",
+        service_quantity: "1",
         subtotal: "0",
         tax: "0",
         discount: "0",
@@ -100,6 +104,11 @@ export default function BillingIndex({
             appointment_id: billing.appointment_id
                 ? String(billing.appointment_id)
                 : "",
+            service_catalog_id: billing.service_catalog_id
+                ? String(billing.service_catalog_id)
+                : "",
+            service_unit_price: String(billing.service_unit_price ?? "0"),
+            service_quantity: String(billing.service_quantity ?? "1"),
             subtotal: String(billing.subtotal ?? "0"),
             tax: String(billing.tax ?? "0"),
             discount: String(billing.discount ?? "0"),
@@ -112,6 +121,7 @@ export default function BillingIndex({
     const resetForm = () => {
         form.reset();
         form.setData("status", "unpaid");
+        form.setData("service_quantity", "1");
         setEditing(null);
     };
 
@@ -165,6 +175,11 @@ export default function BillingIndex({
             const isSelectedDuringEdit =
                 form.data.appointment_id &&
                 String(appt.id) === form.data.appointment_id;
+
+            if (appt.status !== "completed" && !isSelectedDuringEdit) {
+                return false;
+            }
+
             if (
                 paidAppointmentIds.has(appointmentId) &&
                 !isSelectedDuringEdit
@@ -258,6 +273,57 @@ export default function BillingIndex({
         });
     };
 
+    const recalculateSubtotal = (unitPrice, quantity) => {
+        const safePrice = Number(unitPrice) || 0;
+        const safeQty = Number(quantity) || 0;
+        return (safePrice * safeQty).toFixed(2);
+    };
+
+    const onServiceCatalogChange = (serviceCatalogId) => {
+        if (!serviceCatalogId) {
+            form.setData({
+                ...form.data,
+                service_catalog_id: "",
+                service_unit_price: "0",
+                service_quantity: "1",
+                subtotal: "0.00",
+            });
+            return;
+        }
+
+        const selectedService = serviceCatalogs.find(
+            (service) => String(service.id) === serviceCatalogId,
+        );
+        if (!selectedService) {
+            form.setData("service_catalog_id", serviceCatalogId);
+            return;
+        }
+
+        const unitPrice = String(selectedService.default_price ?? "0");
+        const quantity = form.data.service_quantity || "1";
+        form.setData({
+            ...form.data,
+            service_catalog_id: serviceCatalogId,
+            service_unit_price: unitPrice,
+            subtotal: recalculateSubtotal(unitPrice, quantity),
+        });
+    };
+
+    const onServiceQuantityOrPriceChange = (field, value) => {
+        const nextData = {
+            ...form.data,
+            [field]: value,
+        };
+        const unitPrice =
+            field === "service_unit_price" ? value : nextData.service_unit_price;
+        const quantity =
+            field === "service_quantity" ? value : nextData.service_quantity;
+        nextData.subtotal = recalculateSubtotal(unitPrice, quantity);
+        form.setData(nextData);
+    };
+
+    const hasSelectedService = Boolean(form.data.service_catalog_id);
+
     return (
         <AuthenticatedLayout
             header={
@@ -294,6 +360,58 @@ export default function BillingIndex({
                                     </option>
                                 ))}
                             </select>
+                        </div>
+                        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                            <div>
+                                <InputLabel value="Service" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={form.data.service_catalog_id}
+                                    onChange={(e) =>
+                                        onServiceCatalogChange(e.target.value)
+                                    }
+                                >
+                                    <option value="">Select service</option>
+                                    {serviceCatalogs.map((service) => (
+                                        <option key={service.id} value={service.id}>
+                                            {service.name} ({service.category})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Qty" />
+                                <TextInput
+                                    type="number"
+                                    min="1"
+                                    className="mt-1 block w-full"
+                                    value={form.data.service_quantity}
+                                    onChange={(e) =>
+                                        onServiceQuantityOrPriceChange(
+                                            "service_quantity",
+                                            e.target.value,
+                                        )
+                                    }
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Unit Price" />
+                                <TextInput
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    className="mt-1 block w-full"
+                                    value={form.data.service_unit_price}
+                                    onChange={(e) =>
+                                        onServiceQuantityOrPriceChange(
+                                            "service_unit_price",
+                                            e.target.value,
+                                        )
+                                    }
+                                    required
+                                />
+                            </div>
                         </div>
                         <div className="grid gap-4 sm:grid-cols-3">
                             <div>
@@ -352,8 +470,15 @@ export default function BillingIndex({
                                     onChange={(e) =>
                                         form.setData("subtotal", e.target.value)
                                     }
+                                    disabled={hasSelectedService}
                                     required
                                 />
+                                {hasSelectedService && (
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Auto-calculated from selected service
+                                        price and quantity.
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <InputLabel value="Tax" />
@@ -558,6 +683,9 @@ export default function BillingIndex({
                                         Client
                                     </th>
                                     <th className="px-4 py-3 text-left">
+                                        Service
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
                                         Total
                                     </th>
                                     <th className="px-4 py-3 text-left">
@@ -597,6 +725,19 @@ export default function BillingIndex({
                                             </td>
                                             <td className="px-4 py-3">
                                                 {billing.client?.name}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {billing.service_catalog?.name ??
+                                                    "—"}
+                                                {billing.service_catalog && (
+                                                    <p className="text-xs text-gray-500">
+                                                        Qty {billing.service_quantity} x{" "}
+                                                        {Number(
+                                                            billing.service_unit_price ??
+                                                                0,
+                                                        ).toFixed(2)}
+                                                    </p>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {billing.total_amount}

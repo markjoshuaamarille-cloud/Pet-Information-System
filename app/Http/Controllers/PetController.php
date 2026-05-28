@@ -31,6 +31,9 @@ class PetController extends Controller
         return Inertia::render('Pets/Index', [
             'pets' => $petsQuery->get(),
             'clients' => $clientsQuery->get(['id', 'name']),
+            'can_manage_records' => $user && ! $user->hasRole('cashier') && (
+                $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']) || $user->isCustomer()
+            ),
         ]);
     }
 
@@ -86,6 +89,14 @@ class PetController extends Controller
                 ->where('quantity', '>', 0)
                 ->orderBy('name')
                 ->get(['id', 'name', 'category', 'quantity']),
+            'veterinarians' => User::query()
+                ->where('role', 'veterinarian')
+                ->orderBy('name')
+                ->get(['id', 'name', 'role']),
+            'groomers' => User::query()
+                ->where('role', 'groomer')
+                ->orderBy('name')
+                ->get(['id', 'name', 'role']),
             'can_manage_health_records' => $user && $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']),
         ]);
     }

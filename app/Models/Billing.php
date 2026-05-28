@@ -16,6 +16,9 @@ class Billing extends Model
         'client_id',
         'pet_id',
         'appointment_id',
+        'service_catalog_id',
+        'service_unit_price',
+        'service_quantity',
         'subtotal',
         'tax',
         'discount',
@@ -30,10 +33,12 @@ class Billing extends Model
     {
         return [
             'subtotal' => 'decimal:2',
+            'service_unit_price' => 'decimal:2',
             'tax' => 'decimal:2',
             'discount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
+            'service_quantity' => 'integer',
             'due_date' => 'date',
         ];
     }
@@ -51,6 +56,11 @@ class Billing extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function serviceCatalog(): BelongsTo
+    {
+        return $this->belongsTo(ServiceCatalog::class);
     }
 
     public function payments(): HasMany

@@ -25,6 +25,8 @@ class DashboardController extends Controller
         'emergency_care' => 'Emergency Care',
     ];
 
+    private const RECENT_APPOINTMENT_DAYS = 7;
+
     public function __invoke(): Response
     {
         $user = auth()->user();
@@ -38,7 +40,7 @@ class DashboardController extends Controller
             $upcomingAppointments = Appointment::with(['pet', 'client'])
                 ->where('client_id', $clientId)
                 ->where('status', 'scheduled')
-                ->where('scheduled_at', '>=', now())
+                ->whereDate('scheduled_at', '>=', today())
                 ->orderBy('scheduled_at')
                 ->limit(5)
                 ->get();
@@ -50,8 +52,10 @@ class DashboardController extends Controller
                     'pets' => Pet::where('client_id', $clientId)->count(),
                     'clients' => $clientId ? 1 : 0,
                     'appointments_today' => Appointment::where('client_id', $clientId)
-                        ->whereDate('scheduled_at', today())
-                        ->where('status', 'scheduled')
+                        ->where('status', '!=', 'cancelled')
+                        ->where(function ($query): void {
+                            $this->applyTodayAndRecentAppointmentsScope($query);
+                        })
                         ->count(),
                     'medicines' => 0,
                 ],
@@ -61,6 +65,7 @@ class DashboardController extends Controller
                 'upcomingAppointments' => $upcomingAppointments,
                 'dueHealthRecords' => $dueHealthRecords,
                 'appointmentsSectionTitle' => 'Upcoming Appointments',
+                'appointmentsStatLabel' => 'Appointments Today & Recent',
                 'canManageAppointmentStatus' => false,
             ]);
         }
@@ -69,26 +74,18 @@ class DashboardController extends Controller
         $criticalMedicines = Medicine::criticalStock()->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
         $expiringSoon = Medicine::expiringSoon()->whereDate('expiry_date', '>=', now())->get();
 
-        $upcomingAppointmentsQuery = Appointment::with(['pet', 'client']);
+        $upcomingAppointmentsQuery = Appointment::with(['pet', 'client'])
+            ->where('status', '!=', 'cancelled')
+            ->where(function ($query): void {
+                $this->applyTodayRecentAndUpcomingAppointmentsScope($query);
+            });
+
         if ($isVeterinarian) {
-            $upcomingAppointmentsQuery
-                ->where(function ($query): void {
-                    $query->whereDate('scheduled_at', today())
-                        ->orWhere(function ($nested): void {
-                            $nested
-                                ->whereDate('scheduled_at', '>=', today()->subDays(7))
-                                ->whereDate('scheduled_at', '<', today())
-                                ->where('status', '!=', 'completed');
-                        });
-                })
-                ->orderByDesc('scheduled_at');
+            $upcomingAppointmentsQuery->orderByDesc('scheduled_at');
         } else {
-            $upcomingAppointmentsQuery
-                ->where('status', 'scheduled')
-                ->where('scheduled_at', '>=', now())
-                ->orderBy('scheduled_at')
-                ->limit(5);
+            $upcomingAppointmentsQuery->orderBy('scheduled_at')->limit(8);
         }
+
         $upcomingAppointments = $upcomingAppointmentsQuery->get();
 
         $dueHealthRecords = $this->upcomingHealthEvents();
@@ -97,7 +94,12 @@ class DashboardController extends Controller
             'stats' => [
                 'pets' => Pet::count(),
                 'clients' => Client::count(),
-                'appointments_today' => Appointment::whereDate('scheduled_at', today())->where('status', 'scheduled')->count(),
+                'appointments_today' => Appointment::query()
+                    ->where('status', '!=', 'cancelled')
+                    ->where(function ($query): void {
+                        $this->applyTodayAndRecentAppointmentsScope($query);
+                    })
+                    ->count(),
                 'medicines' => Medicine::count(),
             ],
             'expiredMedicines' => $expiredMedicines,
@@ -105,9 +107,44 @@ class DashboardController extends Controller
             'expiringSoon' => $expiringSoon,
             'upcomingAppointments' => $upcomingAppointments,
             'dueHealthRecords' => $dueHealthRecords,
-            'appointmentsSectionTitle' => $isVeterinarian ? "Today's & Pending Recent Appointments" : 'Upcoming Appointments',
+            'appointmentsSectionTitle' => $isVeterinarian ? "Today's & Pending Recent Appointments" : 'Today, Recent & Upcoming Appointments',
+            'appointmentsStatLabel' => 'Appointments Today & Recent',
             'canManageAppointmentStatus' => $canManageAppointmentStatus,
         ]);
+    }
+
+    /**
+     * Today plus still-pending appointments from the last few days.
+     */
+    private function applyTodayAndRecentAppointmentsScope($query): void
+    {
+        $query->where(function ($scope): void {
+            $scope->whereDate('scheduled_at', today())
+                ->orWhere(function ($recent): void {
+                    $recent->whereDate('scheduled_at', '>=', today()->subDays(self::RECENT_APPOINTMENT_DAYS))
+                        ->whereDate('scheduled_at', '<', today())
+                        ->where('status', 'scheduled');
+                });
+        });
+    }
+
+    /**
+     * Today, recent pending catch-up, and future scheduled appointments.
+     */
+    private function applyTodayRecentAndUpcomingAppointmentsScope($query): void
+    {
+        $query->where(function ($scope): void {
+            $scope->whereDate('scheduled_at', today())
+                ->orWhere(function ($recent): void {
+                    $recent->whereDate('scheduled_at', '>=', today()->subDays(self::RECENT_APPOINTMENT_DAYS))
+                        ->whereDate('scheduled_at', '<', today())
+                        ->where('status', 'scheduled');
+                })
+                ->orWhere(function ($upcoming): void {
+                    $upcoming->whereDate('scheduled_at', '>', today())
+                        ->where('status', 'scheduled');
+                });
+        });
     }
 
     /**
