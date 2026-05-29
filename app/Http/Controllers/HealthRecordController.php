@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
+use App\Models\ServiceCatalog;
 use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -19,8 +21,9 @@ class HealthRecordController extends Controller
     public function store(Request $request, Pet $pet): RedirectResponse
     {
         $validated = $this->validatePayload($request);
+        $medicationLines = $this->normalizedMedicationLines($validated);
 
-        if ($error = $this->medicationInventoryError($validated)) {
+        if ($error = $this->syncMedicationInventory([], $medicationLines)) {
             return redirect()
                 ->route('pets.show', $pet)
                 ->withErrors(['medication_quantity' => $error]);
@@ -32,14 +35,11 @@ class HealthRecordController extends Controller
                 ->withErrors(['sticker_photo' => $error]);
         }
 
-        unset($validated['sticker_photo'], $validated['remove_sticker_photo']);
+        unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
+
+        $this->applyPricing($validated);
 
         $pet->healthRecords()->create($validated);
-
-        if ($validated['type'] === 'medication' && ! empty($validated['medicine_id'])) {
-            Medicine::whereKey($validated['medicine_id'])
-                ->decrement('quantity', $validated['medication_quantity']);
-        }
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record added successfully.');
     }
@@ -49,8 +49,10 @@ class HealthRecordController extends Controller
         abort_unless($healthRecord->pet_id === $pet->id, 404);
 
         $validated = $this->validatePayload($request);
+        $previousMedicationLines = $this->medicationLinesFromRecord($healthRecord);
+        $medicationLines = $this->normalizedMedicationLines($validated);
 
-        if ($error = $this->medicationInventoryError($validated, $healthRecord)) {
+        if ($error = $this->syncMedicationInventory($previousMedicationLines, $medicationLines)) {
             return redirect()
                 ->route('pets.show', $pet)
                 ->withErrors(['medication_quantity' => $error]);
@@ -62,19 +64,13 @@ class HealthRecordController extends Controller
                 ->withErrors(['sticker_photo' => $error]);
         }
 
-        unset($validated['sticker_photo'], $validated['remove_sticker_photo']);
+        unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        if ($healthRecord->type === 'medication' && $healthRecord->medicine_id && $healthRecord->medication_quantity) {
-            Medicine::whereKey($healthRecord->medicine_id)
-                ->increment('quantity', $healthRecord->medication_quantity);
-        }
+        $this->applyPricing($validated);
 
         $healthRecord->update($validated);
 
-        if ($validated['type'] === 'medication' && ! empty($validated['medicine_id'])) {
-            Medicine::whereKey($validated['medicine_id'])
-                ->decrement('quantity', $validated['medication_quantity']);
-        }
+        $this->refreshLinkedBilling($healthRecord->fresh());
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record updated successfully.');
     }
@@ -83,9 +79,13 @@ class HealthRecordController extends Controller
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
 
-        if ($healthRecord->type === 'medication' && $healthRecord->medicine_id && $healthRecord->medication_quantity) {
-            Medicine::whereKey($healthRecord->medicine_id)
-                ->increment('quantity', $healthRecord->medication_quantity);
+        if ($error = $this->syncMedicationInventory(
+            $this->medicationLinesFromRecord($healthRecord),
+            [],
+        )) {
+            return redirect()
+                ->route('pets.show', $pet)
+                ->withErrors(['medication_quantity' => $error]);
         }
 
         if ($healthRecord->sticker_photo_path) {
@@ -124,6 +124,12 @@ class HealthRecordController extends Controller
             ],
             'dosage' => 'nullable|string|max:255',
             'medication_quantity' => 'nullable|integer|min:1',
+            'medication_lines' => 'nullable|array',
+            'medication_lines.*.medicine_id' => 'required|exists:medicines,id',
+            'medication_lines.*.medication_quantity' => 'required|integer|min:1',
+            'service_catalog_id' => 'nullable|exists:service_catalogs,id',
+            'unit_price' => 'nullable|numeric|min:0',
+            'quantity' => 'nullable|integer|min:1',
             'record_date' => 'required|date',
             'next_due_date' => 'nullable|date|after_or_equal:record_date',
             'veterinarian_notes' => 'nullable|string',
@@ -142,40 +148,146 @@ class HealthRecordController extends Controller
             $validated['dosage'] = null;
             $validated['medication_quantity'] = null;
         } else {
-            $request->validate([
-                'medication_quantity' => 'required|integer|min:1',
-            ]);
+            $lines = $this->normalizedMedicationLines($validated);
+            if ($lines === []) {
+                throw ValidationException::withMessages([
+                    'medicine_id' => 'Add at least one medicine.',
+                ]);
+            }
+
+            $validated['medicine_id'] = $lines[0]['medicine_id'];
+            $validated['medication_quantity'] = $lines[0]['medication_quantity'];
+            $validated['medication_lines'] = $lines;
+            $validated['dosage'] = null;
         }
 
         return $validated;
     }
 
-    private function medicationInventoryError(array $validated, ?HealthRecord $existing = null): ?string
+    /**
+     * @return list<array{medicine_id: int, medication_quantity: int}>
+     */
+    private function normalizedMedicationLines(array $validated): array
     {
-        if ($validated['type'] !== 'medication' || empty($validated['medicine_id'])) {
+        if (($validated['type'] ?? null) !== 'medication') {
+            return [];
+        }
+
+        if (! empty($validated['medication_lines']) && is_array($validated['medication_lines'])) {
+            return array_values(array_map(fn (array $line) => [
+                'medicine_id' => (int) $line['medicine_id'],
+                'medication_quantity' => max((int) ($line['medication_quantity'] ?? 1), 1),
+            ], $validated['medication_lines']));
+        }
+
+        if (! empty($validated['medicine_id'])) {
+            return [[
+                'medicine_id' => (int) $validated['medicine_id'],
+                'medication_quantity' => max((int) ($validated['medication_quantity'] ?? 1), 1),
+            ]];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<array{medicine_id: int, medication_quantity: int}>
+     */
+    private function medicationLinesFromRecord(HealthRecord $record): array
+    {
+        if ($record->type !== 'medication') {
+            return [];
+        }
+
+        $fromDescription = $this->parseMedicationLinesFromDescription($record->description);
+        if ($fromDescription !== []) {
+            return $fromDescription;
+        }
+
+        if ($record->medicine_id) {
+            return [[
+                'medicine_id' => (int) $record->medicine_id,
+                'medication_quantity' => max((int) $record->medication_quantity, 1),
+            ]];
+        }
+
+        return [];
+    }
+
+    /**
+     * @return list<array{medicine_id: int, medication_quantity: int}>
+     */
+    private function parseMedicationLinesFromDescription(?string $description): array
+    {
+        if (! $description || ! str_contains($description, '__SERVICE_FIELDS__:')) {
+            return [];
+        }
+
+        $marker = '__SERVICE_FIELDS__:';
+        $json = substr($description, strpos($description, $marker) + strlen($marker));
+        $details = json_decode($json, true);
+
+        if (! is_array($details) || empty($details['medication_lines']) || ! is_array($details['medication_lines'])) {
+            return [];
+        }
+
+        return array_values(array_map(fn (array $line) => [
+            'medicine_id' => (int) $line['medicine_id'],
+            'medication_quantity' => max((int) ($line['medication_quantity'] ?? 1), 1),
+        ], $details['medication_lines']));
+    }
+
+    /**
+     * @param  list<array{medicine_id: int, medication_quantity: int}>  $previousLines
+     * @param  list<array{medicine_id: int, medication_quantity: int}>  $newLines
+     */
+    private function syncMedicationInventory(array $previousLines, array $newLines): ?string
+    {
+        if ($previousLines === [] && $newLines === []) {
             return null;
         }
 
-        $medicine = Medicine::find($validated['medicine_id']);
-
-        if (! $medicine) {
-            return 'Selected medicine was not found.';
+        $needed = [];
+        foreach ($newLines as $line) {
+            $medicineId = $line['medicine_id'];
+            $needed[$medicineId] = ($needed[$medicineId] ?? 0) + $line['medication_quantity'];
         }
 
-        $available = $medicine->quantity;
-
-        if ($existing
-            && $existing->type === 'medication'
-            && (int) $existing->medicine_id === (int) $validated['medicine_id']
-        ) {
-            $available += (int) $existing->medication_quantity;
+        $returning = [];
+        foreach ($previousLines as $line) {
+            $medicineId = $line['medicine_id'];
+            $returning[$medicineId] = ($returning[$medicineId] ?? 0) + $line['medication_quantity'];
         }
 
-        if ($available < (int) $validated['medication_quantity']) {
-            return 'Insufficient medicine inventory for the requested quantity.';
-        }
+        $medicineIds = array_unique(array_merge(array_keys($needed), array_keys($returning)));
 
-        return null;
+        return DB::transaction(function () use ($medicineIds, $needed, $returning) {
+            foreach ($medicineIds as $medicineId) {
+                $medicine = Medicine::whereKey($medicineId)->lockForUpdate()->first();
+
+                if (! $medicine) {
+                    return 'Selected medicine was not found.';
+                }
+
+                $available = $medicine->quantity + ($returning[$medicineId] ?? 0);
+                if ($available < ($needed[$medicineId] ?? 0)) {
+                    return 'Insufficient medicine inventory for the requested quantity.';
+                }
+            }
+
+            foreach ($medicineIds as $medicineId) {
+                $medicine = Medicine::whereKey($medicineId)->lockForUpdate()->first();
+                $delta = ($needed[$medicineId] ?? 0) - ($returning[$medicineId] ?? 0);
+
+                if ($delta > 0) {
+                    $medicine->decrement('quantity', $delta);
+                } elseif ($delta < 0) {
+                    $medicine->increment('quantity', abs($delta));
+                }
+            }
+
+            return null;
+        });
     }
 
     private function applyStickerChanges(
@@ -224,5 +336,84 @@ class HealthRecordController extends Controller
         }
 
         Storage::disk('s3')->delete($path);
+    }
+
+    /**
+     * Resolve the service price, quantity, line total and catalog link for a
+     * health record. Pricing auto-fills from Inventory (medication) or the
+     * Service Catalog (other types), but a provided unit price is respected
+     * so staff can override per record.
+     */
+    private function applyPricing(array &$validated): void
+    {
+        $type = $validated['type'];
+        $providedPrice = $validated['unit_price'] ?? null;
+
+        if ($type === 'medication' && ! empty($validated['medicine_id'])) {
+            $formQuantity = isset($validated['quantity']) ? (int) $validated['quantity'] : null;
+
+            // Frontend sends the summed total as unit_price with quantity=1 for multi-line billing.
+            if ($providedPrice !== null && $formQuantity === 1) {
+                $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
+                $validated['unit_price'] = (float) $providedPrice;
+                $validated['quantity'] = 1;
+                $validated['line_total'] = round((float) $providedPrice, 2);
+
+                return;
+            }
+
+            $quantity = max((int) ($validated['medication_quantity'] ?? 1), 1);
+            $unitPrice = $providedPrice !== null
+                ? (float) $providedPrice
+                : (float) (Medicine::find($validated['medicine_id'])?->unit_price ?? 0);
+
+            $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
+            $validated['unit_price'] = $unitPrice;
+            $validated['quantity'] = $quantity;
+            $validated['line_total'] = round($unitPrice * $quantity, 2);
+
+            return;
+        }
+
+        $catalog = ServiceCatalog::where('code', ClinicServices::catalogCodeForType($type))->first();
+        $quantity = max((int) ($validated['quantity'] ?? 1), 1);
+        $unitPrice = $providedPrice !== null
+            ? (float) $providedPrice
+            : (float) ($catalog?->default_price ?? 0);
+
+        $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? $catalog?->id;
+        $validated['unit_price'] = $unitPrice;
+        $validated['quantity'] = $quantity;
+        $validated['line_total'] = round($unitPrice * $quantity, 2);
+    }
+
+    /**
+     * Keep an already-generated invoice in sync when one of its linked health
+     * records is edited.
+     */
+    private function refreshLinkedBilling(?HealthRecord $healthRecord): void
+    {
+        $billing = $healthRecord?->billing;
+
+        if (! $billing) {
+            return;
+        }
+
+        $subtotal = (float) $billing->healthRecords()->sum('line_total');
+        $tax = (float) $billing->tax;
+        $discount = (float) $billing->discount;
+        $total = max($subtotal + $tax - $discount, 0);
+
+        $status = $billing->status;
+        if ($status !== 'cancelled') {
+            $paid = (float) $billing->amount_paid;
+            $status = $paid <= 0 ? 'unpaid' : ($paid < $total ? 'partial' : 'paid');
+        }
+
+        $billing->update([
+            'subtotal' => $subtotal,
+            'total_amount' => $total,
+            'status' => $status,
+        ]);
     }
 }

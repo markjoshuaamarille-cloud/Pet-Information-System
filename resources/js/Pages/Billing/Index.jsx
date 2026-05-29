@@ -54,13 +54,37 @@ const formatAppointmentOption = (appt) => {
 
 export default function BillingIndex({
     billings,
-    clients,
-    pets,
-    appointments,
-    serviceCatalogs,
+    clients = [],
+    pets = [],
+    appointments = [],
+    serviceCatalogs = [],
+    billablePets = [],
+    can_manage_billing = true,
 }) {
     const [editing, setEditing] = useState(null);
     const [payingBillingId, setPayingBillingId] = useState(null);
+    const [generatePetId, setGeneratePetId] = useState("");
+    const [generating, setGenerating] = useState(false);
+
+    const selectedBillablePet = billablePets.find(
+        (p) => String(p.id) === String(generatePetId),
+    );
+
+    const generateInvoice = () => {
+        if (!generatePetId) {
+            return;
+        }
+        setGenerating(true);
+        router.post(
+            route("billing.generate", generatePetId),
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setGeneratePetId(""),
+                onFinish: () => setGenerating(false),
+            },
+        );
+    };
 
     const form = useForm({
         client_id: "",
@@ -273,6 +297,28 @@ export default function BillingIndex({
         });
     };
 
+    const deleteAppointment = (appt) => {
+        if (
+            !confirm(
+                `Are you sure you want to delete this appointment?\n\n${formatAppointmentOption(appt)}`,
+            )
+        ) {
+            return;
+        }
+
+        router.delete(route("appointments.destroy", appt.id), {
+            preserveScroll: true,
+            onSuccess: () => {
+                if (String(form.data.appointment_id) === String(appt.id)) {
+                    form.setData({
+                        ...form.data,
+                        appointment_id: "",
+                    });
+                }
+            },
+        });
+    };
+
     const recalculateSubtotal = (unitPrice, quantity) => {
         const safePrice = Number(unitPrice) || 0;
         const safeQty = Number(quantity) || 0;
@@ -337,29 +383,139 @@ export default function BillingIndex({
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
+                    {can_manage_billing && (
+                        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-6">
+                            <h3 className="mb-1 font-semibold text-emerald-900">
+                                Generate Invoice from Services
+                            </h3>
+                            <p className="mb-4 text-sm text-emerald-800">
+                                Pick a pet to auto-total the services the vet
+                                already recorded. No manual computing needed.
+                            </p>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <div className="sm:col-span-2">
+                                    <InputLabel value="Pet with unbilled services" />
+                                    <select
+                                        className="mt-1 w-full rounded-md border-gray-300"
+                                        value={generatePetId}
+                                        onChange={(e) =>
+                                            setGeneratePetId(e.target.value)
+                                        }
+                                    >
+                                        <option value="">
+                                            {billablePets.length === 0
+                                                ? "No pets with unbilled services"
+                                                : "Select pet"}
+                                        </option>
+                                        {billablePets.map((p) => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.pet_name}
+                                                {p.client_name
+                                                    ? ` (${p.client_name})`
+                                                    : ""}{" "}
+                                                — {p.unbilled_count} svc ·{" "}
+                                                {Number(
+                                                    p.unbilled_total,
+                                                ).toFixed(2)}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex items-end">
+                                    <PrimaryButton
+                                        type="button"
+                                        disabled={!generatePetId || generating}
+                                        onClick={generateInvoice}
+                                    >
+                                        Generate Invoice
+                                    </PrimaryButton>
+                                </div>
+                            </div>
+                            {selectedBillablePet && (
+                                <p className="mt-3 text-sm font-medium text-emerald-900">
+                                    Total to invoice:{" "}
+                                    {Number(
+                                        selectedBillablePet.unbilled_total,
+                                    ).toFixed(2)}
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {can_manage_billing && (
                     <form
                         onSubmit={submit}
                         className="mb-6 rounded-lg bg-white p-6 shadow"
                     >
                         <h3 className="mb-4 font-semibold">
-                            {editing ? "Edit Invoice" : "Create Invoice"}
+                            {editing ? "Edit Invoice" : "Create Invoice (Manual)"}
                         </h3>
                         <div className="sm:col-span-3">
                             <InputLabel value="Appointment" />
-                            <select
-                                className="mt-1 w-full rounded-md border-gray-300"
-                                value={form.data.appointment_id}
-                                onChange={(e) =>
-                                    onAppointmentChange(e.target.value)
-                                }
-                            >
-                                <option value="">No linked appointment</option>
-                                {filteredAppointments.map((appt) => (
-                                    <option key={appt.id} value={appt.id}>
-                                        {formatAppointmentOption(appt)}
-                                    </option>
-                                ))}
-                            </select>
+                            <div className="mt-1 max-h-52 overflow-y-auto rounded-md border border-gray-300 bg-white">
+                                <button
+                                    type="button"
+                                    onClick={() => onAppointmentChange("")}
+                                    className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                                        !form.data.appointment_id
+                                            ? "bg-indigo-50 font-medium text-indigo-800"
+                                            : "text-gray-700"
+                                    }`}
+                                >
+                                    No linked appointment
+                                </button>
+                                {filteredAppointments.length === 0 ? (
+                                    <p className="border-t px-3 py-2 text-sm text-gray-500">
+                                        No completed appointments available.
+                                    </p>
+                                ) : (
+                                    filteredAppointments.map((appt) => {
+                                        const isSelected =
+                                            String(form.data.appointment_id) ===
+                                            String(appt.id);
+
+                                        return (
+                                            <div
+                                                key={appt.id}
+                                                className={`flex items-center gap-2 border-t px-2 py-1 ${
+                                                    isSelected
+                                                        ? "bg-indigo-50"
+                                                        : "hover:bg-gray-50"
+                                                }`}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        onAppointmentChange(
+                                                            String(appt.id),
+                                                        )
+                                                    }
+                                                    className={`min-w-0 flex-1 px-1 py-1.5 text-left text-sm ${
+                                                        isSelected
+                                                            ? "font-medium text-indigo-800"
+                                                            : "text-gray-700"
+                                                    }`}
+                                                >
+                                                    {formatAppointmentOption(
+                                                        appt,
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    title="Delete appointment"
+                                                    aria-label={`Delete appointment for ${appt.pet?.pet_name ?? "pet"}`}
+                                                    onClick={() =>
+                                                        deleteAppointment(appt)
+                                                    }
+                                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-gray-500 hover:bg-red-50 hover:text-red-600"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        );
+                                    })
+                                )}
+                            </div>
                         </div>
                         <div className="mt-4 grid gap-4 sm:grid-cols-3">
                             <div>
@@ -565,8 +721,9 @@ export default function BillingIndex({
                             )}
                         </div>
                     </form>
+                    )}
 
-                    {payingBillingId && (
+                    {can_manage_billing && payingBillingId && (
                         <form
                             onSubmit={submitPayment}
                             className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-6"
@@ -762,44 +919,51 @@ export default function BillingIndex({
                                                 >
                                                     Receipt
                                                 </Link>
-                                                <button
-                                                    className="ms-3 text-indigo-600 hover:underline"
-                                                    onClick={() =>
-                                                        startEdit(billing)
-                                                    }
-                                                >
-                                                    Edit
-                                                </button>
-                                                {billing.status !== "paid" &&
-                                                    billing.status !==
-                                                        "cancelled" && (
+                                                {can_manage_billing && (
+                                                    <>
                                                         <button
-                                                            className="ms-3 text-emerald-600 hover:underline"
+                                                            className="ms-3 text-indigo-600 hover:underline"
                                                             onClick={() =>
-                                                                startPayment(
+                                                                startEdit(
                                                                     billing,
                                                                 )
                                                             }
                                                         >
-                                                            Pay
+                                                            Edit
                                                         </button>
-                                                    )}
-                                                <button
-                                                    className="ms-3 text-red-600 hover:underline"
-                                                    onClick={() =>
-                                                        confirm(
-                                                            "Delete invoice?",
-                                                        ) &&
-                                                        router.delete(
-                                                            route(
-                                                                "billing.destroy",
-                                                                billing.id,
-                                                            ),
-                                                        )
-                                                    }
-                                                >
-                                                    Delete
-                                                </button>
+                                                        {billing.status !==
+                                                            "paid" &&
+                                                            billing.status !==
+                                                                "cancelled" && (
+                                                                <button
+                                                                    className="ms-3 text-emerald-600 hover:underline"
+                                                                    onClick={() =>
+                                                                        startPayment(
+                                                                            billing,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Pay
+                                                                </button>
+                                                            )}
+                                                        <button
+                                                            className="ms-3 text-red-600 hover:underline"
+                                                            onClick={() =>
+                                                                confirm(
+                                                                    "Delete invoice?",
+                                                                ) &&
+                                                                router.delete(
+                                                                    route(
+                                                                        "billing.destroy",
+                                                                        billing.id,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </>
+                                                )}
                                             </td>
                                         </tr>
                                     );

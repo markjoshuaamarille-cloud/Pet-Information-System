@@ -5,9 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Appointment;
 use App\Models\Billing;
 use App\Models\Client;
+use App\Models\HealthRecord;
 use App\Models\Payment;
 use App\Models\Pet;
 use App\Models\ServiceCatalog;
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,30 +22,90 @@ class BillingController extends Controller
 {
     public function index(): Response
     {
+        $user = $this->currentUser();
+        $isCustomer = (bool) $user?->isCustomer();
+        $canManageBilling = $user && $user->hasAnyRole(['super_admin', 'cashier', 'receptionist']);
+
+        $billingsQuery = Billing::with(['client', 'pet', 'appointment', 'serviceCatalog', 'payments'])
+            ->latest();
+
+        if ($isCustomer) {
+            $billingsQuery->where('client_id', $this->customerClientId($user));
+        }
+
         return Inertia::render('Billing/Index', [
-            'billings' => Billing::with(['client', 'pet', 'appointment', 'serviceCatalog', 'payments'])->latest()->get(),
-            'clients' => Client::orderBy('name')->get(['id', 'name']),
-            'pets' => Pet::with('client')->orderBy('pet_name')->get(),
-            'serviceCatalogs' => ServiceCatalog::query()
-                ->orderBy('name')
-                ->get(['id', 'code', 'name', 'category', 'default_price']),
-            'appointments' => Appointment::with(['pet:id,pet_name,client_id', 'client:id,name'])
-                ->where('status', 'completed')
-                ->orderByDesc('scheduled_at')
-                ->get()
-                ->map(fn (Appointment $appointment) => [
-                    'id' => $appointment->id,
-                    'pet_id' => $appointment->pet_id,
-                    'client_id' => $appointment->client_id,
-                    'scheduled_at' => $appointment->scheduled_at,
-                    'status' => $appointment->status,
-                    'service_type' => $appointment->getAttribute('type'),
-                    'service_label' => ClinicServices::label($appointment->getAttribute('type')),
-                    'pet' => $appointment->pet,
-                    'client' => $appointment->client,
-                ])
-                ->values(),
+            'billings' => $billingsQuery->get(),
+            'clients' => $canManageBilling ? Client::orderBy('name')->get(['id', 'name']) : [],
+            'pets' => $canManageBilling ? Pet::with('client')->orderBy('pet_name')->get() : [],
+            'serviceCatalogs' => $canManageBilling
+                ? ServiceCatalog::query()->orderBy('name')->get(['id', 'code', 'name', 'category', 'default_price'])
+                : [],
+            'billablePets' => $canManageBilling ? $this->billablePets() : [],
+            'can_manage_billing' => $canManageBilling,
+            'appointments' => $canManageBilling
+                ? Appointment::with(['pet:id,pet_name,client_id', 'client:id,name'])
+                    ->where('status', 'completed')
+                    ->orderByDesc('scheduled_at')
+                    ->get()
+                    ->map(fn (Appointment $appointment) => [
+                        'id' => $appointment->id,
+                        'pet_id' => $appointment->pet_id,
+                        'client_id' => $appointment->client_id,
+                        'scheduled_at' => $appointment->scheduled_at,
+                        'status' => $appointment->status,
+                        'service_type' => $appointment->getAttribute('type'),
+                        'service_label' => ClinicServices::label($appointment->getAttribute('type')),
+                        'pet' => $appointment->pet,
+                        'client' => $appointment->client,
+                    ])
+                    ->values()
+                : [],
         ]);
+    }
+
+    /**
+     * Auto-build an invoice from a pet's unbilled, priced health records so the
+     * cashier does not have to compute charges manually.
+     */
+    public function generateFromPet(Pet $pet): RedirectResponse
+    {
+        $records = $pet->healthRecords()
+            ->whereNull('billing_id')
+            ->where('line_total', '>', 0)
+            ->get();
+
+        if ($records->isEmpty()) {
+            return redirect()
+                ->route('billing.index')
+                ->withErrors(['pet_id' => 'This pet has no unbilled services to invoice.']);
+        }
+
+        $subtotal = (float) $records->sum('line_total');
+
+        $billing = DB::transaction(function () use ($pet, $records, $subtotal) {
+            $billing = Billing::create([
+                'invoice_number' => $this->generateInvoiceNumber(),
+                'client_id' => $pet->client_id,
+                'pet_id' => $pet->id,
+                'subtotal' => $subtotal,
+                'tax' => 0,
+                'discount' => 0,
+                'total_amount' => $subtotal,
+                'amount_paid' => 0,
+                'status' => 'unpaid',
+                'notes' => 'Auto-generated from health records: '
+                    .$records->pluck('title')->implode(', '),
+            ]);
+
+            HealthRecord::whereIn('id', $records->pluck('id'))
+                ->update(['billing_id' => $billing->id]);
+
+            return $billing;
+        });
+
+        return redirect()
+            ->route('billing.index')
+            ->with('success', "Invoice {$billing->invoice_number} generated from {$records->count()} service(s).");
     }
 
     public function store(Request $request): RedirectResponse
@@ -162,6 +224,11 @@ class BillingController extends Controller
 
     public function receipt(Billing $billing): Response
     {
+        $user = $this->currentUser();
+        if ($user?->isCustomer() && (int) $billing->client_id !== $this->customerClientId($user)) {
+            abort(403, 'You can only view your own receipts.');
+        }
+
         $billing->load(['client', 'pet', 'appointment', 'serviceCatalog', 'payments' => fn ($query) => $query->orderBy('paid_at')]);
 
         $appointment = $billing->appointment;
@@ -192,6 +259,51 @@ class BillingController extends Controller
         $count = Billing::whereDate('created_at', today())->count() + 1;
 
         return sprintf('%s-%04d', $prefix, $count);
+    }
+
+    /**
+     * Pets that have unbilled, priced health records ready for invoicing.
+     *
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function billablePets()
+    {
+        return Pet::with('client:id,name')
+            ->whereHas('healthRecords', fn ($query) => $query
+                ->whereNull('billing_id')
+                ->where('line_total', '>', 0))
+            ->withSum(['healthRecords as unbilled_total' => fn ($query) => $query
+                ->whereNull('billing_id')
+                ->where('line_total', '>', 0)], 'line_total')
+            ->withCount(['healthRecords as unbilled_count' => fn ($query) => $query
+                ->whereNull('billing_id')
+                ->where('line_total', '>', 0)])
+            ->orderBy('pet_name')
+            ->get()
+            ->map(fn (Pet $pet) => [
+                'id' => $pet->id,
+                'pet_name' => $pet->pet_name,
+                'client_name' => $pet->client?->name,
+                'unbilled_total' => (float) $pet->unbilled_total,
+                'unbilled_count' => (int) $pet->unbilled_count,
+            ])
+            ->values();
+    }
+
+    private function currentUser(): ?User
+    {
+        $user = auth()->user();
+
+        return $user instanceof User ? $user : null;
+    }
+
+    private function customerClientId(User $user): int
+    {
+        if (! $user->client_id) {
+            abort(403, 'Your customer account is not linked to a client record.');
+        }
+
+        return (int) $user->client_id;
     }
 
     private function statusFromAmounts(float $amountPaid, float $totalAmount, string $currentStatus): string

@@ -8,7 +8,7 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import InputError from "@/Components/InputError";
 import { Head, Link, useForm, router } from "@inertiajs/react";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 const types = [
     "consultation",
@@ -329,6 +329,109 @@ const toDateTimeLocalInput = (value) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
+const createBillingLine = (unitPrice = "", quantity = "1", source = "manual") => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    unit_price: unitPrice,
+    quantity,
+    source,
+});
+
+const createMedicationLine = (medicineId = "", medicationQuantity = "1") => ({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    medicine_id: medicineId,
+    medication_quantity: medicationQuantity,
+});
+
+const medicationLinesFromRecord = (record, details = {}) => {
+    if (
+        Array.isArray(details.medication_lines) &&
+        details.medication_lines.length > 0
+    ) {
+        return details.medication_lines.map((line) =>
+            createMedicationLine(
+                line.medicine_id ? String(line.medicine_id) : "",
+                line.medication_quantity
+                    ? String(line.medication_quantity)
+                    : "1",
+            ),
+        );
+    }
+
+    if (record.medicine_id) {
+        return [
+            createMedicationLine(
+                String(record.medicine_id),
+                record.medication_quantity
+                    ? String(record.medication_quantity)
+                    : "1",
+            ),
+        ];
+    }
+
+    return [createMedicationLine()];
+};
+
+const billingLinesFromRecord = (record, details = {}) => {
+    if (
+        Array.isArray(details.billing_lines) &&
+        details.billing_lines.length > 0
+    ) {
+        return details.billing_lines.map((line) =>
+            createBillingLine(
+                line.unit_price !== undefined && line.unit_price !== null
+                    ? String(line.unit_price)
+                    : "",
+                line.quantity !== undefined && line.quantity !== null
+                    ? String(line.quantity)
+                    : "1",
+            ),
+        );
+    }
+
+    if (Number(record.line_total) > 0 || Number(record.unit_price) > 0) {
+        return [
+            createBillingLine(
+                record.unit_price !== undefined && record.unit_price !== null
+                    ? String(record.unit_price)
+                    : "",
+                record.quantity ? String(record.quantity) : "1",
+            ),
+        ];
+    }
+
+    return [];
+};
+
+const billingLineSubtotal = (line) =>
+    (Number(line.unit_price) || 0) * (Number(line.quantity) || 0);
+
+const medicationLineSubtotal = (line, medicinesList) => {
+    const medicine = medicinesList.find(
+        (m) => String(m.id) === String(line.medicine_id),
+    );
+
+    return (
+        (Number(medicine?.unit_price) || 0) *
+        (Number(line.medication_quantity) || 0)
+    );
+};
+
+const DEFAULT_BILLING_TAX_RATE = "12";
+
+const billingPricingFromDetails = (details = {}) => ({
+    applyTax: Boolean(details.billing_tax_enabled),
+    taxRate:
+        details.billing_tax_rate !== undefined &&
+        details.billing_tax_rate !== null
+            ? String(details.billing_tax_rate)
+            : DEFAULT_BILLING_TAX_RATE,
+    discountAmount:
+        details.billing_discount !== undefined &&
+        details.billing_discount !== null
+            ? String(details.billing_discount)
+            : "0",
+});
+
 const defaultHealthFormData = () => ({
     type: "consultation",
     title: "",
@@ -336,6 +439,8 @@ const defaultHealthFormData = () => ({
     medicine_id: "",
     dosage: "",
     medication_quantity: "",
+    unit_price: "",
+    quantity: "1",
     record_date: new Date().toISOString().slice(0, 10),
     next_due_date: "",
     veterinarian_notes: "",
@@ -406,14 +511,134 @@ export default function PetShow({
     medicines,
     veterinarians = [],
     groomers = [],
+    servicePrices = {},
     can_manage_health_records,
 }) {
+    const catalogCodeForType = (type) => type;
+
+    const priceForType = (type) => {
+        const code = catalogCodeForType(type);
+        const value = servicePrices?.[code];
+        return value === undefined || value === null ? "" : String(value);
+    };
     const [viewingRecord, setViewingRecord] = useState(null);
     const [editingHealthRecordId, setEditingHealthRecordId] = useState(null);
     const [editingStickerPhotoUrl, setEditingStickerPhotoUrl] = useState(null);
+    const [billingLines, setBillingLines] = useState([]);
+    const [medicationLines, setMedicationLines] = useState([]);
+    const [applyTax, setApplyTax] = useState(true);
+    const [taxRate, setTaxRate] = useState(DEFAULT_BILLING_TAX_RATE);
+    const [discountAmount, setDiscountAmount] = useState("0");
     const healthFormRef = useRef(null);
     const stickerPhotoInputRef = useRef(null);
     const healthForm = useForm(defaultHealthFormData());
+
+    const resolveReferenceUnitPrice = () => {
+        if (healthForm.data.type === "medication") {
+            const selected = medicines.find(
+                (m) =>
+                    String(m.id) === String(healthForm.data.medicine_id),
+            );
+            return selected?.unit_price !== undefined &&
+                selected?.unit_price !== null
+                ? String(selected.unit_price)
+                : "";
+        }
+
+        return priceForType(healthForm.data.type);
+    };
+
+    const billingSubtotal = useMemo(() => {
+        const extraBilling = billingLines.reduce(
+            (sum, line) => sum + billingLineSubtotal(line),
+            0,
+        );
+
+        if (healthForm.data.type === "medication") {
+            const medicationBilling = medicationLines.reduce(
+                (sum, line) => sum + medicationLineSubtotal(line, medicines),
+                0,
+            );
+
+            return medicationBilling + extraBilling;
+        }
+
+        return billingLines.reduce(
+            (sum, line) => sum + billingLineSubtotal(line),
+            0,
+        );
+    }, [billingLines, medicationLines, medicines, healthForm.data.type]);
+
+    const computedLineTotal = useMemo(() => {
+        const tax = applyTax
+            ? billingSubtotal * ((Number(taxRate) || 0) / 100)
+            : 0;
+        const discount = Number(discountAmount) || 0;
+
+        return Math.max(billingSubtotal + tax - discount, 0).toFixed(2);
+    }, [billingSubtotal, applyTax, taxRate, discountAmount]);
+
+    const addBillingLine = () => {
+        if (healthForm.data.type === "medication") {
+            healthForm.clearErrors("unit_price");
+            setBillingLines((prev) => [
+                ...prev,
+                createBillingLine("", "1", "manual"),
+            ]);
+            return;
+        }
+
+        const isFirst = billingLines.length === 0;
+        const unitPrice = isFirst ? resolveReferenceUnitPrice() : "";
+
+        healthForm.clearErrors("unit_price");
+        setBillingLines((prev) => [
+            ...prev,
+            createBillingLine(unitPrice, "1", "manual"),
+        ]);
+    };
+
+    const addMedicationLine = () => {
+        setMedicationLines((prev) => [...prev, createMedicationLine()]);
+    };
+
+    const updateMedicationLine = (id, field, value) => {
+        setMedicationLines((prev) =>
+            prev.map((line) =>
+                line.id === id ? { ...line, [field]: value } : line,
+            ),
+        );
+    };
+
+    const removeMedicationLine = (id) => {
+        setMedicationLines((prev) => {
+            if (prev.length <= 1) {
+                return [createMedicationLine()];
+            }
+
+            return prev.filter((line) => line.id !== id);
+        });
+    };
+
+    const updateBillingLine = (id, field, value) => {
+        setBillingLines((prev) =>
+            prev.map((line) =>
+                line.id === id ? { ...line, [field]: value } : line,
+            ),
+        );
+    };
+
+    const removeBillingLine = (id) => {
+        setBillingLines((prev) => prev.filter((line) => line.id !== id));
+    };
+
+    const hasMedicationCharges = useMemo(
+        () => medicationLines.some((line) => line.medicine_id),
+        [medicationLines],
+    );
+
+    const showBillingSummary =
+        billingLines.length > 0 || hasMedicationCharges;
 
     const resetTypeSpecificFields = (nextType) => {
         healthForm.setData({
@@ -442,6 +667,8 @@ export default function PetShow({
             medicine_id: "",
             dosage: "",
             medication_quantity: "",
+            unit_price: "",
+            quantity: "1",
             instructions: "",
             surgeon_user_id: "",
             pre_op_condition: "",
@@ -473,6 +700,29 @@ export default function PetShow({
             veterinarian_notes: "",
             next_due_date: "",
         });
+
+        if (billingLines.length > 0) {
+            setBillingLines((prev) =>
+                prev.map((line, index) =>
+                    index === 0
+                        ? {
+                              ...line,
+                              unit_price:
+                                  nextType === "medication"
+                                      ? ""
+                                      : priceForType(nextType),
+                              quantity: "1",
+                          }
+                        : line,
+                ),
+            );
+        }
+
+        if (nextType === "medication") {
+            setMedicationLines([createMedicationLine()]);
+        } else {
+            setMedicationLines([]);
+        }
     };
 
     const buildPayload = (data) => {
@@ -489,6 +739,49 @@ export default function PetShow({
                     ? data.medication_quantity || null
                     : null,
         };
+
+        const activeMedicationLines = medicationLines.filter(
+            (line) => line.medicine_id,
+        );
+        const hasBillingContent =
+            healthForm.data.type === "medication"
+                ? activeMedicationLines.length > 0 || billingLines.length > 0
+                : billingLines.length > 0;
+
+        const billingSubtotalValue =
+            healthForm.data.type === "medication"
+                ? activeMedicationLines.reduce(
+                      (sum, line) => sum + medicationLineSubtotal(line, medicines),
+                      0,
+                  ) +
+                  billingLines.reduce(
+                      (sum, line) => sum + billingLineSubtotal(line),
+                      0,
+                  )
+                : billingLines.reduce(
+                      (sum, line) => sum + billingLineSubtotal(line),
+                      0,
+                  );
+        const taxValue = applyTax
+            ? billingSubtotalValue * ((Number(taxRate) || 0) / 100)
+            : 0;
+        const discountValue = Number(discountAmount) || 0;
+        const finalBillingTotal = Math.max(
+            billingSubtotalValue + taxValue - discountValue,
+            0,
+        );
+
+        if (hasBillingContent) {
+            cleanedBase.unit_price = finalBillingTotal;
+            cleanedBase.quantity = 1;
+        } else {
+            cleanedBase.unit_price =
+                data.unit_price === "" ? null : data.unit_price;
+            cleanedBase.quantity =
+                data.type === "medication"
+                    ? data.medication_quantity || 1
+                    : data.quantity || 1;
+        }
 
         let details = {};
         let notes = "";
@@ -535,16 +828,30 @@ export default function PetShow({
             cleanedBase.next_due_date =
                 data.next_grooming_date || cleanedBase.next_due_date;
         } else if (data.type === "medication") {
-            const selectedMedicine = medicines.find(
-                (m) => String(m.id) === String(data.medicine_id),
-            );
             details = {
-                medicine_name: selectedMedicine?.name || "",
-                dosage: data.dosage,
-                medication_quantity: data.medication_quantity,
+                medication_lines: activeMedicationLines.map((line) => ({
+                    medicine_id: Number(line.medicine_id),
+                    medication_quantity:
+                        Number(line.medication_quantity) || 1,
+                    medicine_name:
+                        medicines.find(
+                            (m) =>
+                                String(m.id) === String(line.medicine_id),
+                        )?.name ?? "",
+                })),
                 instructions: data.instructions,
             };
             notes = data.instructions;
+
+            const primaryLine = activeMedicationLines[0];
+            cleanedBase.medicine_id = primaryLine
+                ? Number(primaryLine.medicine_id)
+                : null;
+            cleanedBase.medication_quantity = primaryLine
+                ? Number(primaryLine.medication_quantity) || 1
+                : null;
+            cleanedBase.medication_lines = details.medication_lines;
+            cleanedBase.dosage = null;
         } else if (data.type === "surgery") {
             const surgeonName = staffMemberName(
                 veterinarians,
@@ -631,6 +938,45 @@ export default function PetShow({
             }
         }
 
+        if (hasBillingContent) {
+            const medicationBillingEntries = activeMedicationLines.map(
+                (line) => {
+                    const medicine = medicines.find(
+                        (m) => String(m.id) === String(line.medicine_id),
+                    );
+
+                    return {
+                        unit_price: Number(medicine?.unit_price ?? 0),
+                        quantity: Number(line.medication_quantity) || 1,
+                        source: "medication",
+                        medicine_id: Number(line.medicine_id),
+                    };
+                },
+            );
+            const manualBillingEntries = billingLines.map(
+                ({ unit_price, quantity }) => ({
+                    unit_price:
+                        unit_price === "" ? 0 : Number(unit_price),
+                    quantity: quantity === "" ? 1 : Number(quantity),
+                    source: "manual",
+                }),
+            );
+
+            details.billing_lines = [
+                ...medicationBillingEntries,
+                ...manualBillingEntries,
+            ];
+            details.billing_subtotal = billingSubtotalValue;
+            if (applyTax) {
+                details.billing_tax_enabled = true;
+                details.billing_tax_rate = Number(taxRate) || 0;
+                details.billing_tax_amount = taxValue;
+            }
+            if (discountValue > 0) {
+                details.billing_discount = discountValue;
+            }
+        }
+
         details = Object.fromEntries(
             Object.entries(details).filter(([, value]) => {
                 if (Array.isArray(value)) {
@@ -679,6 +1025,11 @@ export default function PetShow({
             medication_quantity: record.medication_quantity
                 ? String(record.medication_quantity)
                 : "",
+            unit_price:
+                record.unit_price !== undefined && record.unit_price !== null
+                    ? String(record.unit_price)
+                    : "",
+            quantity: record.quantity ? String(record.quantity) : "1",
             sticker_photo: null,
             remove_sticker_photo: false,
         };
@@ -769,6 +1120,11 @@ export default function PetShow({
     const resetHealthForm = () => {
         setEditingHealthRecordId(null);
         setEditingStickerPhotoUrl(null);
+        setBillingLines([]);
+        setMedicationLines([]);
+        setApplyTax(true);
+        setTaxRate(DEFAULT_BILLING_TAX_RATE);
+        setDiscountAmount("0");
         healthForm.transform((data) => data);
         healthForm.reset();
         healthForm.setData(defaultHealthFormData());
@@ -779,6 +1135,36 @@ export default function PetShow({
         setEditingStickerPhotoUrl(record.sticker_photo_url || null);
         setViewingRecord(null);
         healthForm.clearErrors();
+        const { details } = parseServiceDetails(record.description || "");
+        const pricing = billingPricingFromDetails(details ?? {});
+        setMedicationLines(
+            record.type === "medication"
+                ? medicationLinesFromRecord(record, details ?? {})
+                : [],
+        );
+        if (Array.isArray(details?.billing_lines)) {
+            setBillingLines(
+                details.billing_lines
+                    .filter((line) => line.source !== "medication")
+                    .map((line) =>
+                        createBillingLine(
+                            line.unit_price !== undefined &&
+                                line.unit_price !== null
+                                ? String(line.unit_price)
+                                : "",
+                            line.quantity ? String(line.quantity) : "1",
+                            "manual",
+                        ),
+                    ),
+            );
+        } else if (record.type !== "medication") {
+            setBillingLines(billingLinesFromRecord(record, details ?? {}));
+        } else {
+            setBillingLines([]);
+        }
+        setApplyTax(pricing.applyTax);
+        setTaxRate(pricing.taxRate);
+        setDiscountAmount(pricing.discountAmount);
         healthForm.setData(populateFormFromRecord(record));
         healthFormRef.current?.scrollIntoView({
             behavior: "smooth",
@@ -1108,79 +1494,149 @@ export default function PetShow({
                                     </div>
                                     {healthForm.data.type === "medication" && (
                                         <>
-                                            <div>
-                                                <InputLabel value="Medicine" />
-                                                <select
-                                                    className="mt-1 w-full rounded-md border-gray-300"
-                                                    value={
-                                                        healthForm.data
-                                                            .medicine_id
-                                                    }
-                                                    onChange={(e) =>
-                                                        healthForm.setData(
-                                                            "medicine_id",
-                                                            e.target.value,
-                                                        )
-                                                    }
+                                            <div className="sm:col-span-3 flex items-center justify-between gap-2">
+                                                <InputLabel value="Medicines Used" />
+                                                <button
+                                                    type="button"
+                                                    onClick={addMedicationLine}
+                                                    title="Add medicine"
+                                                    aria-label="Add medicine"
+                                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-lg leading-none text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
                                                 >
-                                                    <option value="">
-                                                        Select
-                                                    </option>
-                                                    {medicines
-                                                        .filter(
-                                                            (m) =>
-                                                                Number(
-                                                                    m.quantity,
-                                                                ) > 0,
-                                                        )
-                                                        .map((m) => (
-                                                            <option
-                                                                key={m.id}
-                                                                value={m.id}
-                                                            >
-                                                                {m.name} (
-                                                                {categoryLabels[
-                                                                    m.category
-                                                                ] ?? "Medicine"}
-                                                                )
-                                                            </option>
-                                                        ))}
-                                                </select>
+                                                    +
+                                                </button>
                                             </div>
-                                            <div>
-                                                <InputLabel value="Dosage" />
-                                                <TextInput
-                                                    className="mt-1 block w-full"
-                                                    value={
-                                                        healthForm.data.dosage
-                                                    }
-                                                    onChange={(e) =>
-                                                        healthForm.setData(
-                                                            "dosage",
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                />
-                                            </div>
-                                            <div>
-                                                <InputLabel value="Quantity Used" />
-                                                <TextInput
-                                                    type="number"
-                                                    min="1"
-                                                    className="mt-1 block w-full"
-                                                    value={
-                                                        healthForm.data
-                                                            .medication_quantity
-                                                    }
-                                                    onChange={(e) =>
-                                                        healthForm.setData(
-                                                            "medication_quantity",
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    required
-                                                />
-                                            </div>
+                                            {medicationLines.map(
+                                                (line, index) => (
+                                                    <div
+                                                        key={line.id}
+                                                        className="sm:col-span-3 rounded-md border border-gray-200 bg-gray-50 p-3"
+                                                    >
+                                                        <div className="mb-2 flex items-center justify-between gap-2">
+                                                            <p className="text-xs font-medium text-gray-700">
+                                                                Medicine{" "}
+                                                                {index + 1}
+                                                            </p>
+                                                            {medicationLines.length >
+                                                                1 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() =>
+                                                                        removeMedicationLine(
+                                                                            line.id,
+                                                                        )
+                                                                    }
+                                                                    title="Remove medicine"
+                                                                    aria-label="Remove medicine"
+                                                                    className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm text-gray-500 hover:bg-gray-100 hover:text-red-600"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                        <div className="grid gap-3 sm:grid-cols-2">
+                                                            <div>
+                                                                <InputLabel value="Medicine" />
+                                                                <select
+                                                                    className="mt-1 w-full rounded-md border-gray-300"
+                                                                    value={
+                                                                        line.medicine_id
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateMedicationLine(
+                                                                            line.id,
+                                                                            "medicine_id",
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                    required={
+                                                                        index ===
+                                                                        0
+                                                                    }
+                                                                >
+                                                                    <option value="">
+                                                                        Select
+                                                                    </option>
+                                                                    {medicines
+                                                                        .filter(
+                                                                            (
+                                                                                m,
+                                                                            ) =>
+                                                                                Number(
+                                                                                    m.quantity,
+                                                                                ) >
+                                                                                0,
+                                                                        )
+                                                                        .map(
+                                                                            (
+                                                                                m,
+                                                                            ) => (
+                                                                                <option
+                                                                                    key={
+                                                                                        m.id
+                                                                                    }
+                                                                                    value={
+                                                                                        m.id
+                                                                                    }
+                                                                                >
+                                                                                    {
+                                                                                        m.name
+                                                                                    }{" "}
+                                                                                    (
+                                                                                    {categoryLabels[
+                                                                                        m
+                                                                                            .category
+                                                                                    ] ??
+                                                                                        "Medicine"}
+                                                                                    )
+                                                                                </option>
+                                                                            ),
+                                                                        )}
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <InputLabel value="Quantity Used" />
+                                                                <TextInput
+                                                                    type="number"
+                                                                    min="1"
+                                                                    className="mt-1 block w-full"
+                                                                    value={
+                                                                        line.medication_quantity
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateMedicationLine(
+                                                                            line.id,
+                                                                            "medication_quantity",
+                                                                            e
+                                                                                .target
+                                                                                .value,
+                                                                        )
+                                                                    }
+                                                                    required={
+                                                                        index ===
+                                                                        0
+                                                                    }
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                        {line.medicine_id && (
+                                                            <p className="mt-2 text-xs text-gray-500">
+                                                                Line charge:{" "}
+                                                                {medicationLineSubtotal(
+                                                                    line,
+                                                                    medicines,
+                                                                ).toFixed(2)}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                ),
+                                            )}
                                             <div className="sm:col-span-2">
                                                 <InputLabel value="Notes / Instructions" />
                                                 <textarea
@@ -2131,6 +2587,239 @@ export default function PetShow({
                                         }
                                     />
                                 </div>
+                                <div className="mt-4 rounded-md border border-indigo-100 bg-indigo-50 p-3">
+                                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
+                                            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
+                                                Billing
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={addBillingLine}
+                                                title="Add service price line"
+                                                aria-label="Add service price line"
+                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-lg leading-none text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
+                                            >
+                                                +
+                                            </button>
+                                        </div>
+                                        {billingLines.length > 0 && (
+                                            <p className="text-xs text-gray-500">
+                                                {billingLines.length} price line
+                                                {billingLines.length === 1
+                                                    ? ""
+                                                    : "s"}
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    {showBillingSummary ? (
+                                        <div className="space-y-3">
+                                            {healthForm.data.type ===
+                                                "medication" &&
+                                                hasMedicationCharges && (
+                                                    <p className="text-xs text-gray-600">
+                                                        Medicine charges are
+                                                        included in the
+                                                        subtotal automatically.
+                                                    </p>
+                                                )}
+                                            {billingLines.map(
+                                                (line, index) => (
+                                                <div
+                                                    key={line.id}
+                                                    className="rounded-md border border-indigo-100 bg-white p-3"
+                                                >
+                                                    <div className="mb-2 flex items-center justify-between gap-2">
+                                                        <p className="text-xs font-medium text-gray-700">
+                                                            {healthForm.data
+                                                                .type ===
+                                                            "medication"
+                                                                ? "Extra charge "
+                                                                : "Price line "}
+                                                            {index + 1}
+                                                            {index === 0 &&
+                                                                healthForm.data
+                                                                    .type !==
+                                                                    "medication" && (
+                                                                    <span className="ms-1 font-normal text-gray-500">
+                                                                        (catalog
+                                                                        price
+                                                                        applied)
+                                                                    </span>
+                                                                )}
+                                                        </p>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                removeBillingLine(
+                                                                    line.id,
+                                                                )
+                                                            }
+                                                            title="Remove this price line"
+                                                            aria-label="Remove this price line"
+                                                            className="inline-flex h-6 w-6 items-center justify-center rounded-full text-sm text-gray-500 hover:bg-gray-100 hover:text-red-600"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                    <div className="grid gap-3 sm:grid-cols-3">
+                                                        <div>
+                                                            <InputLabel value="Service Price" />
+                                                            <TextInput
+                                                                type="number"
+                                                                step="0.01"
+                                                                min="0"
+                                                                className="mt-1 block w-full"
+                                                                value={
+                                                                    line.unit_price
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateBillingLine(
+                                                                        line.id,
+                                                                        "unit_price",
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                                placeholder="0.00"
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <InputLabel value="Quantity" />
+                                                            <TextInput
+                                                                type="number"
+                                                                min="1"
+                                                                className="mt-1 block w-full"
+                                                                value={
+                                                                    line.quantity
+                                                                }
+                                                                onChange={(e) =>
+                                                                    updateBillingLine(
+                                                                        line.id,
+                                                                        "quantity",
+                                                                        e.target
+                                                                            .value,
+                                                                    )
+                                                                }
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <InputLabel value="Subtotal" />
+                                                            <div className="mt-1 rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-semibold text-gray-800">
+                                                                {billingLineSubtotal(
+                                                                    line,
+                                                                ).toFixed(2)}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                            <div className="space-y-3 rounded-md border border-indigo-200 bg-white px-4 py-3">
+                                                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={applyTax}
+                                                            onChange={(e) =>
+                                                                setApplyTax(
+                                                                    e.target
+                                                                        .checked,
+                                                                )
+                                                            }
+                                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                        />
+                                                        <span className="text-gray-700">
+                                                            Tax
+                                                        </span>
+                                                        <TextInput
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            className="w-16 py-1 text-sm"
+                                                            value={taxRate}
+                                                            onChange={(e) =>
+                                                                setTaxRate(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            disabled={!applyTax}
+                                                        />
+                                                        <span className="text-gray-500">
+                                                            %
+                                                        </span>
+                                                    </label>
+                                                    <label className="inline-flex items-center gap-2">
+                                                        <span className="text-gray-700">
+                                                            Discount
+                                                        </span>
+                                                        <TextInput
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            className="w-24 py-1 text-sm"
+                                                            value={
+                                                                discountAmount
+                                                            }
+                                                            onChange={(e) =>
+                                                                setDiscountAmount(
+                                                                    e.target
+                                                                        .value,
+                                                                )
+                                                            }
+                                                            placeholder="0.00"
+                                                        />
+                                                    </label>
+                                                </div>
+                                                <div className="flex items-center justify-between border-t border-indigo-100 pt-3">
+                                                    <div>
+                                                        <span className="text-sm font-semibold text-indigo-900">
+                                                            Line Total
+                                                        </span>
+                                                        {billingLines.length >
+                                                            0 && (
+                                                            <p className="mt-0.5 text-xs text-gray-500">
+                                                                Subtotal{" "}
+                                                                {billingSubtotal.toFixed(
+                                                                    2,
+                                                                )}
+                                                                {applyTax &&
+                                                                    ` + Tax ${(
+                                                                        billingSubtotal *
+                                                                        ((Number(
+                                                                            taxRate,
+                                                                        ) ||
+                                                                            0) /
+                                                                            100)
+                                                                    ).toFixed(2)}`}
+                                                                {Number(
+                                                                    discountAmount,
+                                                                ) > 0 &&
+                                                                    ` - Discount ${Number(
+                                                                        discountAmount,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}`}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                    <span className="text-lg font-bold text-indigo-900">
+                                                        {computedLineTotal}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-gray-500">
+                                            {healthForm.data.type ===
+                                            "medication"
+                                                ? "Select medicines above to include their inventory prices in the line total. Press + here to add extra charges."
+                                                : "Optional. Press + to add a service price line. Add more lines for extra charges — the total updates automatically."}
+                                        </p>
+                                    )}
+                                </div>
                                 <InputError
                                     message={healthForm.errors.type}
                                     className="mt-2"
@@ -2155,6 +2844,10 @@ export default function PetShow({
                                     message={
                                         healthForm.errors.medication_quantity
                                     }
+                                    className="mt-2"
+                                />
+                                <InputError
+                                    message={healthForm.errors.unit_price}
                                     className="mt-2"
                                 />
                                 <div className="mt-3 flex flex-wrap items-center gap-3">
@@ -2234,17 +2927,93 @@ export default function PetShow({
                                                             : String(value)}
                                                     </p>
                                                 ))}
-                                            {r.medicine && (
-                                                <p>
-                                                    Medicine: {r.medicine.name}
-                                                    {r.dosage &&
-                                                        ` (${r.dosage})`}
-                                                    {r.medication_quantity &&
-                                                        ` · Qty: ${r.medication_quantity} ${r.medicine.unit ?? ""}`}
-                                                </p>
-                                            )}
+                                            {(() => {
+                                                const medDetails =
+                                                    parseServiceDetails(
+                                                        r.description || "",
+                                                    ).details ?? {};
+                                                const medLines = Array.isArray(
+                                                    medDetails.medication_lines,
+                                                )
+                                                    ? medDetails.medication_lines
+                                                    : r.medicine
+                                                      ? [
+                                                            {
+                                                                medicine_name:
+                                                                    r.medicine
+                                                                        .name,
+                                                                medication_quantity:
+                                                                    r.medication_quantity,
+                                                                unit: r.medicine
+                                                                    .unit,
+                                                            },
+                                                        ]
+                                                      : [];
+
+                                                if (medLines.length === 0) {
+                                                    return null;
+                                                }
+
+                                                return (
+                                                    <p>
+                                                        {medLines.length > 1
+                                                            ? "Medicines: "
+                                                            : "Medicine: "}
+                                                        {medLines
+                                                            .map((line) => {
+                                                                const name =
+                                                                    line.medicine_name ??
+                                                                    medicines.find(
+                                                                        (m) =>
+                                                                            String(
+                                                                                m.id,
+                                                                            ) ===
+                                                                            String(
+                                                                                line.medicine_id,
+                                                                            ),
+                                                                    )?.name ??
+                                                                    "Unknown";
+                                                                const qty =
+                                                                    line.medication_quantity ??
+                                                                    1;
+                                                                const unit =
+                                                                    line.unit ??
+                                                                    medicines.find(
+                                                                        (m) =>
+                                                                            String(
+                                                                                m.id,
+                                                                            ) ===
+                                                                            String(
+                                                                                line.medicine_id,
+                                                                            ),
+                                                                    )?.unit ??
+                                                                    "";
+
+                                                                return `${name} (Qty: ${qty}${unit ? ` ${unit}` : ""})`;
+                                                            })
+                                                            .join("; ")}
+                                                    </p>
+                                                );
+                                            })()}
                                             {r.veterinarian_notes && (
                                                 <p>{r.veterinarian_notes}</p>
+                                            )}
+                                            {Number(r.line_total) > 0 && (
+                                                <p className="font-medium text-gray-700">
+                                                    Charge:{" "}
+                                                    {Number(
+                                                        r.line_total,
+                                                    ).toFixed(2)}
+                                                    {r.billing_id ? (
+                                                        <span className="ms-2 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
+                                                            Invoiced
+                                                        </span>
+                                                    ) : (
+                                                        <span className="ms-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                                                            Unbilled
+                                                        </span>
+                                                    )}
+                                                </p>
                                             )}
                                             {r.sticker_photo_url && (
                                                 <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -2445,6 +3214,28 @@ export default function PetShow({
                                                     ` (${viewingRecord.dosage})`}
                                                 {viewingRecord.medication_quantity &&
                                                     ` · Qty: ${viewingRecord.medication_quantity} ${viewingRecord.medicine.unit ?? ""}`}
+                                            </dd>
+                                        </div>
+                                    )}
+                                    {Number(viewingRecord.line_total) > 0 && (
+                                        <div>
+                                            <dt className="text-gray-500">
+                                                Billing
+                                            </dt>
+                                            <dd>
+                                                {Number(
+                                                    viewingRecord.unit_price,
+                                                ).toFixed(2)}{" "}
+                                                ×{" "}
+                                                {viewingRecord.quantity ?? 1} ={" "}
+                                                <span className="font-semibold">
+                                                    {Number(
+                                                        viewingRecord.line_total,
+                                                    ).toFixed(2)}
+                                                </span>
+                                                {viewingRecord.billing_id
+                                                    ? " (Invoiced)"
+                                                    : " (Unbilled)"}
                                             </dd>
                                         </div>
                                     )}

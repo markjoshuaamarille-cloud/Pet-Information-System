@@ -14,11 +14,16 @@ class HealthRecord extends Model
     protected $fillable = [
         'pet_id',
         'medicine_id',
+        'service_catalog_id',
+        'billing_id',
         'type',
         'title',
         'description',
         'dosage',
         'medication_quantity',
+        'unit_price',
+        'quantity',
+        'line_total',
         'record_date',
         'next_due_date',
         'veterinarian_notes',
@@ -34,6 +39,9 @@ class HealthRecord extends Model
         return [
             'record_date' => 'date',
             'next_due_date' => 'date',
+            'unit_price' => 'decimal:2',
+            'quantity' => 'integer',
+            'line_total' => 'decimal:2',
         ];
     }
 
@@ -61,5 +69,15 @@ class HealthRecord extends Model
     public function medicine(): BelongsTo
     {
         return $this->belongsTo(Medicine::class);
+    }
+
+    public function serviceCatalog(): BelongsTo
+    {
+        return $this->belongsTo(ServiceCatalog::class);
+    }
+
+    public function billing(): BelongsTo
+    {
+        return $this->belongsTo(Billing::class);
     }
 }

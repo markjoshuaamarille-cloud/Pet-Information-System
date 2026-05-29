@@ -6,7 +6,7 @@ import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import { Head, Link, useForm, usePage } from "@inertiajs/react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 const vaccinationStatusOptions = [
     { value: "unknown", label: "Unknown" },
@@ -23,6 +23,9 @@ export default function PetsIndex({
     const user = usePage().props.auth.user;
     const isCustomer = user?.role === "customer";
     const [editingId, setEditingId] = useState(null);
+    const [search, setSearch] = useState("");
+    const [speciesFilter, setSpeciesFilter] = useState("");
+    const [vaccinationFilter, setVaccinationFilter] = useState("");
     const initialFormData = {
         client_id: "",
         pet_name: "",
@@ -109,6 +112,61 @@ export default function PetsIndex({
         form.setData(initialFormData);
         form.clearErrors();
     };
+
+    const speciesOptions = useMemo(() => {
+        const values = [
+            ...new Set(pets.map((pet) => pet.species).filter(Boolean)),
+        ];
+        return values.sort((a, b) => String(a).localeCompare(String(b)));
+    }, [pets]);
+
+    const filteredPets = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        return pets.filter((pet) => {
+            if (speciesFilter && pet.species !== speciesFilter) {
+                return false;
+            }
+
+            if (
+                vaccinationFilter &&
+                pet.vaccination_status !== vaccinationFilter
+            ) {
+                return false;
+            }
+
+            if (!query) {
+                return true;
+            }
+
+            const vaccinationLabel =
+                vaccinationStatusOptions.find(
+                    (option) => option.value === pet.vaccination_status,
+                )?.label ?? "";
+
+            return [
+                pet.pet_name,
+                pet.client?.name,
+                pet.species,
+                pet.breed,
+                pet.microchip_no,
+                pet.color,
+                vaccinationLabel,
+            ]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query));
+        });
+    }, [pets, search, speciesFilter, vaccinationFilter]);
+
+    const clearFilters = () => {
+        setSearch("");
+        setSpeciesFilter("");
+        setVaccinationFilter("");
+    };
+
+    const hasActiveFilters = Boolean(
+        search || speciesFilter || vaccinationFilter,
+    );
 
     return (
         <AuthenticatedLayout
@@ -370,6 +428,73 @@ export default function PetsIndex({
                             preparing billing.
                         </p>
                     )}
+
+                    <div className="mb-4 rounded-lg bg-white p-4 shadow">
+                        <div className="grid gap-4 sm:grid-cols-4">
+                            <div className="sm:col-span-2">
+                                <InputLabel value="Search" />
+                                <TextInput
+                                    className="mt-1 block w-full"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder=""
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Species" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                                    value={speciesFilter}
+                                    onChange={(e) =>
+                                        setSpeciesFilter(e.target.value)
+                                    }
+                                >
+                                    <option value="">All species</option>
+                                    {speciesOptions.map((species) => (
+                                        <option key={species} value={species}>
+                                            {species}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Vaccination Status" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                                    value={vaccinationFilter}
+                                    onChange={(e) =>
+                                        setVaccinationFilter(e.target.value)
+                                    }
+                                >
+                                    <option value="">All statuses</option>
+                                    {vaccinationStatusOptions.map((option) => (
+                                        <option
+                                            key={option.value}
+                                            value={option.value}
+                                        >
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                            <span>
+                                Showing {filteredPets.length} of {pets.length}{" "}
+                                pets
+                            </span>
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="font-medium text-indigo-600 hover:underline"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
@@ -398,70 +523,86 @@ export default function PetsIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {pets.map((p) => (
-                                    <tr key={p.id}>
-                                        <td className="px-4 py-3">
-                                            {p.photo_url ? (
-                                                <ImageLightbox
-                                                    src={p.photo_url}
-                                                    alt={p.pet_name}
-                                                    title={`${p.pet_name} — Pet Photo`}
-                                                    className="h-10 w-10 rounded object-cover"
-                                                    hint="View photo"
-                                                />
-                                            ) : (
-                                                <span className="text-xs text-gray-400">
-                                                    No photo
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {p.pet_name}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {p.species}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {p.microchip_no || "—"}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {vaccinationStatusOptions.find(
-                                                (option) =>
-                                                    option.value ===
-                                                    p.vaccination_status,
-                                            )?.label ?? "Unknown"}
-                                        </td>
-                                        <td className="px-4 py-3">
-                                            {p.client?.name}
-                                        </td>
-                                        <td className="px-4 py-3 text-right">
-                                            <Link
-                                                href={route("pets.show", p.id)}
-                                                className="text-indigo-600 hover:underline"
-                                            >
-                                                View
-                                            </Link>
-                                            {can_manage_records && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => startEdit(p)}
-                                                    className="ms-3 text-amber-600 hover:underline"
-                                                >
-                                                    Edit
-                                                </button>
-                                            )}
-                                            <Link
-                                                href={route(
-                                                    "pets.client-record",
-                                                    p.id,
-                                                )}
-                                                className="ms-3 text-green-600 hover:underline"
-                                            >
-                                                Client Record
-                                            </Link>
+                                {filteredPets.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={7}
+                                            className="px-4 py-8 text-center text-sm text-gray-500"
+                                        >
+                                            No pets match your filters.
                                         </td>
                                     </tr>
-                                ))}
+                                ) : (
+                                    filteredPets.map((p) => (
+                                        <tr key={p.id}>
+                                            <td className="px-4 py-3">
+                                                {p.photo_url ? (
+                                                    <ImageLightbox
+                                                        src={p.photo_url}
+                                                        alt={p.pet_name}
+                                                        title={`${p.pet_name} — Pet Photo`}
+                                                        className="h-10 w-10 rounded object-cover"
+                                                        hint="View photo"
+                                                    />
+                                                ) : (
+                                                    <span className="text-xs text-gray-400">
+                                                        No photo
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {p.pet_name}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {p.species}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {p.microchip_no || "—"}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {vaccinationStatusOptions.find(
+                                                    (option) =>
+                                                        option.value ===
+                                                        p.vaccination_status,
+                                                )?.label ?? "Unknown"}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {p.client?.name}
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <Link
+                                                    href={route(
+                                                        "pets.show",
+                                                        p.id,
+                                                    )}
+                                                    className="text-indigo-600 hover:underline"
+                                                >
+                                                    View
+                                                </Link>
+                                                {can_manage_records && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            startEdit(p)
+                                                        }
+                                                        className="ms-3 text-amber-600 hover:underline"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                )}
+                                                <Link
+                                                    href={route(
+                                                        "pets.client-record",
+                                                        p.id,
+                                                    )}
+                                                    className="ms-3 text-green-600 hover:underline"
+                                                >
+                                                    Client Record
+                                                </Link>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
                     </div>

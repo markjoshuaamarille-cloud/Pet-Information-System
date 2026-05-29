@@ -58,6 +58,26 @@ class ClinicServices
     }
 
     /**
+     * Map a health-record type to its Service Catalog code.
+     * Codes are seeded to match the type, so this is an identity map
+     * with a fallback for safety.
+     */
+    public static function catalogCodeForType(string $type): string
+    {
+        $map = [
+            'consultation' => 'consultation',
+            'vaccination' => 'vaccination',
+            'grooming' => 'grooming',
+            'medication' => 'medication',
+            'surgery' => 'surgery',
+            'boarding' => 'boarding',
+            'emergency_care' => 'emergency_care',
+        ];
+
+        return $map[$type] ?? $type;
+    }
+
+    /**
      * @return list<array{code: string, name: string, category: string}>
      */
     public static function catalogDefaults(): array
