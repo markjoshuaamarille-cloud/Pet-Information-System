@@ -64,7 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/medicines/{medicine}', [MedicineController::class, 'destroy'])->name('medicines.destroy');
     });
 
-    Route::middleware('role:super_admin,veterinarian,receptionist,customer')->group(function () {
+    Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer')->group(function () {
         Route::get('/appointments', [AppointmentController::class, 'index'])->name('appointments.index');
         Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
         Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
@@ -81,7 +81,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/vaccinations/{vaccination}', [VaccinationController::class, 'destroy'])->name('vaccinations.destroy');
     });
 
-    Route::middleware('role:super_admin,groomer,receptionist,cashier')->group(function () {
+    Route::middleware('role:super_admin,groomer,receptionist,cashier,veterinarian')->group(function () {
         Route::get('/grooming', [GroomingRecordController::class, 'index'])->name('grooming.index');
     });
 
@@ -91,13 +91,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/grooming/{grooming}', [GroomingRecordController::class, 'destroy'])->name('grooming.destroy');
     });
 
-    Route::middleware('role:super_admin,cashier,receptionist')->group(function () {
+    Route::middleware('role:super_admin,cashier,receptionist,customer')->group(function () {
         Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::get('/billing/{billing}/receipt', [BillingController::class, 'receipt'])->name('billing.receipt');
+    });
+
+    Route::middleware('role:super_admin,cashier,receptionist')->group(function () {
         Route::post('/billing', [BillingController::class, 'store'])->name('billing.store');
+        Route::post('/billing/generate/{pet}', [BillingController::class, 'generateFromPet'])->name('billing.generate');
         Route::put('/billing/{billing}', [BillingController::class, 'update'])->name('billing.update');
         Route::delete('/billing/{billing}', [BillingController::class, 'destroy'])->name('billing.destroy');
         Route::post('/billing/{billing}/payments', [BillingController::class, 'storePayment'])->name('billing.payments.store');
-        Route::get('/billing/{billing}/receipt', [BillingController::class, 'receipt'])->name('billing.receipt');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer')->group(function () {

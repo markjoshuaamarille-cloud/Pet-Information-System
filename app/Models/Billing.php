@@ -63,6 +63,11 @@ class Billing extends Model
         return $this->belongsTo(ServiceCatalog::class);
     }
 
+    public function healthRecords(): HasMany
+    {
+        return $this->hasMany(HealthRecord::class);
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class)->orderByDesc('paid_at');

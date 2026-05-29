@@ -1,13 +1,54 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
 import FlashMessage from "@/Components/FlashMessage";
 import InputError from "@/Components/InputError";
+import Modal from "@/Components/Modal";
 import PrimaryButton from "@/Components/PrimaryButton";
+import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import { Head, useForm, router } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const statuses = ["scheduled", "completed", "missed"];
+
+const formatDate = (value) => {
+    if (!value) {
+        return "—";
+    }
+
+    const iso = String(value);
+    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+        const [, year, month, day] = match;
+        return `${Number(month)}/${Number(day)}/${year}`;
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
+
+    return date.toLocaleDateString();
+};
+
+const formatDateTime = (value) => {
+    if (!value) {
+        return "—";
+    }
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "—";
+    }
+
+    return date.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
+};
 
 export default function VaccinationsIndex({
     vaccinations,
@@ -17,6 +58,7 @@ export default function VaccinationsIndex({
     can_manage_records = true,
 }) {
     const [editing, setEditing] = useState(null);
+    const [viewingRecord, setViewingRecord] = useState(null);
     const form = useForm({
         pet_id: "",
         appointment_id: "",
@@ -359,11 +401,9 @@ export default function VaccinationsIndex({
                                     <th className="px-4 py-3 text-left">
                                         Status
                                     </th>
-                                    {can_manage_records && (
-                                        <th className="px-4 py-3 text-right">
-                                            Actions
-                                        </th>
-                                    )}
+                                    <th className="px-4 py-3 text-right">
+                                        Actions
+                                    </th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
@@ -383,53 +423,177 @@ export default function VaccinationsIndex({
                                             {record.dose || "-"}
                                         </td>
                                         <td className="px-4 py-3">
-                                            {record.administered_on?.slice(
-                                                0,
-                                                10,
-                                            )}
+                                            {formatDate(record.administered_on)}
                                         </td>
                                         <td className="px-4 py-3">
-                                            {record.next_due_date?.slice(
-                                                0,
-                                                10,
-                                            ) || "-"}
+                                            {formatDate(record.next_due_date)}
                                         </td>
                                         <td className="px-4 py-3 capitalize">
                                             {record.status}
                                         </td>
-                                        {can_manage_records && (
-                                            <td className="px-4 py-3 text-right">
-                                                <button
-                                                    onClick={() =>
-                                                        startEdit(record)
-                                                    }
-                                                    className="text-indigo-600 hover:underline"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={() =>
-                                                        confirm(
-                                                            "Delete vaccination record?",
-                                                        ) &&
-                                                        router.delete(
-                                                            route(
-                                                                "vaccinations.destroy",
-                                                                record.id,
-                                                            ),
-                                                        )
-                                                    }
-                                                    className="ms-3 text-red-600 hover:underline"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </td>
-                                        )}
+                                        <td className="px-4 py-3 text-right">
+                                            <button
+                                                type="button"
+                                                className="text-indigo-600 hover:underline"
+                                                onClick={() =>
+                                                    setViewingRecord(record)
+                                                }
+                                            >
+                                                View
+                                            </button>
+                                            {can_manage_records && (
+                                                <>
+                                                    <button
+                                                        onClick={() =>
+                                                            startEdit(record)
+                                                        }
+                                                        className="ms-3 text-indigo-600 hover:underline"
+                                                    >
+                                                        Edit
+                                                    </button>
+                                                    <button
+                                                        onClick={() =>
+                                                            confirm(
+                                                                "Delete vaccination record?",
+                                                            ) &&
+                                                            router.delete(
+                                                                route(
+                                                                    "vaccinations.destroy",
+                                                                    record.id,
+                                                                ),
+                                                            )
+                                                        }
+                                                        className="ms-3 text-red-600 hover:underline"
+                                                    >
+                                                        Delete
+                                                    </button>
+                                                </>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
+
+                    <Modal
+                        show={!!viewingRecord}
+                        onClose={() => setViewingRecord(null)}
+                        maxWidth="lg"
+                    >
+                        {viewingRecord && (
+                            <div className="p-6">
+                                <div className="mb-4 flex items-start justify-between gap-4">
+                                    <div>
+                                        <span className="rounded bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+                                            Vaccination Record
+                                        </span>
+                                        <h3 className="mt-2 text-lg font-semibold text-gray-900">
+                                            {viewingRecord.medicine?.name ??
+                                                viewingRecord.vaccine_name ??
+                                                "Vaccination"}
+                                        </h3>
+                                    </div>
+                                    <SecondaryButton
+                                        type="button"
+                                        onClick={() => setViewingRecord(null)}
+                                    >
+                                        Close
+                                    </SecondaryButton>
+                                </div>
+
+                                <dl className="space-y-3 text-sm">
+                                    <div>
+                                        <dt className="text-gray-500">Pet</dt>
+                                        <dd>
+                                            {viewingRecord.pet?.pet_name ?? "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Owner</dt>
+                                        <dd>
+                                            {viewingRecord.pet?.client?.name ??
+                                                "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Vaccine
+                                        </dt>
+                                        <dd>
+                                            {viewingRecord.medicine?.name ??
+                                                viewingRecord.vaccine_name ??
+                                                "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Dose</dt>
+                                        <dd>{viewingRecord.dose || "—"}</dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Quantity Used
+                                        </dt>
+                                        <dd>
+                                            {viewingRecord.quantity_used ?? 1}
+                                            {viewingRecord.medicine?.unit
+                                                ? ` ${viewingRecord.medicine.unit}`
+                                                : ""}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Administered On
+                                        </dt>
+                                        <dd>
+                                            {formatDate(
+                                                viewingRecord.administered_on,
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Next Due Date
+                                        </dt>
+                                        <dd>
+                                            {formatDate(
+                                                viewingRecord.next_due_date,
+                                            )}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Status</dt>
+                                        <dd className="capitalize">
+                                            {viewingRecord.status}
+                                        </dd>
+                                    </div>
+                                    {viewingRecord.appointment && (
+                                        <div>
+                                            <dt className="text-gray-500">
+                                                Linked Appointment
+                                            </dt>
+                                            <dd>
+                                                {formatDateTime(
+                                                    viewingRecord.appointment
+                                                        .scheduled_at,
+                                                )}
+                                            </dd>
+                                        </div>
+                                    )}
+                                    {viewingRecord.notes && (
+                                        <div>
+                                            <dt className="text-gray-500">
+                                                Notes
+                                            </dt>
+                                            <dd className="whitespace-pre-wrap">
+                                                {viewingRecord.notes}
+                                            </dd>
+                                        </div>
+                                    )}
+                                </dl>
+                            </div>
+                        )}
+                    </Modal>
                 </div>
             </div>
         </AuthenticatedLayout>

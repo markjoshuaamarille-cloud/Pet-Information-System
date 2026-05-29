@@ -88,7 +88,9 @@ class PetController extends Controller
             'medicines' => Medicine::whereIn('category', ['medicine', 'supplement_vitamin'])
                 ->where('quantity', '>', 0)
                 ->orderBy('name')
-                ->get(['id', 'name', 'category', 'quantity']),
+                ->get(['id', 'name', 'category', 'quantity', 'unit_price']),
+            'servicePrices' => \App\Models\ServiceCatalog::query()
+                ->pluck('default_price', 'code'),
             'veterinarians' => User::query()
                 ->where('role', 'veterinarian')
                 ->orderBy('name')

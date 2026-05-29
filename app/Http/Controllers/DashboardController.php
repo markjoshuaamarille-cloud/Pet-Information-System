@@ -41,7 +41,7 @@ class DashboardController extends Controller
                 ->where('client_id', $clientId)
                 ->where('status', 'scheduled')
                 ->whereDate('scheduled_at', '>=', today())
-                ->orderBy('scheduled_at')
+                ->orderByDesc('scheduled_at')
                 ->limit(5)
                 ->get();
 
@@ -80,10 +80,10 @@ class DashboardController extends Controller
                 $this->applyTodayRecentAndUpcomingAppointmentsScope($query);
             });
 
-        if ($isVeterinarian) {
-            $upcomingAppointmentsQuery->orderByDesc('scheduled_at');
-        } else {
-            $upcomingAppointmentsQuery->orderBy('scheduled_at')->limit(8);
+        $upcomingAppointmentsQuery->orderByDesc('scheduled_at');
+
+        if (! $isVeterinarian) {
+            $upcomingAppointmentsQuery->limit(8);
         }
 
         $upcomingAppointments = $upcomingAppointmentsQuery->get();
@@ -202,7 +202,7 @@ class DashboardController extends Controller
         }
 
         return $events
-            ->sortBy('due_date')
+            ->sortByDesc('due_date')
             ->take($limit)
             ->values()
             ->all();

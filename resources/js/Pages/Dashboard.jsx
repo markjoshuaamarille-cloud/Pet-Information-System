@@ -1,6 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
 import { Head, Link, router, usePage } from '@inertiajs/react';
+import { useMemo } from 'react';
 
 const formatDate = (value) => {
     if (!value) {
@@ -57,6 +58,26 @@ export default function Dashboard({
 }) {
     const isCustomer = usePage().props.auth.user?.role === 'customer';
 
+    const sortedAppointments = useMemo(
+        () =>
+            [...upcomingAppointments].sort(
+                (a, b) =>
+                    new Date(b.scheduled_at).getTime() -
+                    new Date(a.scheduled_at).getTime(),
+            ),
+        [upcomingAppointments],
+    );
+
+    const sortedDueHealthRecords = useMemo(
+        () =>
+            [...dueHealthRecords].sort(
+                (a, b) =>
+                    new Date(b.due_date).getTime() -
+                    new Date(a.due_date).getTime(),
+            ),
+        [dueHealthRecords],
+    );
+
     const statCards = [
         { label: 'Pets', value: stats.pets },
         ...(isCustomer
@@ -108,7 +129,7 @@ export default function Dashboard({
                                 <p className="text-sm text-gray-500">No upcoming appointments.</p>
                             ) : (
                                 <ul className="space-y-2 text-sm">
-                                    {upcomingAppointments.map((a) => (
+                                    {sortedAppointments.map((a) => (
                                         <li key={a.id} className="border-b pb-2">
                                             <strong>{a.pet?.pet_name}</strong> — {serviceLabels[a.type] ?? a.type} with {a.client?.name}
                                             <br />
@@ -155,7 +176,7 @@ export default function Dashboard({
                                 <p className="text-sm text-gray-500">No upcoming due dates.</p>
                             ) : (
                                 <ul className="space-y-3 text-sm">
-                                    {dueHealthRecords.map((event) => (
+                                    {sortedDueHealthRecords.map((event) => (
                                         <li key={event.id} className="border-b pb-3 last:border-b-0 last:pb-0">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <span

@@ -39,6 +39,7 @@ class MedicineController extends Controller
             'description' => 'nullable|string',
             'quantity' => 'required|integer|min:0',
             'unit' => 'required|string|max:50',
+            'unit_price' => 'required|numeric|min:0',
             'expiry_date' => 'required|date',
             'reorder_level' => 'required|integer|min:0',
         ]);
@@ -56,6 +57,7 @@ class MedicineController extends Controller
             'description' => 'nullable|string',
             'quantity' => 'required|integer|min:0',
             'unit' => 'required|string|max:50',
+            'unit_price' => 'required|numeric|min:0',
             'expiry_date' => 'required|date',
             'reorder_level' => 'required|integer|min:0',
         ]);

@@ -17,6 +17,7 @@ class Medicine extends Model
         'description',
         'quantity',
         'unit',
+        'unit_price',
         'expiry_date',
         'reorder_level',
     ];
@@ -25,6 +26,7 @@ class Medicine extends Model
     {
         return [
             'expiry_date' => 'date',
+            'unit_price' => 'decimal:2',
         ];
     }
 
