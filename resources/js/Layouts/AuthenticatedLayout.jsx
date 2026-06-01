@@ -19,6 +19,7 @@ const navItems = [
     { href: 'reports.index', label: 'Reports', roles: ['super_admin', 'veterinarian', 'receptionist', 'cashier'] },
     { href: 'admin.users.index', label: 'Admin Users', roles: ['super_admin'] },
     { href: 'survey.create', label: 'Service Survey', roles: [] },
+    { href: 'nearby-places.index', label: 'Nearby Clinics', roles: [] },
 ];
 
 export default function AuthenticatedLayout({ header, children }) {

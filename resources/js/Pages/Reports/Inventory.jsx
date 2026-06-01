@@ -1,7 +1,17 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ListDisplayControls from '@/Components/ListDisplayControls';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, Link } from '@inertiajs/react';
 
 export default function ReportsInventory({ medicines }) {
+    const {
+        visibleItems: visibleMedicines,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: medicineListCount,
+        showingCount: medicineShowingCount,
+    } = useListDisplayLimit(medicines);
+
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Inventory Report</h2>}>
             <Head title="Inventory Report" />
@@ -25,7 +35,7 @@ export default function ReportsInventory({ medicines }) {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Medicine</th><th className="px-4 py-3 text-left">Quantity</th><th className="px-4 py-3 text-left">Expiry</th><th className="px-4 py-3 text-left">Reorder Level</th><th className="px-4 py-3 text-left">Status</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
-                                {medicines.map((m) => (
+                                {visibleMedicines.map((m) => (
                                     <tr key={m.id}>
                                         <td className="px-4 py-3">{m.name}</td>
                                         <td className="px-4 py-3">{m.quantity} {m.unit}</td>
@@ -36,6 +46,12 @@ export default function ReportsInventory({ medicines }) {
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={medicineListCount}
+                            showingCount={medicineShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

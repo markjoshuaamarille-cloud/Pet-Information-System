@@ -1,7 +1,17 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ListDisplayControls from '@/Components/ListDisplayControls';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, Link } from '@inertiajs/react';
 
 export default function ReportsPets({ pets }) {
+    const {
+        visibleItems: visiblePets,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: petListCount,
+        showingCount: petShowingCount,
+    } = useListDisplayLimit(pets);
+
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Pets Report</h2>}>
             <Head title="Pets Report" />
@@ -25,7 +35,7 @@ export default function ReportsPets({ pets }) {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Pet</th><th className="px-4 py-3 text-left">Species</th><th className="px-4 py-3 text-left">Owner</th><th className="px-4 py-3 text-left">Health Records</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
-                                {pets.map((p) => (
+                                {visiblePets.map((p) => (
                                     <tr key={p.id}>
                                         <td className="px-4 py-3">{p.pet_name}</td>
                                         <td className="px-4 py-3">{p.species}</td>
@@ -35,6 +45,12 @@ export default function ReportsPets({ pets }) {
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={petListCount}
+                            showingCount={petShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

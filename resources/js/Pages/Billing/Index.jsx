@@ -3,11 +3,15 @@ import FlashMessage from "@/Components/FlashMessage";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, Link, router, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
 const billingStatuses = ["unpaid", "partial", "paid", "cancelled"];
+
+const formatPeso = (value) => `₱${Number(value ?? 0).toFixed(2)}`;
 
 const SERVICE_LABELS = {
     checkup: "Checkup",
@@ -69,6 +73,14 @@ export default function BillingIndex({
     const selectedBillablePet = billablePets.find(
         (p) => String(p.id) === String(generatePetId),
     );
+
+    const {
+        visibleItems: visibleBillings,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: billingListCount,
+        showingCount: billingShowingCount,
+    } = useListDisplayLimit(billings);
 
     const generateInvoice = () => {
         if (!generatePetId) {
@@ -413,10 +425,11 @@ export default function BillingIndex({
                                                 {p.client_name
                                                     ? ` (${p.client_name})`
                                                     : ""}{" "}
-                                                — {p.unbilled_count} svc ·{" "}
-                                                {Number(
-                                                    p.unbilled_total,
-                                                ).toFixed(2)}
+                                                — {p.unbilled_count}{" "}
+                                                {p.unbilled_count === 1
+                                                    ? "service"
+                                                    : "services"}{" "}
+                                                · {formatPeso(p.unbilled_total)}
                                             </option>
                                         ))}
                                     </select>
@@ -434,9 +447,7 @@ export default function BillingIndex({
                             {selectedBillablePet && (
                                 <p className="mt-3 text-sm font-medium text-emerald-900">
                                     Total to invoice:{" "}
-                                    {Number(
-                                        selectedBillablePet.unbilled_total,
-                                    ).toFixed(2)}
+                                    {formatPeso(selectedBillablePet.unbilled_total)}
                                 </p>
                             )}
                         </div>
@@ -860,7 +871,7 @@ export default function BillingIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {billings.map((billing) => {
+                                {visibleBillings.map((billing) => {
                                     const balance =
                                         Number(billing.total_amount) -
                                         Number(billing.amount_paid);
@@ -970,6 +981,12 @@ export default function BillingIndex({
                                 })}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={billingListCount}
+                            showingCount={billingShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

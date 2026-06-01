@@ -4,6 +4,8 @@ import InputError from '@/Components/InputError';
 import InputLabel from '@/Components/InputLabel';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
+import ListDisplayControls from '@/Components/ListDisplayControls';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, router, useForm } from '@inertiajs/react';
 
 export default function AdminUsers({ users, roles }) {
@@ -32,6 +34,14 @@ export default function AdminUsers({ users, roles }) {
         }
         router.delete(route('admin.users.destroy', user.id));
     };
+
+    const {
+        visibleItems: visibleUsers,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: userListCount,
+        showingCount: userShowingCount,
+    } = useListDisplayLimit(users);
 
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Admin User Management</h2>}>
@@ -94,7 +104,7 @@ export default function AdminUsers({ users, roles }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {users.map((user) => (
+                                {visibleUsers.map((user) => (
                                     <tr key={user.id}>
                                         <td className="px-4 py-3">{user.name}</td>
                                         <td className="px-4 py-3">{user.email}</td>
@@ -119,6 +129,12 @@ export default function AdminUsers({ users, roles }) {
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={userListCount}
+                            showingCount={userShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

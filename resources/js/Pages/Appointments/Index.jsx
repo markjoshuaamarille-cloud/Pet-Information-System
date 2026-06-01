@@ -1,14 +1,24 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
+import ListDisplayControls from '@/Components/ListDisplayControls';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, useForm, router } from '@inertiajs/react';
 
 export default function AppointmentsIndex({ appointments, pets, clients, can_manage_status, serviceTypes }) {
     const form = useForm({
         pet_id: '', client_id: '', scheduled_at: '', type: 'checkup', status: 'scheduled', notes: '',
     });
+
+    const {
+        visibleItems: visibleAppointments,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: appointmentListCount,
+        showingCount: appointmentShowingCount,
+    } = useListDisplayLimit(appointments);
 
     const submit = (e) => {
         e.preventDefault();
@@ -58,7 +68,7 @@ export default function AppointmentsIndex({ appointments, pets, clients, can_man
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Pet</th><th className="px-4 py-3 text-left">Client</th><th className="px-4 py-3 text-left">When</th><th className="px-4 py-3 text-left">Service</th><th className="px-4 py-3 text-left">Status</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
-                                {appointments.map((a) => (
+                                {visibleAppointments.map((a) => (
                                     <tr key={a.id}>
                                         <td className="px-4 py-3">{a.pet?.pet_name}</td>
                                         <td className="px-4 py-3">{a.client?.name}</td>
@@ -77,6 +87,12 @@ export default function AppointmentsIndex({ appointments, pets, clients, can_man
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={appointmentListCount}
+                            showingCount={appointmentShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

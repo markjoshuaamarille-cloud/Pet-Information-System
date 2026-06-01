@@ -25,7 +25,8 @@ export default defineConfig({
         host: "localhost",
         port: 5173,
         strictPort: true,
-        open: "/login",
+        // ✅ FIX: Full URL → opens directly to port 8000/login
+        open: "http://127.0.0.1:8000/login",
         proxy: {
             "/": {
                 target: laravelUrl,
@@ -37,5 +38,9 @@ export default defineConfig({
                 },
             },
         },
+    },
+    // ✅ ADD THIS: Tell Vite your real app URL
+    laravel: {
+        url: "http://127.0.0.1:8000",
     },
 });

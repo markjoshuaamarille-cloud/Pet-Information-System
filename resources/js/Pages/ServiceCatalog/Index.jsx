@@ -3,6 +3,8 @@ import FlashMessage from "@/Components/FlashMessage";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, router, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -74,6 +76,14 @@ export default function ServiceCatalogIndex({ services }) {
                 .some((value) => String(value).toLowerCase().includes(query));
         });
     }, [services, search, categoryFilter]);
+
+    const {
+        visibleItems: visibleServices,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: serviceListCount,
+        showingCount: serviceShowingCount,
+    } = useListDisplayLimit(filteredServices);
 
     const clearFilters = () => {
         setSearch("");
@@ -254,7 +264,7 @@ export default function ServiceCatalogIndex({ services }) {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredServices.map((service) => (
+                                    visibleServices.map((service) => (
                                     <tr key={service.id}>
                                         <td className="px-4 py-3 font-mono text-xs">
                                             {service.code}
@@ -306,6 +316,12 @@ export default function ServiceCatalogIndex({ services }) {
                                 )}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={serviceListCount}
+                            showingCount={serviceShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

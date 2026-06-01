@@ -3,6 +3,8 @@ import FlashMessage from "@/Components/FlashMessage";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, useForm, router } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -111,6 +113,14 @@ export default function MedicinesIndex({ medicines }) {
                 .some((value) => String(value).toLowerCase().includes(query));
         });
     }, [medicines, search, categoryFilter, statusFilter]);
+
+    const {
+        visibleItems: visibleMedicines,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: medicineListCount,
+        showingCount: medicineShowingCount,
+    } = useListDisplayLimit(filteredMedicines);
 
     const clearFilters = () => {
         setSearch("");
@@ -366,7 +376,7 @@ export default function MedicinesIndex({ medicines }) {
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredMedicines.map((m) => (
+                                    visibleMedicines.map((m) => (
                                         <tr key={m.id}>
                                             <td className="px-4 py-3">
                                                 {m.name}
@@ -429,6 +439,12 @@ export default function MedicinesIndex({ medicines }) {
                                 )}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={medicineListCount}
+                            showingCount={medicineShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

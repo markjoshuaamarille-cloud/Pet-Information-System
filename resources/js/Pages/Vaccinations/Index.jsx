@@ -6,6 +6,8 @@ import PrimaryButton from "@/Components/PrimaryButton";
 import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, useForm, router } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -55,6 +57,7 @@ export default function VaccinationsIndex({
     pets,
     vaccinationAppointments,
     vaccines,
+    veterinarians = [],
     can_manage_records = true,
 }) {
     const [editing, setEditing] = useState(null);
@@ -63,6 +66,7 @@ export default function VaccinationsIndex({
         pet_id: "",
         appointment_id: "",
         medicine_id: "",
+        administered_by_user_id: "",
         dose: "",
         quantity_used: "1",
         administered_on: "",
@@ -105,6 +109,9 @@ export default function VaccinationsIndex({
                 ? String(record.appointment_id)
                 : "",
             medicine_id: record.medicine_id ? String(record.medicine_id) : "",
+            administered_by_user_id: record.administered_by_user_id
+                ? String(record.administered_by_user_id)
+                : "",
             dose: record.dose || "",
             quantity_used: String(record.quantity_used ?? 1),
             administered_on: record.administered_on?.slice(0, 10) || "",
@@ -166,6 +173,14 @@ export default function VaccinationsIndex({
     );
 
     const canCreateRecord = editing || appointmentOptions.length > 0;
+
+    const {
+        visibleItems: visibleVaccinations,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: vaccinationListCount,
+        showingCount: vaccinationShowingCount,
+    } = useListDisplayLimit(vaccinations);
 
     return (
         <AuthenticatedLayout
@@ -268,6 +283,36 @@ export default function VaccinationsIndex({
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Veterinarian" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={form.data.administered_by_user_id}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "administered_by_user_id",
+                                            e.target.value,
+                                        )
+                                    }
+                                    required
+                                >
+                                    <option value="">Select veterinarian</option>
+                                    {veterinarians.map((vet) => (
+                                        <option key={vet.id} value={vet.id}>
+                                            {vet.name}
+                                        </option>
+                                    ))}
+                                </select>
+                                <InputError
+                                    message={form.errors.administered_by_user_id}
+                                    className="mt-1"
+                                />
+                                {veterinarians.length === 0 && (
+                                    <p className="mt-1 text-xs text-amber-600">
+                                        No veterinarians found. Add a user with the veterinarian role in Admin → Users.
+                                    </p>
+                                )}
                             </div>
                             <div>
                                 <InputLabel value="Dose" />
@@ -393,6 +438,9 @@ export default function VaccinationsIndex({
                                         Dose
                                     </th>
                                     <th className="px-4 py-3 text-left">
+                                        Veterinarian
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
                                         Given
                                     </th>
                                     <th className="px-4 py-3 text-left">
@@ -407,7 +455,7 @@ export default function VaccinationsIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {vaccinations.map((record) => (
+                                {visibleVaccinations.map((record) => (
                                     <tr key={record.id}>
                                         <td className="px-4 py-3">
                                             {record.pet?.pet_name}
@@ -421,6 +469,9 @@ export default function VaccinationsIndex({
                                         </td>
                                         <td className="px-4 py-3">
                                             {record.dose || "-"}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {record.administered_by?.name ?? "—"}
                                         </td>
                                         <td className="px-4 py-3">
                                             {formatDate(record.administered_on)}
@@ -474,6 +525,12 @@ export default function VaccinationsIndex({
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={vaccinationListCount}
+                            showingCount={vaccinationShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
 
                     <Modal
@@ -539,6 +596,15 @@ export default function VaccinationsIndex({
                                             {viewingRecord.medicine?.unit
                                                 ? ` ${viewingRecord.medicine.unit}`
                                                 : ""}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">
+                                            Veterinarian
+                                        </dt>
+                                        <dd>
+                                            {viewingRecord.administered_by?.name ??
+                                                "—"}
                                         </dd>
                                     </div>
                                     <div>

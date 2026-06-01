@@ -24,13 +24,17 @@ class VaccinationController extends Controller
         $user = auth()->user();
 
         return Inertia::render('Vaccinations/Index', [
-            'vaccinations' => Vaccination::with(['pet.client', 'appointment', 'medicine:id,name,unit,quantity'])
+            'vaccinations' => Vaccination::with(['pet.client', 'appointment', 'medicine:id,name,unit,quantity', 'administeredBy:id,name'])
                 ->orderByDesc('administered_on')
                 ->get(),
             'vaccines' => Medicine::where('category', self::VACCINE_CATEGORY)
                 ->orderBy('name')
                 ->get(['id', 'name', 'unit', 'quantity']),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
+            'veterinarians' => User::query()
+                ->where('role', 'veterinarian')
+                ->orderBy('name')
+                ->get(['id', 'name']),
             'vaccinationAppointments' => Appointment::with(['pet', 'client'])
                 ->where('type', 'vaccination')
                 ->where('status', 'scheduled')
@@ -117,13 +121,6 @@ class VaccinationController extends Controller
             $vaccination->refresh();
             $appointmentId = $vaccination->appointment_id;
 
-            if ($vaccination->medicine_id && $vaccination->quantity_used > 0) {
-                $vaccine = Medicine::whereKey($vaccination->medicine_id)->lockForUpdate()->first();
-                if ($vaccine) {
-                    $vaccine->increment('quantity', $vaccination->quantity_used);
-                }
-            }
-
             $vaccination->delete();
             $this->syncAppointmentStatus($appointmentId, 'scheduled');
         });
@@ -145,6 +142,12 @@ class VaccinationController extends Controller
                 'required',
                 Rule::exists('medicines', 'id')->where(
                     fn ($query) => $query->where('category', self::VACCINE_CATEGORY)
+                ),
+            ],
+            'administered_by_user_id' => [
+                'required',
+                Rule::exists('users', 'id')->where(
+                    fn ($query) => $query->where('role', 'veterinarian')
                 ),
             ],
             'dose' => 'nullable|string|max:100',
