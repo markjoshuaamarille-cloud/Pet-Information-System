@@ -67,6 +67,7 @@ class DashboardController extends Controller
                 'appointmentsSectionTitle' => 'Upcoming Appointments',
                 'appointmentsStatLabel' => 'Appointments Today & Recent',
                 'canManageAppointmentStatus' => false,
+                'canDeleteOverdueHealthRecords' => false,
             ]);
         }
 
@@ -110,6 +111,7 @@ class DashboardController extends Controller
             'appointmentsSectionTitle' => $isVeterinarian ? "Today's & Pending Recent Appointments" : 'Today, Recent & Upcoming Appointments',
             'appointmentsStatLabel' => 'Appointments Today & Recent',
             'canManageAppointmentStatus' => $canManageAppointmentStatus,
+            'canDeleteOverdueHealthRecords' => (bool) ($user && $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist'])),
         ]);
     }
 
@@ -150,7 +152,7 @@ class DashboardController extends Controller
     /**
      * @return list<array<string, mixed>>
      */
-    private function upcomingHealthEvents(?int $clientId = null, int $daysAhead = 30, int $limit = 8): array
+    private function upcomingHealthEvents(?int $clientId = null, int $daysAhead = 30): array
     {
         $healthRecordsQuery = HealthRecord::with(['pet', 'medicine'])
             ->whereNotNull('next_due_date')
@@ -175,6 +177,7 @@ class DashboardController extends Controller
             $events->push([
                 'id' => 'health-'.$record->id,
                 'source' => 'health_record',
+                'record_id' => $record->id,
                 'category' => $record->type,
                 'category_label' => self::HEALTH_CATEGORY_LABELS[$record->type] ?? ucfirst($record->type),
                 'pet_id' => $record->pet_id,
@@ -190,6 +193,7 @@ class DashboardController extends Controller
             $events->push([
                 'id' => 'vaccination-'.$vaccination->id,
                 'source' => 'vaccination',
+                'record_id' => $vaccination->id,
                 'category' => 'vaccine',
                 'category_label' => self::HEALTH_CATEGORY_LABELS['vaccine'],
                 'pet_id' => $vaccination->pet_id,
@@ -203,7 +207,6 @@ class DashboardController extends Controller
 
         return $events
             ->sortByDesc('due_date')
-            ->take($limit)
             ->values()
             ->all();
     }

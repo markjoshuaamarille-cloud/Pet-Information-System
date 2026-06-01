@@ -5,6 +5,8 @@ import InputError from "@/Components/InputError";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, Link, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -157,6 +159,14 @@ export default function PetsIndex({
                 .some((value) => String(value).toLowerCase().includes(query));
         });
     }, [pets, search, speciesFilter, vaccinationFilter]);
+
+    const {
+        visibleItems: visiblePets,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: petListCount,
+        showingCount: petShowingCount,
+    } = useListDisplayLimit(filteredPets);
 
     const clearFilters = () => {
         setSearch("");
@@ -533,7 +543,7 @@ export default function PetsIndex({
                                         </td>
                                     </tr>
                                 ) : (
-                                    filteredPets.map((p) => (
+                                    visiblePets.map((p) => (
                                         <tr key={p.id}>
                                             <td className="px-4 py-3">
                                                 {p.photo_url ? (
@@ -605,6 +615,12 @@ export default function PetsIndex({
                                 )}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={petListCount}
+                            showingCount={petShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>

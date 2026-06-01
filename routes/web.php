@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GroomingRecordController;
 use App\Http\Controllers\HealthRecordController;
 use App\Http\Controllers\MedicineController;
+use App\Http\Controllers\NearbyPlacesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PetController;
 use App\Http\Controllers\ProfileController;
@@ -127,6 +128,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/users/{user}/role', [UserManagementController::class, 'updateRole'])->name('users.role.update');
         Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
     });
+
+    Route::get('/nearby-places', [NearbyPlacesController::class, 'index'])->name('nearby-places.index');
+    Route::post('/nearby-places/geocode', [NearbyPlacesController::class, 'geocode'])->name('nearby-places.geocode');
+    Route::post('/nearby-places/search', [NearbyPlacesController::class, 'search'])->name('nearby-places.search');
 
     Route::get('/survey', [UsabilitySurveyController::class, 'create'])->name('survey.create');
     Route::post('/survey', [UsabilitySurveyController::class, 'store'])->name('survey.store');

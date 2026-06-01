@@ -101,13 +101,7 @@ const typeSpecificSummaryFields = {
         "groomer_name",
         "next_grooming_date",
     ],
-    medication: [
-        "medicine_name",
-        "dosage",
-        "medication_quantity",
-        "next_due_date",
-        "instructions",
-    ],
+    medication: ["instructions"],
     surgery: [
         "surgeon_name",
         "procedure_details",
@@ -243,7 +237,63 @@ const formatDateTimeLocal = (value) => {
 const getRecordDetails = (record) =>
     parseServiceDetails(record.description).details ?? {};
 
-const isInternalDetailField = (field) => field.endsWith("_user_id");
+const INTERNAL_DETAIL_FIELDS = new Set([
+    "medication_lines",
+    "billing_lines",
+    "billing_subtotal",
+    "billing_tax_enabled",
+    "billing_tax_rate",
+    "billing_tax_amount",
+    "billing_discount",
+    "medicine_name",
+    "medication_quantity",
+    "dosage",
+]);
+
+const isInternalDetailField = (field) =>
+    INTERNAL_DETAIL_FIELDS.has(field) || field.endsWith("_user_id");
+
+const getMedicationLinesForRecord = (record, medicinesList = []) => {
+    const details = getRecordDetails(record);
+
+    if (
+        Array.isArray(details.medication_lines) &&
+        details.medication_lines.length > 0
+    ) {
+        return details.medication_lines;
+    }
+
+    if (record.medicine) {
+        return [
+            {
+                medicine_id: record.medicine_id,
+                medicine_name: record.medicine.name,
+                medication_quantity: record.medication_quantity,
+                unit: record.medicine.unit,
+            },
+        ];
+    }
+
+    return [];
+};
+
+const formatMedicationLine = (line, medicinesList = []) => {
+    const name =
+        line.medicine_name ??
+        medicinesList.find(
+            (m) => String(m.id) === String(line.medicine_id),
+        )?.name ??
+        "Unknown";
+    const qty = line.medication_quantity ?? 1;
+    const unit =
+        line.unit ??
+        medicinesList.find(
+            (m) => String(m.id) === String(line.medicine_id),
+        )?.unit ??
+        "";
+
+    return `${name} · Qty: ${qty}${unit ? ` ${unit}` : ""}`;
+};
 
 const getDisplayableRecordDetails = (record) =>
     Object.fromEntries(
@@ -2928,27 +2978,11 @@ export default function PetShow({
                                                     </p>
                                                 ))}
                                             {(() => {
-                                                const medDetails =
-                                                    parseServiceDetails(
-                                                        r.description || "",
-                                                    ).details ?? {};
-                                                const medLines = Array.isArray(
-                                                    medDetails.medication_lines,
-                                                )
-                                                    ? medDetails.medication_lines
-                                                    : r.medicine
-                                                      ? [
-                                                            {
-                                                                medicine_name:
-                                                                    r.medicine
-                                                                        .name,
-                                                                medication_quantity:
-                                                                    r.medication_quantity,
-                                                                unit: r.medicine
-                                                                    .unit,
-                                                            },
-                                                        ]
-                                                      : [];
+                                                const medLines =
+                                                    getMedicationLinesForRecord(
+                                                        r,
+                                                        medicines,
+                                                    );
 
                                                 if (medLines.length === 0) {
                                                     return null;
@@ -2960,37 +2994,12 @@ export default function PetShow({
                                                             ? "Medicines: "
                                                             : "Medicine: "}
                                                         {medLines
-                                                            .map((line) => {
-                                                                const name =
-                                                                    line.medicine_name ??
-                                                                    medicines.find(
-                                                                        (m) =>
-                                                                            String(
-                                                                                m.id,
-                                                                            ) ===
-                                                                            String(
-                                                                                line.medicine_id,
-                                                                            ),
-                                                                    )?.name ??
-                                                                    "Unknown";
-                                                                const qty =
-                                                                    line.medication_quantity ??
-                                                                    1;
-                                                                const unit =
-                                                                    line.unit ??
-                                                                    medicines.find(
-                                                                        (m) =>
-                                                                            String(
-                                                                                m.id,
-                                                                            ) ===
-                                                                            String(
-                                                                                line.medicine_id,
-                                                                            ),
-                                                                    )?.unit ??
-                                                                    "";
-
-                                                                return `${name} (Qty: ${qty}${unit ? ` ${unit}` : ""})`;
-                                                            })
+                                                            .map((line) =>
+                                                                formatMedicationLine(
+                                                                    line,
+                                                                    medicines,
+                                                                ),
+                                                            )
                                                             .join("; ")}
                                                     </p>
                                                 );
@@ -3203,17 +3212,33 @@ export default function PetShow({
                                             </dd>
                                         </div>
                                     )}
-                                    {viewingRecord.medicine && (
+                                    {getMedicationLinesForRecord(
+                                        viewingRecord,
+                                        medicines,
+                                    ).length > 0 && (
                                         <div>
                                             <dt className="text-gray-500">
-                                                Medicine
+                                                {getMedicationLinesForRecord(
+                                                    viewingRecord,
+                                                    medicines,
+                                                ).length > 1
+                                                    ? "Medicines"
+                                                    : "Medicine"}
                                             </dt>
                                             <dd>
-                                                {viewingRecord.medicine.name}
-                                                {viewingRecord.dosage &&
-                                                    ` (${viewingRecord.dosage})`}
-                                                {viewingRecord.medication_quantity &&
-                                                    ` · Qty: ${viewingRecord.medication_quantity} ${viewingRecord.medicine.unit ?? ""}`}
+                                                <ul className="list-disc space-y-1 pl-5">
+                                                    {getMedicationLinesForRecord(
+                                                        viewingRecord,
+                                                        medicines,
+                                                    ).map((line, index) => (
+                                                        <li key={index}>
+                                                            {formatMedicationLine(
+                                                                line,
+                                                                medicines,
+                                                            )}
+                                                        </li>
+                                                    ))}
+                                                </ul>
                                             </dd>
                                         </div>
                                     )}
@@ -3223,19 +3248,70 @@ export default function PetShow({
                                                 Billing
                                             </dt>
                                             <dd>
-                                                {Number(
-                                                    viewingRecord.unit_price,
-                                                ).toFixed(2)}{" "}
-                                                ×{" "}
-                                                {viewingRecord.quantity ?? 1} ={" "}
-                                                <span className="font-semibold">
-                                                    {Number(
-                                                        viewingRecord.line_total,
-                                                    ).toFixed(2)}
-                                                </span>
-                                                {viewingRecord.billing_id
-                                                    ? " (Invoiced)"
-                                                    : " (Unbilled)"}
+                                                {(() => {
+                                                    const billingDetails =
+                                                        getRecordDetails(
+                                                            viewingRecord,
+                                                        );
+                                                    const subtotal =
+                                                        billingDetails.billing_subtotal;
+                                                    const taxAmount =
+                                                        billingDetails.billing_tax_amount;
+                                                    const discount =
+                                                        billingDetails.billing_discount;
+
+                                                    if (subtotal !== undefined) {
+                                                        return (
+                                                            <>
+                                                                <p>
+                                                                    Subtotal:{" "}
+                                                                    {Number(
+                                                                        subtotal,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}
+                                                                    {taxAmount >
+                                                                        0 &&
+                                                                        ` · Tax: ${Number(taxAmount).toFixed(2)}`}
+                                                                    {discount >
+                                                                        0 &&
+                                                                        ` · Discount: ${Number(discount).toFixed(2)}`}
+                                                                </p>
+                                                                <p className="mt-1 font-semibold">
+                                                                    Total:{" "}
+                                                                    {Number(
+                                                                        viewingRecord.line_total,
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}
+                                                                    {viewingRecord.billing_id
+                                                                        ? " (Invoiced)"
+                                                                        : " (Unbilled)"}
+                                                                </p>
+                                                            </>
+                                                        );
+                                                    }
+
+                                                    return (
+                                                        <>
+                                                            {Number(
+                                                                viewingRecord.unit_price,
+                                                            ).toFixed(2)}{" "}
+                                                            ×{" "}
+                                                            {viewingRecord.quantity ??
+                                                                1}{" "}
+                                                            ={" "}
+                                                            <span className="font-semibold">
+                                                                {Number(
+                                                                    viewingRecord.line_total,
+                                                                ).toFixed(2)}
+                                                            </span>
+                                                            {viewingRecord.billing_id
+                                                                ? " (Invoiced)"
+                                                                : " (Unbilled)"}
+                                                        </>
+                                                    );
+                                                })()}
                                             </dd>
                                         </div>
                                     )}

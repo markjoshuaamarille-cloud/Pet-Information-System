@@ -79,15 +79,6 @@ class HealthRecordController extends Controller
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
 
-        if ($error = $this->syncMedicationInventory(
-            $this->medicationLinesFromRecord($healthRecord),
-            [],
-        )) {
-            return redirect()
-                ->route('pets.show', $pet)
-                ->withErrors(['medication_quantity' => $error]);
-        }
-
         if ($healthRecord->sticker_photo_path) {
             Storage::disk('s3')->delete($healthRecord->sticker_photo_path);
         }

@@ -15,6 +15,7 @@ class Vaccination extends Model
         'pet_id',
         'appointment_id',
         'medicine_id',
+        'administered_by_user_id',
         'vaccine_name',
         'dose',
         'quantity_used',
@@ -45,6 +46,11 @@ class Vaccination extends Model
     public function medicine(): BelongsTo
     {
         return $this->belongsTo(Medicine::class);
+    }
+
+    public function administeredBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'administered_by_user_id');
     }
 
     public function scopeDueSoon(Builder $query, int $days = 14): Builder

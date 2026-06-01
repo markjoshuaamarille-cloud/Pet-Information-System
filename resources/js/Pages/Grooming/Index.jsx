@@ -5,6 +5,8 @@ import PrimaryButton from "@/Components/PrimaryButton";
 import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
+import ListDisplayControls from "@/Components/ListDisplayControls";
+import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -217,6 +219,14 @@ export default function GroomingIndex({
         return pets.filter((pet) => Number(pet.id) === Number(selected.pet_id));
     }, [pets, groomingAppointments, form.data.appointment_id]);
 
+    const {
+        visibleItems: visibleRecords,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: recordListCount,
+        showingCount: recordShowingCount,
+    } = useListDisplayLimit(records);
+
     return (
         <AuthenticatedLayout
             header={
@@ -388,7 +398,7 @@ export default function GroomingIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {records.map((record) => (
+                                {visibleRecords.map((record) => (
                                     <tr key={record.id}>
                                         <td className="px-4 py-3">
                                             {record.pet?.pet_name}
@@ -420,6 +430,12 @@ export default function GroomingIndex({
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={recordListCount}
+                            showingCount={recordShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
 
                     <Modal

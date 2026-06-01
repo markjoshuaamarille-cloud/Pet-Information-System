@@ -1,4 +1,6 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
+import ListDisplayControls from '@/Components/ListDisplayControls';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, Link } from '@inertiajs/react';
 
 const severityStyle = {
@@ -40,6 +42,14 @@ const typeLabels = {
 };
 
 export default function NotificationsIndex({ notifications, isCustomer = false }) {
+    const {
+        visibleItems: visibleNotifications,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: notificationListCount,
+        showingCount: notificationShowingCount,
+    } = useListDisplayLimit(notifications);
+
     return (
         <AuthenticatedLayout
             header={
@@ -63,11 +73,12 @@ export default function NotificationsIndex({ notifications, isCustomer = false }
                                 : 'No alerts at this time.'}
                         </div>
                     ) : (
-                        <ul className="space-y-3">
-                            {notifications.map((n) => (
+                        <div className="overflow-hidden rounded-lg bg-white shadow">
+                            <ul className="divide-y divide-gray-200">
+                            {visibleNotifications.map((n) => (
                                 <li
                                     key={n.id ?? `${n.type}-${n.message}`}
-                                    className={`rounded-lg border p-4 ${severityStyle[n.severity] ?? severityStyle.info}`}
+                                    className={`p-4 ${severityStyle[n.severity] ?? severityStyle.info}`}
                                 >
                                     <div className="flex flex-wrap items-center gap-2">
                                         <span className="text-xs font-bold uppercase">
@@ -91,7 +102,14 @@ export default function NotificationsIndex({ notifications, isCustomer = false }
                                     )}
                                 </li>
                             ))}
-                        </ul>
+                            </ul>
+                            <ListDisplayControls
+                                totalCount={notificationListCount}
+                                showingCount={notificationShowingCount}
+                                displayLimit={displayLimit}
+                                onLimitChange={setDisplayLimit}
+                            />
+                        </div>
                     )}
                 </div>
             </div>

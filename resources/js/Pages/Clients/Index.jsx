@@ -3,12 +3,21 @@ import FlashMessage from '@/Components/FlashMessage';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
 import InputLabel from '@/Components/InputLabel';
+import ListDisplayControls from '@/Components/ListDisplayControls';
+import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, useForm, router } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function ClientsIndex({ clients }) {
     const [editing, setEditing] = useState(null);
     const form = useForm({ name: '', contact: '', email: '', address: '' });
+    const {
+        visibleItems: visibleClients,
+        displayLimit,
+        setDisplayLimit,
+        totalCount: clientListCount,
+        showingCount: clientShowingCount,
+    } = useListDisplayLimit(clients);
 
     const submit = (e) => {
         e.preventDefault();
@@ -47,7 +56,7 @@ export default function ClientsIndex({ clients }) {
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Name</th><th className="px-4 py-3 text-left">Contact</th><th className="px-4 py-3 text-left">Pets</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
-                                {clients.map((c) => (
+                                {visibleClients.map((c) => (
                                     <tr key={c.id}>
                                         <td className="px-4 py-3">{c.name}</td>
                                         <td className="px-4 py-3">{c.contact}</td>
@@ -60,6 +69,12 @@ export default function ClientsIndex({ clients }) {
                                 ))}
                             </tbody>
                         </table>
+                        <ListDisplayControls
+                            totalCount={clientListCount}
+                            showingCount={clientShowingCount}
+                            displayLimit={displayLimit}
+                            onLimitChange={setDisplayLimit}
+                        />
                     </div>
                 </div>
             </div>
