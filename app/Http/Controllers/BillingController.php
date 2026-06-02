@@ -26,7 +26,7 @@ class BillingController extends Controller
         $isCustomer = (bool) $user?->isCustomer();
         $canManageBilling = $user && $user->hasAnyRole(['super_admin', 'cashier', 'receptionist']);
 
-        $billingsQuery = Billing::with(['client', 'pet', 'appointment', 'serviceCatalog', 'payments'])
+        $billingsQuery = Billing::with(['client', 'pet', 'appointment', 'serviceCatalog', 'payments', 'lineItems.medicine'])
             ->latest();
 
         if ($isCustomer) {
@@ -229,7 +229,14 @@ class BillingController extends Controller
             abort(403, 'You can only view your own receipts.');
         }
 
-        $billing->load(['client', 'pet', 'appointment', 'serviceCatalog', 'payments' => fn ($query) => $query->orderBy('paid_at')]);
+        $billing->load([
+            'client',
+            'pet',
+            'appointment',
+            'serviceCatalog',
+            'lineItems',
+            'payments' => fn ($query) => $query->orderBy('paid_at'),
+        ]);
 
         $appointment = $billing->appointment;
         $serviceLabel = $appointment
@@ -248,6 +255,7 @@ class BillingController extends Controller
                     'service_label' => $serviceLabel,
                 ] : null,
                 'service_catalog' => $billing->serviceCatalog,
+                'line_items' => $billing->lineItems,
                 'payments' => $billing->payments,
             ],
         ]);

@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
-use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class AuthenticatedSessionController extends Controller
 {
@@ -28,19 +28,29 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request): SymfonyResponse
     {
         $request->authenticate();
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Avoid redirecting to a stale intended URL the user's role cannot access.
+        $request->session()->forget('url.intended');
+
+        $dashboardUrl = route('dashboard', absolute: false);
+
+        // Force a full page load so the browser applies the regenerated session cookie.
+        if ($request->header('X-Inertia')) {
+            return Inertia::location($dashboardUrl);
+        }
+
+        return redirect($dashboardUrl);
     }
 
     /**
      * Destroy an authenticated session.
      */
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request): SymfonyResponse
     {
         Auth::guard('web')->logout();
 

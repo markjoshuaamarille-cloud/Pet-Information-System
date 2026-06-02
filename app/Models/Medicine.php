@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\Storage;
 
 class Medicine extends Model
 {
@@ -15,11 +16,16 @@ class Medicine extends Model
         'name',
         'category',
         'description',
+        'image_path',
         'quantity',
         'unit',
         'unit_price',
         'expiry_date',
         'reorder_level',
+    ];
+
+    protected $appends = [
+        'image_url',
     ];
 
     protected function casts(): array
@@ -33,6 +39,22 @@ class Medicine extends Model
     public function healthRecords(): HasMany
     {
         return $this->hasMany(HealthRecord::class);
+    }
+
+    public function getImageUrlAttribute(): ?string
+    {
+        if (! $this->image_path) {
+            return null;
+        }
+
+        try {
+            /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
+            $disk = Storage::disk('s3');
+
+            return $disk->temporaryUrl($this->image_path, now()->addHour());
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     public function scopeExpired(Builder $query): Builder

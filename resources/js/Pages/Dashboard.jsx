@@ -90,15 +90,15 @@ export default function Dashboard({
     } = useListDisplayLimit(sortedDueHealthRecords);
 
     const deleteOverdueEvent = (event) => {
-        if (
-            !confirm(
-                "Delete this overdue record? This cannot be undone.",
-            )
-        ) {
+        if (!confirm("Delete this overdue record? This cannot be undone.")) {
             return;
         }
 
-        if (event.source === "health_record" && event.pet_id && event.record_id) {
+        if (
+            event.source === "health_record" &&
+            event.pet_id &&
+            event.record_id
+        ) {
             router.delete(
                 route("health-records.destroy", [
                     event.pet_id,
@@ -271,29 +271,33 @@ export default function Dashboard({
                                 </p>
                             ) : (
                                 <>
-                                <ul className="space-y-3 text-sm">
-                                    {visibleDueHealthRecords.map((event) => (
-                                        <li
-                                            key={event.id}
-                                            className="border-b pb-3 last:border-b-0 last:pb-0"
-                                        >
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span
-                                                    className={`rounded px-2 py-0.5 text-xs font-medium ${
-                                                        categoryStyles[
-                                                            event.category
-                                                        ] ??
-                                                        "bg-gray-100 text-gray-800"
-                                                    }`}
+                                    <ul className="space-y-3 text-sm">
+                                        {visibleDueHealthRecords.map(
+                                            (event) => (
+                                                <li
+                                                    key={event.id}
+                                                    className="border-b pb-3 last:border-b-0 last:pb-0"
                                                 >
-                                                    {event.category_label}
-                                                </span>
-                                                {event.is_overdue && (
-                                                    <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
-                                                        Overdue
-                                                    </span>
-                                                )}
-                                                {event.is_overdue &&
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span
+                                                            className={`rounded px-2 py-0.5 text-xs font-medium ${
+                                                                categoryStyles[
+                                                                    event
+                                                                        .category
+                                                                ] ??
+                                                                "bg-gray-100 text-gray-800"
+                                                            }`}
+                                                        >
+                                                            {
+                                                                event.category_label
+                                                            }
+                                                        </span>
+                                                        {event.is_overdue && (
+                                                            <span className="rounded bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+                                                                Overdue
+                                                            </span>
+                                                        )}
+                                                        {/* {event.is_overdue &&
                                                     canDeleteOverdueHealthRecords && (
                                                         <button
                                                             type="button"
@@ -306,48 +310,51 @@ export default function Dashboard({
                                                         >
                                                             Delete
                                                         </button>
-                                                    )}
-                                            </div>
-                                            <p className="mt-1">
-                                                {event.pet_id ? (
-                                                    <Link
-                                                        href={route(
-                                                            "pets.show",
-                                                            event.pet_id,
+                                                    )} */}
+                                                    </div>
+                                                    <p className="mt-1">
+                                                        {event.pet_id ? (
+                                                            <Link
+                                                                href={route(
+                                                                    "pets.show",
+                                                                    event.pet_id,
+                                                                )}
+                                                                className="font-medium text-indigo-600 hover:underline"
+                                                            >
+                                                                {event.pet_name ??
+                                                                    "Unknown pet"}
+                                                            </Link>
+                                                        ) : (
+                                                            <strong>
+                                                                {event.pet_name ??
+                                                                    "Unknown pet"}
+                                                            </strong>
                                                         )}
-                                                        className="font-medium text-indigo-600 hover:underline"
-                                                    >
-                                                        {event.pet_name ??
-                                                            "Unknown pet"}
-                                                    </Link>
-                                                ) : (
-                                                    <strong>
-                                                        {event.pet_name ??
-                                                            "Unknown pet"}
-                                                    </strong>
-                                                )}
-                                                {" — "}
-                                                {event.title}
-                                                {event.detail && (
-                                                    <span className="text-gray-600">
-                                                        {" "}
-                                                        ({event.detail})
-                                                    </span>
-                                                )}
-                                            </p>
-                                            <p className="text-gray-500">
-                                                Due:{" "}
-                                                {formatDate(event.due_date)}
-                                            </p>
-                                        </li>
-                                    ))}
-                                </ul>
-                                <ListDisplayControls
-                                    totalCount={dueHealthListCount}
-                                    showingCount={dueHealthShowingCount}
-                                    displayLimit={displayLimit}
-                                    onLimitChange={setDisplayLimit}
-                                />
+                                                        {" — "}
+                                                        {event.title}
+                                                        {event.detail && (
+                                                            <span className="text-gray-600">
+                                                                {" "}
+                                                                ({event.detail})
+                                                            </span>
+                                                        )}
+                                                    </p>
+                                                    <p className="text-gray-500">
+                                                        Due:{" "}
+                                                        {formatDate(
+                                                            event.due_date,
+                                                        )}
+                                                    </p>
+                                                </li>
+                                            ),
+                                        )}
+                                    </ul>
+                                    <ListDisplayControls
+                                        totalCount={dueHealthListCount}
+                                        showingCount={dueHealthShowingCount}
+                                        displayLimit={displayLimit}
+                                        onLimitChange={setDisplayLimit}
+                                    />
                                 </>
                             )}
                         </div>

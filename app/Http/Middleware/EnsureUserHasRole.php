@@ -12,8 +12,14 @@ class EnsureUserHasRole
     {
         $user = $request->user();
 
-        if (! $user || ! $user->hasAnyRole($roles)) {
-            abort(403, 'You do not have permission to access this page.');
+        if (! $user) {
+            return redirect()->route('login');
+        }
+
+        if (! $user->hasAnyRole($roles)) {
+            return redirect()
+                ->route('dashboard')
+                ->with('error', 'You do not have permission to access that page.');
         }
 
         return $next($request);

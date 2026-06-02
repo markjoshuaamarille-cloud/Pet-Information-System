@@ -13,6 +13,7 @@ class Billing extends Model
 
     protected $fillable = [
         'invoice_number',
+        'sale_type',
         'client_id',
         'pet_id',
         'appointment_id',
@@ -21,10 +22,13 @@ class Billing extends Model
         'service_quantity',
         'subtotal',
         'tax',
+        'tax_applied',
+        'tax_rate',
         'discount',
         'total_amount',
         'amount_paid',
         'status',
+        'inventory_deducted',
         'due_date',
         'notes',
     ];
@@ -35,9 +39,12 @@ class Billing extends Model
             'subtotal' => 'decimal:2',
             'service_unit_price' => 'decimal:2',
             'tax' => 'decimal:2',
+            'tax_applied' => 'boolean',
+            'tax_rate' => 'decimal:2',
             'discount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
+            'inventory_deducted' => 'boolean',
             'service_quantity' => 'integer',
             'due_date' => 'date',
         ];
@@ -71,5 +78,15 @@ class Billing extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class)->orderByDesc('paid_at');
+    }
+
+    public function lineItems(): HasMany
+    {
+        return $this->hasMany(BillingLineItem::class);
+    }
+
+    public function isRetail(): bool
+    {
+        return $this->sale_type === 'pet_shop_retail';
     }
 }
