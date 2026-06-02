@@ -64,6 +64,7 @@ export default function BillingReceipt({ billing }) {
                 <section className="mb-6 grid gap-4 sm:grid-cols-2 text-sm">
                     <div>
                         <p><strong>Invoice No:</strong> {billing.invoice_number}</p>
+                        <p><strong>Type:</strong> {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' ? 'Pet Shop Sale' : 'Clinic Service'}</p>
                         <p><strong>Status:</strong> <span className="capitalize">{billing.status}</span></p>
                         <p><strong>Issue Date:</strong> {formatDate(billing.created_at)}</p>
                         {billing.due_date && (
@@ -90,6 +91,32 @@ export default function BillingReceipt({ billing }) {
                         )}
                     </div>
                 </section>
+
+                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' && billing.line_items?.length > 0 && (
+                    <section className="mb-6">
+                        <h2 className="mb-3 text-lg font-semibold">Products</h2>
+                        <table className="w-full border text-sm">
+                            <thead>
+                                <tr className="bg-gray-100">
+                                    <th className="border p-2 text-left">Item</th>
+                                    <th className="border p-2 text-right">Qty</th>
+                                    <th className="border p-2 text-right">Unit Price</th>
+                                    <th className="border p-2 text-right">Line Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {billing.line_items.map((item) => (
+                                    <tr key={item.id}>
+                                        <td className="border p-2">{item.description}</td>
+                                        <td className="border p-2 text-right">{item.quantity}</td>
+                                        <td className="border p-2 text-right">{formatMoney(item.unit_price)}</td>
+                                        <td className="border p-2 text-right">{formatMoney(item.line_total)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </section>
+                )}
 
                 <section className="mb-6">
                     <table className="w-full border text-sm">

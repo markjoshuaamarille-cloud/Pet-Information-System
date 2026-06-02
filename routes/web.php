@@ -11,6 +11,8 @@ use App\Http\Controllers\MedicineController;
 use App\Http\Controllers\NearbyPlacesController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PetController;
+use App\Http\Controllers\PetShopBillingController;
+use App\Http\Controllers\PetShopController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ServiceCatalogController;
@@ -132,6 +134,25 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('/nearby-places', [NearbyPlacesController::class, 'index'])->name('nearby-places.index');
     Route::post('/nearby-places/geocode', [NearbyPlacesController::class, 'geocode'])->name('nearby-places.geocode');
     Route::post('/nearby-places/search', [NearbyPlacesController::class, 'search'])->name('nearby-places.search');
+
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer,cashier')->group(function () {
+        Route::get('/pet-shop', [PetShopController::class, 'index'])->name('pet-shop.index');
+    });
+
+    Route::middleware('role:super_admin,cashier,receptionist,customer')->group(function () {
+        Route::post('/pet-shop/checkout', [PetShopController::class, 'checkout'])->name('pet-shop.checkout');
+    });
+
+    Route::middleware('role:super_admin')->group(function () {
+        Route::post('/pet-shop/{medicine}', [PetShopController::class, 'update'])->name('pet-shop.update');
+    });
+
+    Route::middleware('role:super_admin,cashier,receptionist')->group(function () {
+        Route::get('/pet-shop-billing', [PetShopBillingController::class, 'index'])->name('pet-shop-billing.index');
+        Route::put('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'update'])->name('pet-shop-billing.update');
+        Route::post('/pet-shop-billing/{billing}/payments', [PetShopBillingController::class, 'storePayment'])->name('pet-shop-billing.payments.store');
+        Route::delete('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'destroy'])->name('pet-shop-billing.destroy');
+    });
 
     Route::get('/survey', [UsabilitySurveyController::class, 'create'])->name('survey.create');
     Route::post('/survey', [UsabilitySurveyController::class, 'store'])->name('survey.store');

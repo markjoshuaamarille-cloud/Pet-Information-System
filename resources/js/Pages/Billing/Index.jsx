@@ -69,6 +69,19 @@ export default function BillingIndex({
     const [payingBillingId, setPayingBillingId] = useState(null);
     const [generatePetId, setGeneratePetId] = useState("");
     const [generating, setGenerating] = useState(false);
+    const [saleTypeFilter, setSaleTypeFilter] = useState("all");
+
+    const filteredBillings = useMemo(() => {
+        if (saleTypeFilter === "all") {
+            return billings;
+        }
+
+        return billings.filter((billing) => {
+            const saleType = billing.sale_type ?? "clinic_service";
+
+            return saleType === saleTypeFilter;
+        });
+    }, [billings, saleTypeFilter]);
 
     const selectedBillablePet = billablePets.find(
         (p) => String(p.id) === String(generatePetId),
@@ -80,7 +93,7 @@ export default function BillingIndex({
         setDisplayLimit,
         totalCount: billingListCount,
         showingCount: billingShowingCount,
-    } = useListDisplayLimit(billings);
+    } = useListDisplayLimit(filteredBillings);
 
     const generateInvoice = () => {
         if (!generatePetId) {
@@ -394,6 +407,27 @@ export default function BillingIndex({
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
+
+                    <div className="mb-6 flex flex-wrap gap-2">
+                        {[
+                            { value: 'all', label: 'All invoices' },
+                            { value: 'clinic_service', label: 'Clinic services' },
+                            { value: 'pet_shop_retail', label: 'Pet shop sales' },
+                        ].map((option) => (
+                            <button
+                                key={option.value}
+                                type="button"
+                                onClick={() => setSaleTypeFilter(option.value)}
+                                className={`rounded-full px-3 py-1 text-sm font-medium ${
+                                    saleTypeFilter === option.value
+                                        ? 'bg-indigo-600 text-white'
+                                        : 'bg-white text-gray-700 shadow ring-1 ring-gray-200 hover:bg-gray-50'
+                                }`}
+                            >
+                                {option.label}
+                            </button>
+                        ))}
+                    </div>
 
                     {can_manage_billing && (
                         <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-6">
@@ -851,7 +885,10 @@ export default function BillingIndex({
                                         Client
                                     </th>
                                     <th className="px-4 py-3 text-left">
-                                        Service
+                                        Type
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Details
                                     </th>
                                     <th className="px-4 py-3 text-left">
                                         Total
@@ -895,23 +932,47 @@ export default function BillingIndex({
                                                 {billing.client?.name}
                                             </td>
                                             <td className="px-4 py-3">
-                                                {billing.service_catalog?.name ??
-                                                    "—"}
-                                                {billing.service_catalog && (
-                                                    <p className="text-xs text-gray-500">
-                                                        Qty {billing.service_quantity} x{" "}
-                                                        {Number(
-                                                            billing.service_unit_price ??
-                                                                0,
-                                                        ).toFixed(2)}
-                                                    </p>
+                                                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' ? (
+                                                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
+                                                        Pet shop
+                                                    </span>
+                                                ) : (
+                                                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                                        Clinic
+                                                    </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
-                                                {billing.total_amount}
+                                                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' ? (
+                                                    <div className="space-y-1">
+                                                        {(billing.line_items ?? []).length === 0 ? (
+                                                            <span className="text-gray-500">Retail sale</span>
+                                                        ) : (
+                                                            billing.line_items.map((item) => (
+                                                                <p key={item.id} className="text-xs text-gray-600">
+                                                                    {item.description} — Qty {item.quantity} x{' '}
+                                                                    {formatPeso(item.unit_price)}
+                                                                </p>
+                                                            ))
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        {billing.service_catalog?.name ?? '—'}
+                                                        {billing.service_catalog && (
+                                                            <p className="text-xs text-gray-500">
+                                                                Qty {billing.service_quantity} x{' '}
+                                                                {formatPeso(billing.service_unit_price)}
+                                                            </p>
+                                                        )}
+                                                    </>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
-                                                {billing.amount_paid}
+                                                {formatPeso(billing.total_amount)}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {formatPeso(billing.amount_paid)}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {balance.toFixed(2)}
@@ -932,16 +993,18 @@ export default function BillingIndex({
                                                 </Link>
                                                 {can_manage_billing && (
                                                     <>
-                                                        <button
-                                                            className="ms-3 text-indigo-600 hover:underline"
-                                                            onClick={() =>
-                                                                startEdit(
-                                                                    billing,
-                                                                )
-                                                            }
-                                                        >
-                                                            Edit
-                                                        </button>
+                                                        {(billing.sale_type ?? 'clinic_service') !== 'pet_shop_retail' && (
+                                                            <button
+                                                                className="ms-3 text-indigo-600 hover:underline"
+                                                                onClick={() =>
+                                                                    startEdit(
+                                                                        billing,
+                                                                    )
+                                                                }
+                                                            >
+                                                                Edit
+                                                            </button>
+                                                        )}
                                                         {billing.status !==
                                                             "paid" &&
                                                             billing.status !==
