@@ -94,12 +94,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/grooming/{grooming}', [GroomingRecordController::class, 'destroy'])->name('grooming.destroy');
     });
 
-    Route::middleware('role:super_admin,cashier,receptionist,customer')->group(function () {
+    Route::middleware('role:super_admin,cashier,receptionist')->group(function () {
         Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
         Route::get('/billing/{billing}/receipt', [BillingController::class, 'receipt'])->name('billing.receipt');
-    });
-
-    Route::middleware('role:super_admin,cashier,receptionist')->group(function () {
         Route::post('/billing', [BillingController::class, 'store'])->name('billing.store');
         Route::post('/billing/generate/{pet}', [BillingController::class, 'generateFromPet'])->name('billing.generate');
         Route::put('/billing/{billing}', [BillingController::class, 'update'])->name('billing.update');

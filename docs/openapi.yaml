@@ -1,0 +1,1511 @@
+openapi: 3.0.3
+info:
+  title: Pet Information System Mobile API
+  description: |
+    Full clinic mobile REST API (Laravel + Sanctum).
+
+    **Synced with:** `routes/api.php`
+
+    **Authentication:** `POST /auth/login` or `/auth/register`, then `Authorization: Bearer {token}`.
+
+    **Default success shape:** `{ "message": string, "data": object|null }`
+
+    **Exceptions:** `POST /nearby-places/geocode` and `POST /nearby-places/search` return JSON directly (no `message`/`data` wrapper on success).
+  version: 1.0.0
+  contact:
+    name: Pet Information System
+
+servers:
+  - url: http://127.0.0.1:8000/api/v1
+    description: Local development
+  - url: "{baseUrl}/api/v1"
+    description: Production
+    variables:
+      baseUrl:
+        default: https://your-domain.com
+
+tags:
+  - name: Authentication
+  - name: Dashboard
+  - name: Clients
+  - name: Pets
+  - name: Health Records
+  - name: Appointments
+  - name: Medicines
+  - name: Vaccinations
+  - name: Grooming
+  - name: Billing
+  - name: Pet Shop
+  - name: Pet Shop Billing
+  - name: Service Catalog
+  - name: Notifications
+  - name: Reports
+  - name: Admin Users
+  - name: Nearby Places
+  - name: Survey
+  - name: Profile
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+
+  schemas:
+    SuccessResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+        data:
+          nullable: true
+
+    ValidationError:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [super_admin, veterinarian, receptionist, groomer, customer, cashier]
+        client_id: { type: integer, nullable: true }
+        email_verified_at: { type: string, format: date-time, nullable: true }
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+
+    RegisterRequest:
+      type: object
+      required: [name, email, password, password_confirmation]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, format: password }
+        password_confirmation: { type: string, format: password }
+
+    AuthData:
+      type: object
+      properties:
+        token: { type: string }
+        token_type: { type: string, example: Bearer }
+        user:
+          $ref: "#/components/schemas/User"
+
+    ClientInput:
+      type: object
+      required: [name, contact]
+      properties:
+        name: { type: string }
+        contact: { type: string }
+        email: { type: string, format: email, nullable: true }
+        address: { type: string, nullable: true }
+
+    PetInput:
+      type: object
+      required: [pet_name, species]
+      properties:
+        client_id: { type: integer }
+        pet_name: { type: string }
+        species: { type: string }
+        breed: { type: string }
+        age: { type: integer }
+        gender: { type: string }
+        birth_date: { type: string, format: date }
+        weight: { type: number }
+        color: { type: string }
+        microchip_no: { type: string }
+        vaccination_status:
+          type: string
+          enum: [up_to_date, partial, not_vaccinated, unknown]
+        medical_history: { type: string }
+        photo: { type: string, format: binary }
+
+    AppointmentInput:
+      type: object
+      required: [pet_id, client_id, scheduled_at, type, status]
+      properties:
+        pet_id: { type: integer }
+        client_id: { type: integer }
+        scheduled_at: { type: string, format: date-time }
+        type:
+          type: string
+          enum: [checkup, vaccination, grooming, consultation, surgery, boarding, emergency_care, other]
+        status:
+          type: string
+          enum: [scheduled, completed, cancelled]
+        notes: { type: string, nullable: true }
+
+    MedicineInput:
+      type: object
+      required: [name, category, quantity, unit, unit_price, expiry_date, reorder_level]
+      properties:
+        name: { type: string }
+        category:
+          type: string
+          enum: [medicine, vaccine, supplement_vitamin, consumable_supply, parasite_control, grooming_hygiene, pet_food]
+        description: { type: string }
+        quantity: { type: integer, minimum: 0 }
+        unit: { type: string }
+        unit_price: { type: number, minimum: 0 }
+        expiry_date: { type: string, format: date }
+        reorder_level: { type: integer, minimum: 0 }
+
+    PaymentInput:
+      type: object
+      required: [amount, method, paid_at]
+      properties:
+        amount: { type: number, minimum: 0.01 }
+        method:
+          type: string
+          enum: [cash, card, gcash, maya, bank_transfer]
+        paid_at: { type: string, format: date }
+        reference_number: { type: string, nullable: true }
+        notes: { type: string, nullable: true }
+
+    PetShopCheckout:
+      type: object
+      required: [client_id, items]
+      properties:
+        client_id: { type: integer }
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [medicine_id, quantity]
+            properties:
+              medicine_id: { type: integer }
+              quantity: { type: integer, minimum: 1 }
+        notes: { type: string, maxLength: 1000 }
+
+    SurveySubmit:
+      type: object
+      required: [q1, q2, q3, q4, q5, q6, q7, q8, q9, q10]
+      properties:
+        respondent_name: { type: string, maxLength: 255 }
+        q1: { type: integer, minimum: 1, maximum: 5 }
+        q2: { type: integer, minimum: 1, maximum: 5 }
+        q3: { type: integer, minimum: 1, maximum: 5 }
+        q4: { type: integer, minimum: 1, maximum: 5 }
+        q5: { type: integer, minimum: 1, maximum: 5 }
+        q6: { type: integer, minimum: 1, maximum: 5 }
+        q7: { type: integer, minimum: 1, maximum: 5 }
+        q8: { type: integer, minimum: 1, maximum: 5 }
+        q9: { type: integer, minimum: 1, maximum: 5 }
+        q10: { type: integer, minimum: 1, maximum: 5 }
+        comments: { type: string }
+
+    ProfileUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+
+    PasswordUpdate:
+      type: object
+      required: [current_password, password, password_confirmation]
+      properties:
+        current_password: { type: string }
+        password: { type: string, format: password }
+        password_confirmation: { type: string, format: password }
+
+    AccountDelete:
+      type: object
+      required: [password]
+      properties:
+        password: { type: string }
+
+    GeocodeRequest:
+      type: object
+      required: [place]
+      properties:
+        place: { type: string, minLength: 2, maxLength: 255 }
+
+    GeocodeResponse:
+      type: object
+      properties:
+        lat: { type: number }
+        lng: { type: number }
+        label: { type: string }
+
+    NearbySearchRequest:
+      type: object
+      required: [lat, lng]
+      properties:
+        lat: { type: number, minimum: -90, maximum: 90 }
+        lng: { type: number, minimum: -180, maximum: 180 }
+        type:
+          type: string
+          enum: [all, vet, petshop, grooming]
+          default: all
+        radius:
+          type: integer
+          minimum: 500
+          maximum: 20000
+          default: 5000
+
+    NearbyPlace:
+      type: object
+      properties:
+        name: { type: string }
+        address: { type: string }
+        distance_m: { type: integer }
+        phone: { type: string, nullable: true }
+        website: { type: string, nullable: true }
+        lat: { type: number }
+        lng: { type: number }
+
+  responses:
+    Success:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SuccessResponse"
+    Created:
+      description: Created
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/SuccessResponse"
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ValidationError"
+    Unauthorized:
+      description: Unauthenticated
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string, example: Unauthenticated. }
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                example: You do not have permission to access this resource.
+
+paths:
+  /auth/register:
+    post:
+      tags: [Authentication]
+      summary: Register customer account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Login and receive Bearer token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SuccessResponse"
+                  - type: object
+                    properties:
+                      data:
+                        $ref: "#/components/schemas/AuthData"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/user:
+    get:
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      summary: Get current user
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /auth/logout:
+    post:
+      tags: [Authentication]
+      security: [{ bearerAuth: [] }]
+      summary: Revoke current token
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /dashboard:
+    get:
+      tags: [Dashboard]
+      security: [{ bearerAuth: [] }]
+      summary: Dashboard stats and alerts
+      description: All authenticated roles. Returns stats, medicine alerts (staff), upcoming appointments, due health events.
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /clients:
+    get:
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      summary: List clients
+      description: "Roles: super_admin, receptionist"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      summary: Create client
+      description: "Roles: super_admin, receptionist"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /clients/{client}:
+    put:
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      summary: Update client
+      description: "Roles: super_admin, receptionist"
+      parameters:
+        - name: client
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+    delete:
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      summary: Delete client
+      description: "Roles: super_admin, receptionist"
+      parameters:
+        - name: client
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+
+  /pets:
+    get:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: List pets
+      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier. Response data includes pets, clients, can_manage_records."
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Create pet
+      description: "Roles: super_admin, veterinarian, receptionist, customer"
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PetInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /pets/{pet}:
+    get:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Show pet with relations
+      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+    put:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Update pet (JSON or multipart)
+      description: "Roles: super_admin, veterinarian, receptionist, customer"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PetInput"
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+    post:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Update pet (multipart photo upload)
+      description: Same as PUT; use POST when uploading photo from mobile.
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/PetInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    delete:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Delete pet
+      description: "Roles: super_admin, veterinarian, receptionist, customer"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+
+  /pets/{pet}/client-record:
+    get:
+      tags: [Pets]
+      security: [{ bearerAuth: [] }]
+      summary: Customer-facing pet record view
+      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+
+  /pets/{pet}/health-records:
+    post:
+      tags: [Health Records]
+      security: [{ bearerAuth: [] }]
+      summary: Add health record
+      description: "Roles: super_admin, veterinarian, receptionist"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [type, title, record_date]
+              properties:
+                type:
+                  type: string
+                  enum: [consultation, vaccination, grooming, medication, surgery, boarding, emergency_care]
+                title: { type: string }
+                description: { type: string }
+                medicine_id: { type: integer }
+                medication_quantity: { type: integer }
+                medication_lines: { type: array, items: { type: object } }
+                record_date: { type: string, format: date }
+                next_due_date: { type: string, format: date }
+                unit_price: { type: number }
+                quantity: { type: integer }
+                veterinarian_notes: { type: string }
+                sticker_photo: { type: string, format: binary }
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /pets/{pet}/health-records/{healthRecord}:
+    put:
+      tags: [Health Records]
+      security: [{ bearerAuth: [] }]
+      summary: Update health record
+      description: "Roles: super_admin, veterinarian, receptionist"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: healthRecord
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                type: { type: string }
+                title: { type: string }
+                record_date: { type: string, format: date }
+                sticker_photo: { type: string, format: binary }
+                remove_sticker_photo: { type: boolean }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    post:
+      tags: [Health Records]
+      security: [{ bearerAuth: [] }]
+      summary: Update health record (multipart)
+      description: Same as PUT; preferred for sticker photo uploads.
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: healthRecord
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    delete:
+      tags: [Health Records]
+      security: [{ bearerAuth: [] }]
+      summary: Delete health record
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: healthRecord
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /pets/{pet}/health-records/{healthRecord}/sticker:
+    delete:
+      tags: [Health Records]
+      security: [{ bearerAuth: [] }]
+      summary: Remove vaccine sticker photo
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: healthRecord
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /appointments:
+    get:
+      tags: [Appointments]
+      security: [{ bearerAuth: [] }]
+      summary: List appointments
+      description: "Roles: super_admin, veterinarian, receptionist, cashier, customer"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Appointments]
+      security: [{ bearerAuth: [] }]
+      summary: Schedule appointment
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /appointments/{appointment}:
+    put:
+      tags: [Appointments]
+      security: [{ bearerAuth: [] }]
+      summary: Update appointment
+      description: Customers force status to cancelled on update.
+      parameters:
+        - name: appointment
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AppointmentInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Appointments]
+      security: [{ bearerAuth: [] }]
+      summary: Cancel appointment
+      parameters:
+        - name: appointment
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /medicines:
+    get:
+      tags: [Medicines]
+      security: [{ bearerAuth: [] }]
+      summary: List inventory
+      description: "Roles: super_admin, veterinarian, receptionist"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Medicines]
+      security: [{ bearerAuth: [] }]
+      summary: Add medicine
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MedicineInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /medicines/{medicine}:
+    put:
+      tags: [Medicines]
+      security: [{ bearerAuth: [] }]
+      summary: Update medicine
+      parameters:
+        - name: medicine
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MedicineInput"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Medicines]
+      security: [{ bearerAuth: [] }]
+      summary: Delete medicine
+      parameters:
+        - name: medicine
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /vaccinations:
+    get:
+      tags: [Vaccinations]
+      security: [{ bearerAuth: [] }]
+      summary: List vaccinations and metadata
+      description: "Roles: super_admin, veterinarian, receptionist, cashier"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [Vaccinations]
+      security: [{ bearerAuth: [] }]
+      summary: Record vaccination
+      description: "Roles: super_admin, veterinarian, receptionist"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /vaccinations/{vaccination}:
+    put:
+      tags: [Vaccinations]
+      security: [{ bearerAuth: [] }]
+      summary: Update vaccination
+      parameters:
+        - name: vaccination
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Vaccinations]
+      security: [{ bearerAuth: [] }]
+      summary: Delete vaccination
+      parameters:
+        - name: vaccination
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /grooming:
+    get:
+      tags: [Grooming]
+      security: [{ bearerAuth: [] }]
+      summary: List grooming records
+      description: "Roles: super_admin, groomer, receptionist, cashier, veterinarian"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [Grooming]
+      security: [{ bearerAuth: [] }]
+      summary: Create grooming record
+      description: "Roles: super_admin, groomer, receptionist"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /grooming/{grooming}:
+    put:
+      tags: [Grooming]
+      security: [{ bearerAuth: [] }]
+      summary: Update grooming record
+      parameters:
+        - name: grooming
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Grooming]
+      security: [{ bearerAuth: [] }]
+      summary: Delete grooming record
+      parameters:
+        - name: grooming
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /billing:
+    get:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: List clinic invoices
+      description: "Roles: super_admin, cashier, receptionist"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Create invoice
+      description: "Roles: super_admin, cashier, receptionist"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /billing/generate/{pet}:
+    post:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Auto-generate invoice from unbilled health records
+      description: "Roles: super_admin, cashier, receptionist"
+      parameters:
+        - name: pet
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          description: No unbilled services
+
+  /billing/{billing}:
+    get:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Show invoice
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+    put:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Update invoice
+      description: "Roles: super_admin, cashier, receptionist"
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Delete invoice
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /billing/{billing}/payments:
+    post:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Post payment
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "404":
+          description: Not found
+
+  /billing/{billing}/receipt:
+    get:
+      tags: [Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Receipt data
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Not found
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      security: [{ bearerAuth: [] }]
+      summary: List notifications
+      description: "Roles: super_admin, veterinarian, receptionist, cashier, customer"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /service-catalog:
+    get:
+      tags: [Service Catalog]
+      security: [{ bearerAuth: [] }]
+      summary: List services
+      description: "Roles: super_admin, veterinarian, receptionist, cashier"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [Service Catalog]
+      security: [{ bearerAuth: [] }]
+      summary: Create service
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /service-catalog/{serviceCatalog}:
+    put:
+      tags: [Service Catalog]
+      security: [{ bearerAuth: [] }]
+      summary: Update service
+      parameters:
+        - name: serviceCatalog
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+    delete:
+      tags: [Service Catalog]
+      security: [{ bearerAuth: [] }]
+      summary: Delete service
+      parameters:
+        - name: serviceCatalog
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /reports:
+    get:
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      summary: Report summary
+      description: "Roles: super_admin, veterinarian, receptionist, cashier"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /reports/pets:
+    get:
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      summary: Pets report data
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /reports/inventory:
+    get:
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      summary: Inventory report data
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /reports/pets/export:
+    get:
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      summary: Export pets CSV
+      responses:
+        "200":
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /reports/inventory/export:
+    get:
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      summary: Export inventory CSV
+      responses:
+        "200":
+          description: CSV file download
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+
+  /admin/users:
+    get:
+      tags: [Admin Users]
+      security: [{ bearerAuth: [] }]
+      summary: List users
+      description: "Roles: super_admin"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+    post:
+      tags: [Admin Users]
+      security: [{ bearerAuth: [] }]
+      summary: Create user
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+
+  /admin/users/{user}/role:
+    put:
+      tags: [Admin Users]
+      security: [{ bearerAuth: [] }]
+      summary: Update user role
+      parameters:
+        - name: user
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [super_admin, veterinarian, receptionist, groomer, customer, cashier]
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "404":
+          description: Not found
+
+  /admin/users/{user}:
+    delete:
+      tags: [Admin Users]
+      security: [{ bearerAuth: [] }]
+      summary: Delete user
+      parameters:
+        - name: user
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          description: Cannot delete own account
+        "404":
+          description: Not found
+
+  /nearby-places:
+    get:
+      tags: [Nearby Places]
+      security: [{ bearerAuth: [] }]
+      summary: Nearby places info
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /nearby-places/geocode:
+    post:
+      tags: [Nearby Places]
+      security: [{ bearerAuth: [] }]
+      summary: Geocode place name to coordinates
+      description: Response is NOT wrapped in message/data.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GeocodeRequest"
+      responses:
+        "200":
+          description: Coordinates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeocodeResponse"
+        "404":
+          description: Place not found
+        "502":
+          description: Geoapify error
+        "503":
+          description: API key not configured
+
+  /nearby-places/search:
+    post:
+      tags: [Nearby Places]
+      security: [{ bearerAuth: [] }]
+      summary: Search nearby vet services
+      description: Response is a JSON array (not message/data wrapper).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/NearbySearchRequest"
+      responses:
+        "200":
+          description: List of places
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/NearbyPlace"
+        "502":
+          description: Geoapify error
+        "503":
+          description: API key not configured
+
+  /pet-shop:
+    get:
+      tags: [Pet Shop]
+      security: [{ bearerAuth: [] }]
+      summary: List shop products
+      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /pet-shop/checkout:
+    post:
+      tags: [Pet Shop]
+      security: [{ bearerAuth: [] }]
+      summary: Place retail order
+      description: "Roles: super_admin, cashier, receptionist, customer"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PetShopCheckout"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /pet-shop/{medicine}:
+    post:
+      tags: [Pet Shop]
+      security: [{ bearerAuth: [] }]
+      summary: Update pet shop product
+      description: "Roles: super_admin only"
+      parameters:
+        - name: medicine
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                description: { type: string }
+                unit: { type: string }
+                unit_price: { type: number }
+                image: { type: string, format: binary }
+                remove_image: { type: boolean }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /pet-shop-billing:
+    get:
+      tags: [Pet Shop Billing]
+      security: [{ bearerAuth: [] }]
+      summary: List retail orders
+      description: "Roles: super_admin, cashier, receptionist"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /pet-shop-billing/{billing}:
+    put:
+      tags: [Pet Shop Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Update retail order (tax/discount)
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tax_applied, tax_rate]
+              properties:
+                tax_applied: { type: boolean }
+                tax_rate: { type: number }
+                discount: { type: number }
+                notes: { type: string }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Pet Shop Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Cancel retail order
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          description: Cannot delete paid order
+
+  /pet-shop-billing/{billing}/payments:
+    post:
+      tags: [Pet Shop Billing]
+      security: [{ bearerAuth: [] }]
+      summary: Record retail payment
+      parameters:
+        - name: billing
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /survey:
+    get:
+      tags: [Survey]
+      security: [{ bearerAuth: [] }]
+      summary: Get survey questions
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [Survey]
+      security: [{ bearerAuth: [] }]
+      summary: Submit survey
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SurveySubmit"
+      responses:
+        "201":
+          $ref: "#/components/responses/Created"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /survey/results:
+    get:
+      tags: [Survey]
+      security: [{ bearerAuth: [] }]
+      summary: Survey results and average SUS score
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+
+  /profile:
+    get:
+      tags: [Profile]
+      security: [{ bearerAuth: [] }]
+      summary: Get profile
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    patch:
+      tags: [Profile]
+      security: [{ bearerAuth: [] }]
+      summary: Update profile (name, email)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [Profile]
+      security: [{ bearerAuth: [] }]
+      summary: Delete account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AccountDelete"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /profile/password:
+    put:
+      tags: [Profile]
+      security: [{ bearerAuth: [] }]
+      summary: Update password
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordUpdate"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+        "422":
+          $ref: "#/components/responses/ValidationError"

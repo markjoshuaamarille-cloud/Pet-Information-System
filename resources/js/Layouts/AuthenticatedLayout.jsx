@@ -12,7 +12,7 @@ const navItems = [
     { href: 'appointments.index', label: 'Scheduling', roles: ['super_admin', 'veterinarian', 'receptionist', 'customer'] },
     { href: 'vaccinations.index', label: 'Vaccinations', roles: ['super_admin', 'veterinarian', 'receptionist', 'cashier'] },
     { href: 'grooming.index', label: 'Grooming', roles: ['super_admin', 'groomer', 'receptionist', 'cashier', 'veterinarian'] },
-    { href: 'billing.index', label: 'Billing', roles: ['super_admin', 'cashier', 'receptionist', 'customer'] },
+    { href: 'billing.index', label: 'Billing', roles: ['super_admin', 'cashier', 'receptionist'] },
     { href: 'pet-shop.index', label: 'Pet Shop', roles: ['super_admin', 'veterinarian', 'receptionist', 'customer', 'cashier'] },
     { href: 'pet-shop-billing.index', label: 'Pet Shop Billing', roles: ['super_admin', 'cashier', 'receptionist'] },
     { href: 'service-catalog.index', label: 'Service Catalog', roles: ['super_admin', 'veterinarian', 'receptionist', 'cashier'] },

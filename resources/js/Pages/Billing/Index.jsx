@@ -56,6 +56,23 @@ const formatAppointmentOption = (appt) => {
     return `${petName} - ${date}(${service})`;
 };
 
+const billingMatchesSearch = (billing, query) => {
+    const haystack = [
+        billing.invoice_number,
+        billing.client?.name,
+        billing.pet?.pet_name,
+        billing.service_catalog?.name,
+        billing.status,
+        billing.notes,
+        ...(billing.line_items ?? []).map((item) => item.description),
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+    return haystack.includes(query);
+};
+
 export default function BillingIndex({
     billings,
     clients = [],
@@ -70,18 +87,40 @@ export default function BillingIndex({
     const [generatePetId, setGeneratePetId] = useState("");
     const [generating, setGenerating] = useState(false);
     const [saleTypeFilter, setSaleTypeFilter] = useState("all");
+    const [search, setSearch] = useState("");
+    const [statusFilter, setStatusFilter] = useState("");
 
     const filteredBillings = useMemo(() => {
-        if (saleTypeFilter === "all") {
-            return billings;
-        }
+        const query = search.trim().toLowerCase();
 
         return billings.filter((billing) => {
             const saleType = billing.sale_type ?? "clinic_service";
 
-            return saleType === saleTypeFilter;
+            if (saleTypeFilter !== "all" && saleType !== saleTypeFilter) {
+                return false;
+            }
+
+            if (statusFilter && billing.status !== statusFilter) {
+                return false;
+            }
+
+            if (query && !billingMatchesSearch(billing, query)) {
+                return false;
+            }
+
+            return true;
         });
-    }, [billings, saleTypeFilter]);
+    }, [billings, saleTypeFilter, statusFilter, search]);
+
+    const hasActiveFilters = Boolean(
+        search || statusFilter || saleTypeFilter !== "all",
+    );
+
+    const clearFilters = () => {
+        setSearch("");
+        setStatusFilter("");
+        setSaleTypeFilter("all");
+    };
 
     const selectedBillablePet = billablePets.find(
         (p) => String(p.id) === String(generatePetId),
@@ -386,7 +425,9 @@ export default function BillingIndex({
             [field]: value,
         };
         const unitPrice =
-            field === "service_unit_price" ? value : nextData.service_unit_price;
+            field === "service_unit_price"
+                ? value
+                : nextData.service_unit_price;
         const quantity =
             field === "service_quantity" ? value : nextData.service_quantity;
         nextData.subtotal = recalculateSubtotal(unitPrice, quantity);
@@ -410,9 +451,15 @@ export default function BillingIndex({
 
                     <div className="mb-6 flex flex-wrap gap-2">
                         {[
-                            { value: 'all', label: 'All invoices' },
-                            { value: 'clinic_service', label: 'Clinic services' },
-                            { value: 'pet_shop_retail', label: 'Pet shop sales' },
+                            { value: "all", label: "All invoices" },
+                            {
+                                value: "clinic_service",
+                                label: "Clinic services",
+                            },
+                            {
+                                value: "pet_shop_retail",
+                                label: "Pet shop sales",
+                            },
                         ].map((option) => (
                             <button
                                 key={option.value}
@@ -420,8 +467,8 @@ export default function BillingIndex({
                                 onClick={() => setSaleTypeFilter(option.value)}
                                 className={`rounded-full px-3 py-1 text-sm font-medium ${
                                     saleTypeFilter === option.value
-                                        ? 'bg-indigo-600 text-white'
-                                        : 'bg-white text-gray-700 shadow ring-1 ring-gray-200 hover:bg-gray-50'
+                                        ? "bg-indigo-600 text-white"
+                                        : "bg-white text-gray-700 shadow ring-1 ring-gray-200 hover:bg-gray-50"
                                 }`}
                             >
                                 {option.label}
@@ -481,292 +528,372 @@ export default function BillingIndex({
                             {selectedBillablePet && (
                                 <p className="mt-3 text-sm font-medium text-emerald-900">
                                     Total to invoice:{" "}
-                                    {formatPeso(selectedBillablePet.unbilled_total)}
+                                    {formatPeso(
+                                        selectedBillablePet.unbilled_total,
+                                    )}
                                 </p>
                             )}
                         </div>
                     )}
 
                     {can_manage_billing && (
-                    <form
-                        onSubmit={submit}
-                        className="mb-6 rounded-lg bg-white p-6 shadow"
-                    >
-                        <h3 className="mb-4 font-semibold">
-                            {editing ? "Edit Invoice" : "Create Invoice (Manual)"}
-                        </h3>
-                        <div className="sm:col-span-3">
-                            <InputLabel value="Appointment" />
-                            <div className="mt-1 max-h-52 overflow-y-auto rounded-md border border-gray-300 bg-white">
-                                <button
-                                    type="button"
-                                    onClick={() => onAppointmentChange("")}
-                                    className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                                        !form.data.appointment_id
-                                            ? "bg-indigo-50 font-medium text-indigo-800"
-                                            : "text-gray-700"
-                                    }`}
-                                >
-                                    No linked appointment
-                                </button>
-                                {filteredAppointments.length === 0 ? (
-                                    <p className="border-t px-3 py-2 text-sm text-gray-500">
-                                        No completed appointments available.
-                                    </p>
-                                ) : (
-                                    filteredAppointments.map((appt) => {
-                                        const isSelected =
-                                            String(form.data.appointment_id) ===
-                                            String(appt.id);
+                        <form
+                            onSubmit={submit}
+                            className="mb-6 rounded-lg bg-white p-6 shadow"
+                        >
+                            <h3 className="mb-4 font-semibold">
+                                {editing
+                                    ? "Edit Invoice"
+                                    : "Create Invoice (Manual)"}
+                            </h3>
+                            <div className="sm:col-span-3">
+                                <InputLabel value="Appointment" />
+                                <div className="mt-1 max-h-52 overflow-y-auto rounded-md border border-gray-300 bg-white">
+                                    <button
+                                        type="button"
+                                        onClick={() => onAppointmentChange("")}
+                                        className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                                            !form.data.appointment_id
+                                                ? "bg-indigo-50 font-medium text-indigo-800"
+                                                : "text-gray-700"
+                                        }`}
+                                    >
+                                        No linked appointment
+                                    </button>
+                                    {filteredAppointments.length === 0 ? (
+                                        <p className="border-t px-3 py-2 text-sm text-gray-500">
+                                            No completed appointments available.
+                                        </p>
+                                    ) : (
+                                        filteredAppointments.map((appt) => {
+                                            const isSelected =
+                                                String(
+                                                    form.data.appointment_id,
+                                                ) === String(appt.id);
 
-                                        return (
-                                            <div
-                                                key={appt.id}
-                                                className={`flex items-center gap-2 border-t px-2 py-1 ${
-                                                    isSelected
-                                                        ? "bg-indigo-50"
-                                                        : "hover:bg-gray-50"
-                                                }`}
-                                            >
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        onAppointmentChange(
-                                                            String(appt.id),
-                                                        )
-                                                    }
-                                                    className={`min-w-0 flex-1 px-1 py-1.5 text-left text-sm ${
+                                            return (
+                                                <div
+                                                    key={appt.id}
+                                                    className={`flex items-center gap-2 border-t px-2 py-1 ${
                                                         isSelected
-                                                            ? "font-medium text-indigo-800"
-                                                            : "text-gray-700"
+                                                            ? "bg-indigo-50"
+                                                            : "hover:bg-gray-50"
                                                     }`}
                                                 >
-                                                    {formatAppointmentOption(
-                                                        appt,
-                                                    )}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    title="Delete appointment"
-                                                    aria-label={`Delete appointment for ${appt.pet?.pet_name ?? "pet"}`}
-                                                    onClick={() =>
-                                                        deleteAppointment(appt)
-                                                    }
-                                                    className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-gray-500 hover:bg-red-50 hover:text-red-600"
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        );
-                                    })
-                                )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            onAppointmentChange(
+                                                                String(appt.id),
+                                                            )
+                                                        }
+                                                        className={`min-w-0 flex-1 px-1 py-1.5 text-left text-sm ${
+                                                            isSelected
+                                                                ? "font-medium text-indigo-800"
+                                                                : "text-gray-700"
+                                                        }`}
+                                                    >
+                                                        {formatAppointmentOption(
+                                                            appt,
+                                                        )}
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        title="Delete appointment"
+                                                        aria-label={`Delete appointment for ${appt.pet?.pet_name ?? "pet"}`}
+                                                        onClick={() =>
+                                                            deleteAppointment(
+                                                                appt,
+                                                            )
+                                                        }
+                                                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-gray-500 hover:bg-red-50 hover:text-red-600"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            );
+                                        })
+                                    )}
+                                </div>
                             </div>
-                        </div>
-                        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                            <div>
-                                <InputLabel value="Service" />
-                                <select
-                                    className="mt-1 w-full rounded-md border-gray-300"
-                                    value={form.data.service_catalog_id}
-                                    onChange={(e) =>
-                                        onServiceCatalogChange(e.target.value)
-                                    }
-                                >
-                                    <option value="">Select service</option>
-                                    {serviceCatalogs.map((service) => (
-                                        <option key={service.id} value={service.id}>
-                                            {service.name} ({service.category})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <InputLabel value="Qty" />
-                                <TextInput
-                                    type="number"
-                                    min="1"
-                                    className="mt-1 block w-full"
-                                    value={form.data.service_quantity}
-                                    onChange={(e) =>
-                                        onServiceQuantityOrPriceChange(
-                                            "service_quantity",
-                                            e.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <InputLabel value="Unit Price" />
-                                <TextInput
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="mt-1 block w-full"
-                                    value={form.data.service_unit_price}
-                                    onChange={(e) =>
-                                        onServiceQuantityOrPriceChange(
-                                            "service_unit_price",
-                                            e.target.value,
-                                        )
-                                    }
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <div className="grid gap-4 sm:grid-cols-3">
-                            <div>
-                                <InputLabel value="Client" />
-                                <select
-                                    className="mt-1 w-full rounded-md border-gray-300"
-                                    value={form.data.client_id}
-                                    onChange={(e) =>
-                                        form.setData(
-                                            "client_id",
-                                            e.target.value,
-                                        )
-                                    }
-                                    disabled={Boolean(selectedAppointment)}
-                                    required
-                                >
-                                    <option value="">Select client</option>
-                                    {filteredClients.map((client) => (
-                                        <option
-                                            key={client.id}
-                                            value={client.id}
-                                        >
-                                            {client.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <InputLabel value="Pet (optional)" />
-                                <select
-                                    className="mt-1 w-full rounded-md border-gray-300"
-                                    value={form.data.pet_id}
-                                    onChange={(e) =>
-                                        form.setData("pet_id", e.target.value)
-                                    }
-                                    disabled={Boolean(selectedAppointment)}
-                                >
-                                    <option value="">No linked pet</option>
-                                    {filteredPets.map((pet) => (
-                                        <option key={pet.id} value={pet.id}>
-                                            {pet.pet_name} ({pet.client?.name})
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <br />
-
-                            <div>
-                                <InputLabel value="Subtotal" />
-                                <TextInput
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="mt-1 block w-full"
-                                    value={form.data.subtotal}
-                                    onChange={(e) =>
-                                        form.setData("subtotal", e.target.value)
-                                    }
-                                    disabled={hasSelectedService}
-                                    required
-                                />
-                                {hasSelectedService && (
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        Auto-calculated from selected service
-                                        price and quantity.
-                                    </p>
-                                )}
-                            </div>
-                            <div>
-                                <InputLabel value="Tax" />
-                                <TextInput
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="mt-1 block w-full"
-                                    value={form.data.tax}
-                                    onChange={(e) =>
-                                        form.setData("tax", e.target.value)
-                                    }
-                                />
-                            </div>
-                            <div>
-                                <InputLabel value="Discount" />
-                                <TextInput
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    className="mt-1 block w-full"
-                                    value={form.data.discount}
-                                    onChange={(e) =>
-                                        form.setData("discount", e.target.value)
-                                    }
-                                />
-                            </div>
-                            <div>
-                                <InputLabel value="Due Date" />
-                                <TextInput
-                                    type="date"
-                                    className="mt-1 block w-full"
-                                    value={form.data.due_date}
-                                    onChange={(e) =>
-                                        form.setData("due_date", e.target.value)
-                                    }
-                                />
-                            </div>
-                            {editing && (
+                            <div className="mt-4 grid gap-4 sm:grid-cols-3">
                                 <div>
-                                    <InputLabel value="Status" />
+                                    <InputLabel value="Service" />
                                     <select
                                         className="mt-1 w-full rounded-md border-gray-300"
-                                        value={form.data.status}
+                                        value={form.data.service_catalog_id}
                                         onChange={(e) =>
-                                            form.setData(
-                                                "status",
+                                            onServiceCatalogChange(
                                                 e.target.value,
                                             )
                                         }
                                     >
-                                        {billingStatuses.map((status) => (
-                                            <option key={status} value={status}>
-                                                {status}
+                                        <option value="">Select service</option>
+                                        {serviceCatalogs.map((service) => (
+                                            <option
+                                                key={service.id}
+                                                value={service.id}
+                                            >
+                                                {service.name} (
+                                                {service.category})
                                             </option>
                                         ))}
                                     </select>
                                 </div>
-                            )}
-                            <div className="sm:col-span-3">
-                                <InputLabel value="Notes" />
-                                <textarea
-                                    className="mt-1 block w-full rounded-md border-gray-300"
-                                    rows={3}
-                                    value={form.data.notes}
-                                    onChange={(e) =>
-                                        form.setData("notes", e.target.value)
-                                    }
+                                <div>
+                                    <InputLabel value="Qty" />
+                                    <TextInput
+                                        type="number"
+                                        min="1"
+                                        className="mt-1 block w-full"
+                                        value={form.data.service_quantity}
+                                        onChange={(e) =>
+                                            onServiceQuantityOrPriceChange(
+                                                "service_quantity",
+                                                e.target.value,
+                                            )
+                                        }
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <InputLabel value="Unit Price" />
+                                    <TextInput
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="mt-1 block w-full"
+                                        value={form.data.service_unit_price}
+                                        onChange={(e) =>
+                                            onServiceQuantityOrPriceChange(
+                                                "service_unit_price",
+                                                e.target.value,
+                                            )
+                                        }
+                                        required
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                                <div>
+                                    <InputLabel value="Client" />
+                                    <select
+                                        className="mt-1 w-full rounded-md border-gray-300"
+                                        value={form.data.client_id}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "client_id",
+                                                e.target.value,
+                                            )
+                                        }
+                                        disabled={Boolean(selectedAppointment)}
+                                        required
+                                    >
+                                        <option value="">Select client</option>
+                                        {filteredClients.map((client) => (
+                                            <option
+                                                key={client.id}
+                                                value={client.id}
+                                            >
+                                                {client.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <InputLabel value="Pet (optional)" />
+                                    <select
+                                        className="mt-1 w-full rounded-md border-gray-300"
+                                        value={form.data.pet_id}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "pet_id",
+                                                e.target.value,
+                                            )
+                                        }
+                                        disabled={Boolean(selectedAppointment)}
+                                    >
+                                        <option value="">No linked pet</option>
+                                        {filteredPets.map((pet) => (
+                                            <option key={pet.id} value={pet.id}>
+                                                {pet.pet_name} (
+                                                {pet.client?.name})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <br />
+
+                                <div>
+                                    <InputLabel value="Subtotal" />
+                                    <TextInput
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="mt-1 block w-full"
+                                        value={form.data.subtotal}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "subtotal",
+                                                e.target.value,
+                                            )
+                                        }
+                                        disabled={hasSelectedService}
+                                        required
+                                    />
+                                    {hasSelectedService && (
+                                        <p className="mt-1 text-xs text-gray-500">
+                                            Auto-calculated from selected
+                                            service price and quantity.
+                                        </p>
+                                    )}
+                                </div>
+                                <div>
+                                    <InputLabel value="Tax" />
+                                    <TextInput
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="mt-1 block w-full"
+                                        value={form.data.tax}
+                                        onChange={(e) =>
+                                            form.setData("tax", e.target.value)
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <InputLabel value="Discount" />
+                                    <TextInput
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="mt-1 block w-full"
+                                        value={form.data.discount}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "discount",
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                                <div>
+                                    <InputLabel value="Due Date" />
+                                    <TextInput
+                                        type="date"
+                                        className="mt-1 block w-full"
+                                        value={form.data.due_date}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "due_date",
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                                {editing && (
+                                    <div>
+                                        <InputLabel value="Status" />
+                                        <select
+                                            className="mt-1 w-full rounded-md border-gray-300"
+                                            value={form.data.status}
+                                            onChange={(e) =>
+                                                form.setData(
+                                                    "status",
+                                                    e.target.value,
+                                                )
+                                            }
+                                        >
+                                            {billingStatuses.map((status) => (
+                                                <option
+                                                    key={status}
+                                                    value={status}
+                                                >
+                                                    {status}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
+                                <div className="sm:col-span-3">
+                                    <InputLabel value="Notes" />
+                                    <textarea
+                                        className="mt-1 block w-full rounded-md border-gray-300"
+                                        rows={3}
+                                        value={form.data.notes}
+                                        onChange={(e) =>
+                                            form.setData(
+                                                "notes",
+                                                e.target.value,
+                                            )
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div className="mt-4 flex items-center gap-3">
+                                <PrimaryButton disabled={form.processing}>
+                                    Save Invoice
+                                </PrimaryButton>
+                                {editing && (
+                                    <button
+                                        type="button"
+                                        className="text-sm text-gray-600 hover:underline"
+                                        onClick={resetForm}
+                                    >
+                                        Cancel edit
+                                    </button>
+                                )}
+                            </div>
+                        </form>
+                    )}
+
+                    <div className="mb-6 rounded-lg bg-white p-4 shadow">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                            <div className="sm:col-span-2">
+                                <InputLabel value="Search" />
+                                <TextInput
+                                    type="search"
+                                    className="mt-1 block w-full"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Invoice, client, pet, service, or product..."
                                 />
                             </div>
+                            <div>
+                                <InputLabel value="Status" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    value={statusFilter}
+                                    onChange={(e) =>
+                                        setStatusFilter(e.target.value)
+                                    }
+                                >
+                                    <option value="">All statuses</option>
+                                    {billingStatuses.map((status) => (
+                                        <option key={status} value={status}>
+                                            {status.charAt(0).toUpperCase() +
+                                                status.slice(1)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
-                        <div className="mt-4 flex items-center gap-3">
-                            <PrimaryButton disabled={form.processing}>
-                                Save Invoice
-                            </PrimaryButton>
-                            {editing && (
+                        <div className="mt-3 flex items-center justify-between text-sm">
+                            <p className="text-gray-500">
+                                Showing {filteredBillings.length} of{" "}
+                                {billings.length} invoices
+                            </p>
+                            {hasActiveFilters && (
                                 <button
                                     type="button"
-                                    className="text-sm text-gray-600 hover:underline"
-                                    onClick={resetForm}
+                                    onClick={clearFilters}
+                                    className="text-indigo-600 hover:underline"
                                 >
-                                    Cancel edit
+                                    Clear filters
                                 </button>
                             )}
                         </div>
-                    </form>
-                    )}
+                    </div>
 
                     {can_manage_billing && payingBillingId && (
                         <form
@@ -908,140 +1035,193 @@ export default function BillingIndex({
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
-                                {visibleBillings.map((billing) => {
-                                    const balance =
-                                        Number(billing.total_amount) -
-                                        Number(billing.amount_paid);
-                                    return (
-                                        <tr key={billing.id}>
-                                            <td className="px-4 py-3">
-                                                <p className="font-medium">
-                                                    {billing.invoice_number}
-                                                </p>
-                                                {billing.due_date && (
-                                                    <p className="text-xs text-gray-500">
-                                                        Due:{" "}
-                                                        {billing.due_date.slice(
-                                                            0,
-                                                            10,
-                                                        )}
+                                {visibleBillings.length === 0 ? (
+                                    <tr>
+                                        <td
+                                            colSpan={8}
+                                            className="px-4 py-8 text-center text-gray-500"
+                                        >
+                                            {billings.length === 0
+                                                ? "No invoices yet."
+                                                : "No invoices match your filters."}
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    visibleBillings.map((billing) => {
+                                        const balance =
+                                            Number(billing.total_amount) -
+                                            Number(billing.amount_paid);
+                                        return (
+                                            <tr key={billing.id}>
+                                                <td className="px-4 py-3">
+                                                    <p className="font-medium">
+                                                        {billing.invoice_number}
                                                     </p>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {billing.client?.name}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' ? (
-                                                    <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
-                                                        Pet shop
-                                                    </span>
-                                                ) : (
-                                                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
-                                                        Clinic
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' ? (
-                                                    <div className="space-y-1">
-                                                        {(billing.line_items ?? []).length === 0 ? (
-                                                            <span className="text-gray-500">Retail sale</span>
-                                                        ) : (
-                                                            billing.line_items.map((item) => (
-                                                                <p key={item.id} className="text-xs text-gray-600">
-                                                                    {item.description} — Qty {item.quantity} x{' '}
-                                                                    {formatPeso(item.unit_price)}
-                                                                </p>
-                                                            ))
-                                                        )}
-                                                    </div>
-                                                ) : (
-                                                    <>
-                                                        {billing.service_catalog?.name ?? '—'}
-                                                        {billing.service_catalog && (
-                                                            <p className="text-xs text-gray-500">
-                                                                Qty {billing.service_quantity} x{' '}
-                                                                {formatPeso(billing.service_unit_price)}
-                                                            </p>
-                                                        )}
-                                                    </>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {formatPeso(billing.total_amount)}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {formatPeso(billing.amount_paid)}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {balance.toFixed(2)}
-                                            </td>
-                                            <td className="px-4 py-3 capitalize">
-                                                {billing.status}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Link
-                                                    href={route(
-                                                        "billing.receipt",
-                                                        billing.id,
+                                                    {billing.due_date && (
+                                                        <p className="text-xs text-gray-500">
+                                                            Due:{" "}
+                                                            {billing.due_date.slice(
+                                                                0,
+                                                                10,
+                                                            )}
+                                                        </p>
                                                     )}
-                                                    className="text-gray-700 hover:underline"
-                                                    target="_blank"
-                                                >
-                                                    Receipt
-                                                </Link>
-                                                {can_manage_billing && (
-                                                    <>
-                                                        {(billing.sale_type ?? 'clinic_service') !== 'pet_shop_retail' && (
-                                                            <button
-                                                                className="ms-3 text-indigo-600 hover:underline"
-                                                                onClick={() =>
-                                                                    startEdit(
-                                                                        billing,
-                                                                    )
-                                                                }
-                                                            >
-                                                                Edit
-                                                            </button>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {billing.client?.name}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {(billing.sale_type ??
+                                                        "clinic_service") ===
+                                                    "pet_shop_retail" ? (
+                                                        <span className="rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">
+                                                            Pet shop
+                                                        </span>
+                                                    ) : (
+                                                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">
+                                                            Clinic
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {(billing.sale_type ??
+                                                        "clinic_service") ===
+                                                    "pet_shop_retail" ? (
+                                                        <div className="space-y-1">
+                                                            {(
+                                                                billing.line_items ??
+                                                                []
+                                                            ).length === 0 ? (
+                                                                <span className="text-gray-500">
+                                                                    Retail sale
+                                                                </span>
+                                                            ) : (
+                                                                billing.line_items.map(
+                                                                    (item) => (
+                                                                        <p
+                                                                            key={
+                                                                                item.id
+                                                                            }
+                                                                            className="text-xs text-gray-600"
+                                                                        >
+                                                                            {
+                                                                                item.description
+                                                                            }{" "}
+                                                                            —
+                                                                            Qty{" "}
+                                                                            {
+                                                                                item.quantity
+                                                                            }{" "}
+                                                                            x{" "}
+                                                                            {formatPeso(
+                                                                                item.unit_price,
+                                                                            )}
+                                                                        </p>
+                                                                    ),
+                                                                )
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <>
+                                                            {billing
+                                                                .service_catalog
+                                                                ?.name ?? "—"}
+                                                            {billing.service_catalog && (
+                                                                <p className="text-xs text-gray-500">
+                                                                    Qty{" "}
+                                                                    {
+                                                                        billing.service_quantity
+                                                                    }{" "}
+                                                                    x{" "}
+                                                                    {formatPeso(
+                                                                        billing.service_unit_price,
+                                                                    )}
+                                                                </p>
+                                                            )}
+                                                        </>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {formatPeso(
+                                                        billing.total_amount,
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {formatPeso(
+                                                        billing.amount_paid,
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {balance.toFixed(2)}
+                                                </td>
+                                                <td className="px-4 py-3 capitalize">
+                                                    {billing.status}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Link
+                                                        href={route(
+                                                            "billing.receipt",
+                                                            billing.id,
                                                         )}
-                                                        {billing.status !==
-                                                            "paid" &&
-                                                            billing.status !==
-                                                                "cancelled" && (
+                                                        className="text-gray-700 hover:underline"
+                                                        target="_blank"
+                                                    >
+                                                        Receipt
+                                                    </Link>
+                                                    {can_manage_billing && (
+                                                        <>
+                                                            {(billing.sale_type ??
+                                                                "clinic_service") !==
+                                                                "pet_shop_retail" && (
                                                                 <button
-                                                                    className="ms-3 text-emerald-600 hover:underline"
+                                                                    className="ms-3 text-indigo-600 hover:underline"
                                                                     onClick={() =>
-                                                                        startPayment(
+                                                                        startEdit(
                                                                             billing,
                                                                         )
                                                                     }
                                                                 >
-                                                                    Pay
+                                                                    Edit
                                                                 </button>
                                                             )}
-                                                        <button
-                                                            className="ms-3 text-red-600 hover:underline"
-                                                            onClick={() =>
-                                                                confirm(
-                                                                    "Delete invoice?",
-                                                                ) &&
-                                                                router.delete(
-                                                                    route(
-                                                                        "billing.destroy",
-                                                                        billing.id,
-                                                                    ),
-                                                                )
-                                                            }
-                                                        >
-                                                            Delete
-                                                        </button>
-                                                    </>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
+                                                            {billing.status !==
+                                                                "paid" &&
+                                                                billing.status !==
+                                                                    "cancelled" && (
+                                                                    <button
+                                                                        className="ms-3 text-emerald-600 hover:underline"
+                                                                        onClick={() =>
+                                                                            startPayment(
+                                                                                billing,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Pay
+                                                                    </button>
+                                                                )}
+                                                            <button
+                                                                className="ms-3 text-red-600 hover:underline"
+                                                                onClick={() =>
+                                                                    confirm(
+                                                                        "Delete invoice?",
+                                                                    ) &&
+                                                                    router.delete(
+                                                                        route(
+                                                                            "billing.destroy",
+                                                                            billing.id,
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            >
+                                                                Delete
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                         </table>
                         <ListDisplayControls
