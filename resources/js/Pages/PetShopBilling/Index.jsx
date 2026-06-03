@@ -37,12 +37,28 @@ const statusStyles = {
     cancelled: "bg-gray-100 text-gray-800",
 };
 
+const orderMatchesSearch = (order, query) => {
+    const haystack = [
+        order.invoice_number,
+        order.client?.name,
+        order.status,
+        order.notes,
+        ...(order.line_items ?? []).map((item) => item.description),
+    ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+    return haystack.includes(query);
+};
+
 export default function PetShopBillingIndex({
     orders,
     stats = null,
     can_manage = false,
 }) {
     const [statusFilter, setStatusFilter] = useState("all");
+    const [search, setSearch] = useState("");
     const [editingOrder, setEditingOrder] = useState(null);
     const [payingOrder, setPayingOrder] = useState(null);
 
@@ -62,12 +78,27 @@ export default function PetShopBillingIndex({
     });
 
     const filteredOrders = useMemo(() => {
-        if (statusFilter === "all") {
-            return orders;
-        }
+        const query = search.trim().toLowerCase();
 
-        return orders.filter((order) => order.status === statusFilter);
-    }, [orders, statusFilter]);
+        return orders.filter((order) => {
+            if (statusFilter !== "all" && order.status !== statusFilter) {
+                return false;
+            }
+
+            if (query && !orderMatchesSearch(order, query)) {
+                return false;
+            }
+
+            return true;
+        });
+    }, [orders, statusFilter, search]);
+
+    const hasActiveFilters = Boolean(search || statusFilter !== "all");
+
+    const clearFilters = () => {
+        setSearch("");
+        setStatusFilter("all");
+    };
 
     const {
         visibleItems: visibleOrders,
@@ -260,6 +291,32 @@ export default function PetShopBillingIndex({
                         ))}
                     </div>
 
+                    <div className="mb-4 rounded-lg bg-white p-4 shadow">
+                        <InputLabel value="Search" />
+                        <TextInput
+                            type="search"
+                            className="mt-1 block w-full"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Invoice, client, product, or notes..."
+                        />
+                        <div className="mt-3 flex items-center justify-between text-sm">
+                            <p className="text-gray-500">
+                                Showing {filteredOrders.length} of{" "}
+                                {orders.length} orders
+                            </p>
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="text-purple-600 hover:underline"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
@@ -294,7 +351,9 @@ export default function PetShopBillingIndex({
                                             colSpan={7}
                                             className="px-4 py-8 text-center text-gray-500"
                                         >
-                                            No pet shop orders found.
+                                            {orders.length === 0
+                                                ? "No pet shop orders found."
+                                                : "No orders match your filters."}
                                         </td>
                                     </tr>
                                 ) : (
