@@ -6,6 +6,7 @@ use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\ServiceCatalog;
+use App\Models\User;
 use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,9 +38,13 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated);
+        $this->applyPricing($validated, $request->attributes->get('active_clinic_id'));
 
-        $pet->healthRecords()->create($validated);
+        $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
+
+        $record = $pet->healthRecords()->create($validated);
+
+        \App\Support\ClinicBilling::createFromHealthRecord($record->fresh());
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record added successfully.');
     }
@@ -47,6 +52,7 @@ class HealthRecordController extends Controller
     public function update(Request $request, Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord($request, $healthRecord);
 
         $validated = $this->validatePayload($request);
         $previousMedicationLines = $this->medicationLinesFromRecord($healthRecord);
@@ -66,11 +72,17 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated);
+        $this->applyPricing($validated, $request->attributes->get('active_clinic_id'));
 
         $healthRecord->update($validated);
 
-        $this->refreshLinkedBilling($healthRecord->fresh());
+        $healthRecord = $healthRecord->fresh();
+
+        if (! $healthRecord->billing_id) {
+            \App\Support\ClinicBilling::createFromHealthRecord($healthRecord);
+        }
+
+        $this->refreshLinkedBilling($healthRecord);
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record updated successfully.');
     }
@@ -78,6 +90,7 @@ class HealthRecordController extends Controller
     public function destroy(Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord(request(), $healthRecord);
 
         if ($healthRecord->sticker_photo_path) {
             Storage::disk('s3')->delete($healthRecord->sticker_photo_path);
@@ -91,6 +104,7 @@ class HealthRecordController extends Controller
     public function destroySticker(Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord(request(), $healthRecord);
 
         if ($healthRecord->sticker_photo_path) {
             Storage::disk('s3')->delete($healthRecord->sticker_photo_path);
@@ -335,7 +349,7 @@ class HealthRecordController extends Controller
      * Service Catalog (other types), but a provided unit price is respected
      * so staff can override per record.
      */
-    private function applyPricing(array &$validated): void
+    private function applyPricing(array &$validated, ?int $clinicId = null): void
     {
         $type = $validated['type'];
         $providedPrice = $validated['unit_price'] ?? null;
@@ -354,9 +368,13 @@ class HealthRecordController extends Controller
             }
 
             $quantity = max((int) ($validated['medication_quantity'] ?? 1), 1);
+            $medicineQuery = Medicine::query()->whereKey($validated['medicine_id']);
+            if ($clinicId) {
+                $medicineQuery->where('clinic_id', $clinicId);
+            }
             $unitPrice = $providedPrice !== null
                 ? (float) $providedPrice
-                : (float) (Medicine::find($validated['medicine_id'])?->unit_price ?? 0);
+                : (float) ($medicineQuery->value('unit_price') ?? 0);
 
             $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
             $validated['unit_price'] = $unitPrice;
@@ -366,7 +384,12 @@ class HealthRecordController extends Controller
             return;
         }
 
-        $catalog = ServiceCatalog::where('code', ClinicServices::catalogCodeForType($type))->first();
+        $catalogQuery = ServiceCatalog::query()
+            ->where('code', ClinicServices::catalogCodeForType($type));
+        if ($clinicId) {
+            $catalogQuery->where('clinic_id', $clinicId);
+        }
+        $catalog = $catalogQuery->first();
         $quantity = max((int) ($validated['quantity'] ?? 1), 1);
         $unitPrice = $providedPrice !== null
             ? (float) $providedPrice
@@ -406,5 +429,27 @@ class HealthRecordController extends Controller
             'total_amount' => $total,
             'status' => $status,
         ]);
+    }
+
+    private function ensureCanModifyHealthRecord(Request $request, HealthRecord $healthRecord): void
+    {
+        $user = $request->user();
+        $activeClinicId = $request->attributes->get('active_clinic_id');
+
+        if ($user instanceof User && $user->isPlatformAdmin() && ! $activeClinicId) {
+            return;
+        }
+
+        if (! $activeClinicId) {
+            abort(403, 'Select a clinic to modify health records.');
+        }
+
+        if ($healthRecord->clinic_id === null) {
+            return;
+        }
+
+        if ((int) $healthRecord->clinic_id !== (int) $activeClinicId) {
+            abort(403, 'You can only edit or delete health records created by your active clinic.');
+        }
     }
 }

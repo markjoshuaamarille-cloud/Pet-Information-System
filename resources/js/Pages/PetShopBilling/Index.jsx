@@ -325,7 +325,7 @@ export default function PetShopBillingIndex({
                                         Invoice
                                     </th>
                                     <th className="px-4 py-3 text-left">
-                                        Client
+                                        Customer
                                     </th>
                                     <th className="px-4 py-3 text-left">
                                         Items

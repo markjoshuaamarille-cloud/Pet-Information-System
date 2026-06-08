@@ -5,10 +5,97 @@ import InputError from "@/Components/InputError";
 import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
-import ListDisplayControls from "@/Components/ListDisplayControls";
-import useListDisplayLimit from "@/hooks/useListDisplayLimit";
-import { Head, Link, useForm, usePage } from "@inertiajs/react";
+import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
+
+const OTHERS_VALUE = "__others__";
+
+const speciesOptions = [
+    "Dog",
+    "Cat",
+    "Rabbit",
+    "Hamster",
+    "Guinea Pig",
+    "Bird",
+    "Reptile",
+    "Turtle",
+    "Fish",
+];
+
+const breedOptionsBySpecies = {
+    Dog: [
+        "Aspin",
+        "Shih Tzu",
+        "Pomeranian",
+        "Labrador Retriever",
+        "Golden Retriever",
+        "German Shepherd",
+        "Poodle",
+        "Beagle",
+        "Siberian Husky",
+        "Chihuahua",
+        "Cocker Spaniel",
+        "Bulldog",
+    ],
+    Cat: [
+        "Persian",
+        "Siamese",
+        "British Shorthair",
+        "Maine Coon",
+        "Ragdoll",
+        "Domestic Shorthair",
+        "Domestic Longhair",
+        "Scottish Fold",
+        "Bengal",
+    ],
+    Rabbit: [
+        "Holland Lop",
+        "Netherland Dwarf",
+        "Mini Rex",
+        "Lionhead",
+    ],
+    Hamster: ["Syrian", "Dwarf", "Roborovski"],
+    "Guinea Pig": ["American", "Abyssinian", "Peruvian", "Skinny Pig"],
+    Bird: [
+        "Parrot",
+        "Cockatiel",
+        "Budgie",
+        "Lovebird",
+        "Canary",
+        "Finch",
+    ],
+    Reptile: ["Bearded Dragon", "Leopard Gecko", "Iguana", "Snake"],
+    Turtle: ["Red-Eared Slider", "Box Turtle", "Painted Turtle"],
+    Fish: ["Goldfish", "Betta", "Koi", "Guppy"],
+};
+
+const presetBreeds = [
+    ...new Set(Object.values(breedOptionsBySpecies).flat()),
+];
+
+const defaultBreedOptions = ["Mixed", "Unknown", ...presetBreeds];
+
+const genderOptions = [
+    "Male",
+    "Female",
+    "Neutered Male",
+    "Spayed Female",
+    "Unknown",
+];
+
+const colorOptions = [
+    "Black",
+    "White",
+    "Brown",
+    "Cream",
+    "Gray",
+    "Orange / Ginger",
+    "Black and White",
+    "Brown and White",
+    "Tri-color",
+    "Multi-color",
+];
 
 const vaccinationStatusOptions = [
     { value: "unknown", label: "Unknown" },
@@ -17,12 +104,79 @@ const vaccinationStatusOptions = [
     { value: "not_vaccinated", label: "Not Vaccinated" },
 ];
 
+function resolveSelectValue(value, options) {
+    if (!value) {
+        return "";
+    }
+
+    return options.includes(value) ? value : OTHERS_VALUE;
+}
+
+function SelectOrOtherField({
+    label,
+    value,
+    options,
+    onChange,
+    required = false,
+    error,
+    placeholder,
+    disabled = false,
+}) {
+    const selectValue = resolveSelectValue(value, options);
+    const showOtherInput = selectValue === OTHERS_VALUE;
+
+    return (
+        <div>
+            <InputLabel value={label} />
+            <select
+                className="mt-1 w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100"
+                value={selectValue}
+                disabled={disabled}
+                onChange={(e) => {
+                    const next = e.target.value;
+
+                    if (next === OTHERS_VALUE) {
+                        onChange(
+                            value && !options.includes(value) ? value : "",
+                        );
+                        return;
+                    }
+
+                    onChange(next);
+                }}
+                required={required && !showOtherInput}
+            >
+                <option value="">Select {label.toLowerCase()}</option>
+                {options.map((option) => (
+                    <option key={option} value={option}>
+                        {option}
+                    </option>
+                ))}
+                <option value={OTHERS_VALUE}>Others</option>
+            </select>
+            {showOtherInput && (
+                <TextInput
+                    className="mt-2 block w-full"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder ?? `Specify ${label.toLowerCase()}`}
+                    required={required}
+                />
+            )}
+            {error && <InputError message={error} className="mt-1" />}
+        </div>
+    );
+}
+
 export default function PetsIndex({
     pets,
     clients,
     can_manage_records = true,
+    can_toggle_pet_status = false,
 }) {
     const user = usePage().props.auth.user;
+    const activeClinic = usePage().props.activeClinic;
+    const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const isCustomer = user?.role === "customer";
     const [editingId, setEditingId] = useState(null);
     const [search, setSearch] = useState("");
@@ -115,12 +269,20 @@ export default function PetsIndex({
         form.clearErrors();
     };
 
-    const speciesOptions = useMemo(() => {
+    const filterSpeciesOptions = useMemo(() => {
         const values = [
             ...new Set(pets.map((pet) => pet.species).filter(Boolean)),
         ];
         return values.sort((a, b) => String(a).localeCompare(String(b)));
     }, [pets]);
+
+    const formBreedOptions = useMemo(() => {
+        if (form.data.species && breedOptionsBySpecies[form.data.species]) {
+            return breedOptionsBySpecies[form.data.species];
+        }
+
+        return defaultBreedOptions;
+    }, [form.data.species]);
 
     const filteredPets = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -160,14 +322,6 @@ export default function PetsIndex({
         });
     }, [pets, search, speciesFilter, vaccinationFilter]);
 
-    const {
-        visibleItems: visiblePets,
-        displayLimit,
-        setDisplayLimit,
-        totalCount: petListCount,
-        showingCount: petShowingCount,
-    } = useListDisplayLimit(filteredPets);
-
     const clearFilters = () => {
         setSearch("");
         setSpeciesFilter("");
@@ -178,12 +332,41 @@ export default function PetsIndex({
         search || speciesFilter || vaccinationFilter,
     );
 
+    const togglePetStatus = (pet) => {
+        const isActive = pet.is_active !== false;
+
+        if (isActive) {
+            if (
+                !confirm(
+                    `Deactivate ${pet.pet_name}? You cannot schedule appointments while deactivated. If still deactivated after 1 year, this pet record will be automatically deleted.`,
+                )
+            ) {
+                return;
+            }
+        } else if (
+            !confirm(`Reactivate ${pet.pet_name}? Appointments can be scheduled again.`)
+        ) {
+            return;
+        }
+
+        router.patch(route("pets.toggle-active", pet.id), {}, {
+            preserveScroll: true,
+        });
+    };
+
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold text-gray-800">
-                    Pet Records
-                </h2>
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {clinicScopeTitle("Pet Records", activeClinic, isPlatformAdmin)}
+                    </h2>
+                    {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
+                        <p className="mt-1 text-sm text-gray-500">
+                            {clinicScopeSubtitle(activeClinic, isPlatformAdmin)}
+                        </p>
+                    )}
+                </div>
             }
         >
             <Head title="Pets" />
@@ -242,37 +425,55 @@ export default function PetsIndex({
                                         className="mt-1"
                                     />
                                 </div>
-                                <div>
-                                    <InputLabel value="Species" />
-                                    <TextInput
-                                        className="mt-1 block w-full"
-                                        value={form.data.species}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                "species",
-                                                e.target.value,
-                                            )
-                                        }
-                                        required
-                                    />
-                                    <InputError
-                                        message={form.errors.species}
-                                        className="mt-1"
-                                    />
-                                </div>
-                                <div>
-                                    <InputLabel value="Breed" />
-                                    <TextInput
-                                        className="mt-1 block w-full"
-                                        value={form.data.breed}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                "breed",
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
+                                <SelectOrOtherField
+                                    label="Species"
+                                    value={form.data.species}
+                                    options={speciesOptions}
+                                    onChange={(value) =>
+                                        form.setData((data) => {
+                                            const breeds =
+                                                value &&
+                                                breedOptionsBySpecies[value]
+                                                    ? breedOptionsBySpecies[
+                                                          value
+                                                      ]
+                                                    : defaultBreedOptions;
+                                            const isCustomBreed =
+                                                data.breed &&
+                                                !presetBreeds.includes(
+                                                    data.breed,
+                                                ) &&
+                                                !["Mixed", "Unknown"].includes(
+                                                    data.breed,
+                                                );
+
+                                            return {
+                                                ...data,
+                                                species: value,
+                                                breed: breeds.includes(
+                                                    data.breed,
+                                                )
+                                                    ? data.breed
+                                                    : isCustomBreed
+                                                      ? data.breed
+                                                      : "",
+                                            };
+                                        })
+                                    }
+                                    required
+                                    error={form.errors.species}
+                                    placeholder="Specify species"
+                                />
+                                <SelectOrOtherField
+                                    label="Breed"
+                                    value={form.data.breed}
+                                    options={formBreedOptions}
+                                    onChange={(value) =>
+                                        form.setData("breed", value)
+                                    }
+                                    error={form.errors.breed}
+                                    placeholder="Specify breed"
+                                />
                                 <div>
                                     <InputLabel value="Age" />
                                     <TextInput
@@ -284,19 +485,16 @@ export default function PetsIndex({
                                         }
                                     />
                                 </div>
-                                <div>
-                                    <InputLabel value="Gender" />
-                                    <TextInput
-                                        className="mt-1 block w-full"
-                                        value={form.data.gender}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                "gender",
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
+                                <SelectOrOtherField
+                                    label="Gender"
+                                    value={form.data.gender}
+                                    options={genderOptions}
+                                    onChange={(value) =>
+                                        form.setData("gender", value)
+                                    }
+                                    error={form.errors.gender}
+                                    placeholder="Specify gender"
+                                />
                                 <div>
                                     <InputLabel value="Birth Date" />
                                     <TextInput
@@ -327,19 +525,16 @@ export default function PetsIndex({
                                         }
                                     />
                                 </div>
-                                <div>
-                                    <InputLabel value="Color" />
-                                    <TextInput
-                                        className="mt-1 block w-full"
-                                        value={form.data.color}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                "color",
-                                                e.target.value,
-                                            )
-                                        }
-                                    />
-                                </div>
+                                <SelectOrOtherField
+                                    label="Color"
+                                    value={form.data.color}
+                                    options={colorOptions}
+                                    onChange={(value) =>
+                                        form.setData("color", value)
+                                    }
+                                    error={form.errors.color}
+                                    placeholder="Specify color"
+                                />
                                 <div>
                                     <InputLabel value="Microchip No" />
                                     <TextInput
@@ -397,7 +592,7 @@ export default function PetsIndex({
                                 </div>
                             </div>
                             <div className="mt-4">
-                                <InputLabel value="Medical History Notes" />
+                                <InputLabel value="Remarks" />
                                 <textarea
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     rows={2}
@@ -460,7 +655,7 @@ export default function PetsIndex({
                                     }
                                 >
                                     <option value="">All species</option>
-                                    {speciesOptions.map((species) => (
+                                    {filterSpeciesOptions.map((species) => (
                                         <option key={species} value={species}>
                                             {species}
                                         </option>
@@ -527,6 +722,9 @@ export default function PetsIndex({
                                     <th className="px-4 py-3 text-left">
                                         Owner
                                     </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Status
+                                    </th>
                                     <th className="px-4 py-3 text-right">
                                         Actions
                                     </th>
@@ -536,15 +734,22 @@ export default function PetsIndex({
                                 {filteredPets.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={7}
+                                            colSpan={8}
                                             className="px-4 py-8 text-center text-sm text-gray-500"
                                         >
                                             No pets match your filters.
                                         </td>
                                     </tr>
                                 ) : (
-                                    visiblePets.map((p) => (
-                                        <tr key={p.id}>
+                                    filteredPets.map((p) => (
+                                        <tr
+                                            key={p.id}
+                                            className={
+                                                p.is_active === false
+                                                    ? "bg-gray-50/80"
+                                                    : ""
+                                            }
+                                        >
                                             <td className="px-4 py-3">
                                                 {p.photo_url ? (
                                                     <ImageLightbox
@@ -579,6 +784,17 @@ export default function PetsIndex({
                                             <td className="px-4 py-3">
                                                 {p.client?.name}
                                             </td>
+                                            <td className="px-4 py-3">
+                                                {p.is_active === false ? (
+                                                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                                        Deactivated
+                                                    </span>
+                                                ) : (
+                                                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                                        Active
+                                                    </span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-right">
                                                 <Link
                                                     href={route(
@@ -609,18 +825,29 @@ export default function PetsIndex({
                                                 >
                                                     Client Record
                                                 </Link>
+                                                {can_toggle_pet_status && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() =>
+                                                            togglePetStatus(p)
+                                                        }
+                                                        className={`ms-3 hover:underline ${
+                                                            p.is_active === false
+                                                                ? "text-emerald-600"
+                                                                : "text-red-600"
+                                                        }`}
+                                                    >
+                                                        {p.is_active === false
+                                                            ? "Activate"
+                                                            : "Deactivate"}
+                                                    </button>
+                                                )}
                                             </td>
                                         </tr>
                                     ))
                                 )}
                             </tbody>
                         </table>
-                        <ListDisplayControls
-                            totalCount={petListCount}
-                            showingCount={petShowingCount}
-                            displayLimit={displayLimit}
-                            onLimitChange={setDisplayLimit}
-                        />
                     </div>
                 </div>
             </div>

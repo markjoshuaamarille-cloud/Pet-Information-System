@@ -1,9 +1,11 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import { formatClinicDateTime } from "@/utils/formatDateTime";
 import FlashMessage from "@/Components/FlashMessage";
 import ListDisplayControls from "@/Components/ListDisplayControls";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, Link, router, usePage } from "@inertiajs/react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
 
 const formatDate = (value) => {
     if (!value) {
@@ -47,19 +49,64 @@ const serviceLabels = {
     other: "Other",
 };
 
+function StatRecordsModal({ title, description, onClose, children }) {
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+            onClick={onClose}
+        >
+            <div
+                className="max-h-[85vh] w-full max-w-2xl overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                    <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                            {title}
+                        </h3>
+                        {description && (
+                            <p className="text-sm text-gray-500">{description}</p>
+                        )}
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="rounded-md px-2 py-1 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    >
+                        Close
+                    </button>
+                </div>
+                <div className="max-h-[calc(85vh-5rem)] overflow-y-auto px-5 py-4">
+                    {children}
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Dashboard({
     stats,
+    statPets = [],
+    statClients = [],
+    statAppointments = [],
+    statMedicines = [],
     expiredMedicines,
     criticalMedicines,
     expiringSoon,
     upcomingAppointments,
+    appointmentHistory = [],
     dueHealthRecords,
     appointmentsSectionTitle = "Upcoming Appointments",
-    appointmentsStatLabel = "Appointments Today & Recent",
+    appointmentsStatLabel = "Upcoming Appointments",
     canManageAppointmentStatus = false,
     canDeleteOverdueHealthRecords = false,
 }) {
-    const isCustomer = usePage().props.auth.user?.role === "customer";
+    const page = usePage();
+    const isCustomer = page.props.auth.user?.role === "customer";
+    const activeClinic = page.props.activeClinic;
+    const isPlatformAdmin = page.props.isPlatformAdmin ?? false;
+    const appTimezone = page.props.appTimezone ?? "Asia/Manila";
+    const [activeStatModal, setActiveStatModal] = useState(null);
 
     const sortedAppointments = useMemo(
         () =>
@@ -69,6 +116,16 @@ export default function Dashboard({
                     new Date(a.scheduled_at).getTime(),
             ),
         [upcomingAppointments],
+    );
+
+    const sortedAppointmentHistory = useMemo(
+        () =>
+            [...appointmentHistory].sort(
+                (a, b) =>
+                    new Date(b.scheduled_at).getTime() -
+                    new Date(a.scheduled_at).getTime(),
+            ),
+        [appointmentHistory],
     );
 
     const sortedDueHealthRecords = useMemo(
@@ -117,20 +174,284 @@ export default function Dashboard({
     };
 
     const statCards = [
-        { label: "Pets", value: stats.pets },
-        ...(isCustomer ? [] : [{ label: "Clients", value: stats.clients }]),
-        { label: appointmentsStatLabel, value: stats.appointments_today },
+        {
+            key: "pets",
+            label: "Pets",
+            value: stats.pets,
+        },
         ...(isCustomer
             ? []
-            : [{ label: "Medicines & Supplies", value: stats.medicines }]),
+            : [{ key: "clients", label: "Clients", value: stats.clients }]),
+        {
+            key: "appointments",
+            label: appointmentsStatLabel,
+            value: stats.appointments_today,
+        },
+        ...(isCustomer
+            ? [
+                  {
+                      key: "appointmentHistory",
+                      label: "Appointments History",
+                      value: stats.appointments_history ?? 0,
+                  },
+              ]
+            : [
+                  {
+                      key: "medicines",
+                      label: "Medicines & Supplies",
+                      value: stats.medicines,
+                  },
+              ]),
     ];
+
+    const statModalMeta = {
+        pets: {
+            title: "Pets",
+            description: isCustomer
+                ? "Your registered pets."
+                : activeClinic
+                  ? `Pets with records or visits at ${activeClinic.name}.`
+                  : "All pets across clinics.",
+        },
+        clients: {
+            title: "Clients",
+            description: activeClinic
+                ? `Clients linked to ${activeClinic.name}.`
+                : "Registered pet owners.",
+        },
+        appointments: {
+            title: appointmentsStatLabel,
+            description: isCustomer
+                ? "Today's and recent pending appointments."
+                : activeClinic
+                  ? `Today's and recent appointments at ${activeClinic.name}.`
+                  : "Today's and recent pending clinic appointments.",
+        },
+        medicines: {
+            title: "Medicines & Supplies",
+            description: activeClinic
+                ? `Inventory for ${activeClinic.name}.`
+                : "Inventory items on record.",
+        },
+        appointmentHistory: {
+            title: "Appointments History",
+            description:
+                "Recent completed, cancelled, and past appointments.",
+        },
+    };
+
+    const renderStatModalContent = () => {
+        switch (activeStatModal) {
+            case "pets":
+                if (statPets.length === 0) {
+                    return (
+                        <p className="text-sm text-gray-500">No pets found.</p>
+                    );
+                }
+                return (
+                    <ul className="space-y-3 text-sm">
+                        {statPets.map((pet) => (
+                            <li
+                                key={pet.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                            >
+                                <p className="font-medium text-gray-900">
+                                    {pet.pet_name}
+                                </p>
+                                <p className="mt-1 text-gray-600">
+                                    {pet.species}
+                                    {pet.breed ? ` · ${pet.breed}` : ""}
+                                    {pet.client?.name
+                                        ? ` · Owner: ${pet.client.name}`
+                                        : ""}
+                                </p>
+                                <Link
+                                    href={route("pets.show", pet.id)}
+                                    className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:underline"
+                                    onClick={() => setActiveStatModal(null)}
+                                >
+                                    View pet record
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
+                );
+            case "clients":
+                if (statClients.length === 0) {
+                    return (
+                        <p className="text-sm text-gray-500">
+                            No clients found.
+                        </p>
+                    );
+                }
+                return (
+                    <ul className="space-y-3 text-sm">
+                        {statClients.map((client) => (
+                            <li
+                                key={client.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                            >
+                                <p className="font-medium text-gray-900">
+                                    {client.name}
+                                </p>
+                                <p className="mt-1 text-gray-600">
+                                    {client.contact || "—"}
+                                    {client.email ? ` · ${client.email}` : ""}
+                                </p>
+                                {client.address && (
+                                    <p className="mt-1 text-gray-500">
+                                        {client.address}
+                                    </p>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                );
+            case "appointments":
+                if (statAppointments.length === 0) {
+                    return (
+                        <p className="text-sm text-gray-500">
+                            No appointments in this period.
+                        </p>
+                    );
+                }
+                return (
+                    <ul className="space-y-3 text-sm">
+                        {statAppointments.map((a) => (
+                            <li
+                                key={a.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                            >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <p className="font-medium text-gray-900">
+                                            {a.pet?.pet_name ?? "Unknown pet"}
+                                        </p>
+                                        <p className="text-gray-600">
+                                            {serviceLabels[a.type] ?? a.type}
+                                            {!isCustomer && a.client?.name
+                                                ? ` · ${a.client.name}`
+                                                : ""}
+                                        </p>
+                                    </div>
+                                    <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-medium uppercase text-gray-700">
+                                        {a.status}
+                                    </span>
+                                </div>
+                                <p className="mt-2 text-gray-500">
+                                    {formatClinicDateTime(
+                                        a.scheduled_at,
+                                        appTimezone,
+                                    )}
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
+                );
+            case "medicines":
+                if (statMedicines.length === 0) {
+                    return (
+                        <p className="text-sm text-gray-500">
+                            No medicines found.
+                        </p>
+                    );
+                }
+                return (
+                    <ul className="space-y-3 text-sm">
+                        {statMedicines.map((medicine) => (
+                            <li
+                                key={medicine.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                            >
+                                <p className="font-medium text-gray-900">
+                                    {medicine.name}
+                                </p>
+                                <p className="mt-1 text-gray-600">
+                                    {medicine.category || "Uncategorized"} ·{" "}
+                                    {medicine.quantity} {medicine.unit}
+                                    {medicine.unit_price != null
+                                        ? ` · ₱${Number(medicine.unit_price).toFixed(2)}`
+                                        : ""}
+                                </p>
+                                {medicine.expiry_date && (
+                                    <p className="mt-1 text-gray-500">
+                                        Expires:{" "}
+                                        {formatDate(medicine.expiry_date)}
+                                    </p>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                );
+            case "appointmentHistory":
+                if (sortedAppointmentHistory.length === 0) {
+                    return (
+                        <p className="text-sm text-gray-500">
+                            No appointment history yet.
+                        </p>
+                    );
+                }
+                return (
+                    <ul className="space-y-3 text-sm">
+                        {sortedAppointmentHistory.map((a) => (
+                            <li
+                                key={a.id}
+                                className="rounded-lg border border-gray-200 p-4"
+                            >
+                                <div className="flex flex-wrap items-start justify-between gap-2">
+                                    <div>
+                                        <p className="font-medium text-gray-900">
+                                            {a.pet?.pet_name ?? "Unknown pet"}
+                                        </p>
+                                        <p className="text-gray-600">
+                                            {serviceLabels[a.type] ?? a.type}
+                                        </p>
+                                    </div>
+                                    <span
+                                        className={`rounded px-2 py-0.5 text-xs font-medium uppercase ${
+                                            a.status === "completed"
+                                                ? "bg-emerald-100 text-emerald-800"
+                                                : a.status === "cancelled"
+                                                  ? "bg-red-100 text-red-800"
+                                                  : "bg-gray-100 text-gray-800"
+                                        }`}
+                                    >
+                                        {a.status}
+                                    </span>
+                                </div>
+                                <p className="mt-2 text-gray-500">
+                                    {formatClinicDateTime(
+                                        a.scheduled_at,
+                                        appTimezone,
+                                    )}
+                                </p>
+                                {a.notes && (
+                                    <p className="mt-2 text-gray-600">
+                                        Notes: {a.notes}
+                                    </p>
+                                )}
+                            </li>
+                        ))}
+                    </ul>
+                );
+            default:
+                return null;
+        }
+    };
 
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold text-gray-800">
-                    Pet Care Management Dashboard
-                </h2>
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {clinicScopeTitle("Pet Care Management Dashboard", activeClinic, isPlatformAdmin)}
+                    </h2>
+                    {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
+                        <p className="mt-1 text-sm text-gray-500">
+                            {clinicScopeSubtitle(activeClinic, isPlatformAdmin)}
+                        </p>
+                    )}
+                </div>
             }
         >
             <Head title="Dashboard" />
@@ -139,22 +460,39 @@ export default function Dashboard({
                     <FlashMessage />
 
                     <div
-                        className={`grid gap-4 sm:grid-cols-2 ${isCustomer ? "lg:grid-cols-2" : "lg:grid-cols-4"}`}
+                        className={`grid gap-3 sm:grid-cols-2 ${isCustomer ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}
                     >
                         {statCards.map((s) => (
-                            <div
-                                key={s.label}
-                                className="rounded-lg bg-white p-5 shadow"
+                            <button
+                                key={s.key}
+                                type="button"
+                                onClick={() => setActiveStatModal(s.key)}
+                                className="rounded-xl border border-gray-100 bg-white p-3.5 text-left shadow-sm transition hover:border-indigo-100 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-indigo-500/40 focus:ring-offset-1"
                             >
-                                <p className="text-sm text-gray-500">
-                                    {s.label}
-                                </p>
-                                <p className="text-3xl font-bold text-indigo-600">
-                                    {s.value}
-                                </p>
-                            </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="h-9 w-1 shrink-0 rounded-full bg-indigo-500/70" />
+                                    <div className="min-w-0">
+                                        <p className="truncate text-[11px] font-medium uppercase tracking-wide text-gray-400">
+                                            {s.label}
+                                        </p>
+                                        <p className="mt-0.5 text-2xl font-semibold tabular-nums text-indigo-600">
+                                            {s.value}
+                                        </p>
+                                    </div>
+                                </div>
+                            </button>
                         ))}
                     </div>
+
+                    {activeStatModal && statModalMeta[activeStatModal] && (
+                        <StatRecordsModal
+                            title={statModalMeta[activeStatModal].title}
+                            description={statModalMeta[activeStatModal].description}
+                            onClose={() => setActiveStatModal(null)}
+                        >
+                            {renderStatModalContent()}
+                        </StatRecordsModal>
+                    )}
 
                     {(expiredMedicines.length > 0 ||
                         criticalMedicines.length > 0) && (
@@ -205,9 +543,10 @@ export default function Dashboard({
                                             with {a.client?.name}
                                             <br />
                                             <span className="text-gray-500">
-                                                {new Date(
+                                                {formatClinicDateTime(
                                                     a.scheduled_at,
-                                                ).toLocaleString()}
+                                                    appTimezone,
+                                                )}
                                             </span>
                                             <span className="ml-2 text-xs font-medium uppercase text-gray-600">
                                                 [{a.status}]

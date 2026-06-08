@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Pet;
 use App\Models\SystemNotification;
 use App\Models\Vaccination;
 use Illuminate\Foundation\Inspiring;
@@ -58,3 +59,10 @@ Artisan::command('reminders:vaccinations', function () {
 })->purpose('Generate notifications for upcoming vaccination due dates');
 
 Schedule::command('reminders:vaccinations')->dailyAt('08:00');
+
+Artisan::command('pets:purge-deactivated', function () {
+    $purged = Pet::purgeDeactivatedBeyondOneYear();
+    $this->info("Deactivated pets purged: {$purged}");
+})->purpose('Delete pet records deactivated for one year or longer');
+
+Schedule::command('pets:purge-deactivated')->dailyAt('02:00');

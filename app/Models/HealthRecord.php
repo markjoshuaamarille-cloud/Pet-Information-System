@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToClinic;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,9 +10,10 @@ use Illuminate\Support\Facades\Storage;
 
 class HealthRecord extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToClinic;
 
     protected $fillable = [
+        'clinic_id',
         'pet_id',
         'medicine_id',
         'service_catalog_id',

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,6 +27,8 @@ class Pet extends Model
         'vaccination_status',
         'photo_path',
         'medical_history',
+        'is_active',
+        'deactivated_at',
     ];
 
     protected $appends = [
@@ -37,7 +40,36 @@ class Pet extends Model
         return [
             'birth_date' => 'date',
             'weight' => 'decimal:2',
+            'is_active' => 'boolean',
+            'deactivated_at' => 'datetime',
         ];
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    public static function purgeDeactivatedBeyondOneYear(): int
+    {
+        $pets = self::query()
+            ->where('is_active', false)
+            ->whereNotNull('deactivated_at')
+            ->where('deactivated_at', '<=', now()->subYear())
+            ->get();
+
+        $purged = 0;
+
+        foreach ($pets as $pet) {
+            if ($pet->photo_path) {
+                Storage::disk('s3')->delete($pet->photo_path);
+            }
+
+            $pet->delete();
+            $purged++;
+        }
+
+        return $purged;
     }
 
     public function getPhotoUrlAttribute(): ?string

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToClinic;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -10,9 +11,10 @@ use Illuminate\Support\Facades\Storage;
 
 class Medicine extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToClinic;
 
     protected $fillable = [
+        'clinic_id',
         'name',
         'category',
         'description',
@@ -22,6 +24,7 @@ class Medicine extends Model
         'unit_price',
         'expiry_date',
         'reorder_level',
+        'is_active',
     ];
 
     protected $appends = [

@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Models\User;
+use App\Support\GeoapifyAddress;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -18,9 +20,25 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): Response
     {
+        $user   = $request->user();
+        $client = ($user instanceof User && $user->isCustomer()) ? $user->client : null;
+
         return Inertia::render('Profile/Edit', [
             'mustVerifyEmail' => $request->user() instanceof MustVerifyEmail,
-            'status' => session('status'),
+            'status'          => session('status'),
+            'clientLocation'  => $client ? [
+                'address'           => $client->address,
+                'address_line1'     => $client->address_line1,
+                'address_line2'     => $client->address_line2,
+                'barangay'          => $client->barangay,
+                'city'              => $client->city,
+                'province'          => $client->province,
+                'postal_code'       => $client->postal_code,
+                'country'           => $client->country,
+                'latitude'          => $client->latitude,
+                'longitude'         => $client->longitude,
+                'address_formatted' => $client->address_formatted,
+            ] : null,
         ]);
     }
 
@@ -36,6 +54,13 @@ class ProfileController extends Controller
         }
 
         $request->user()->save();
+
+        $user = $request->user();
+
+        if ($user instanceof User && $user->isCustomer() && $user->client_id && $request->filled('address_line1')) {
+            $locationValidated = $request->validate(GeoapifyAddress::validationRules(requireCoordinates: true));
+            $user->client()->update(GeoapifyAddress::normalizeClientFields($locationValidated));
+        }
 
         return Redirect::route('profile.edit');
     }

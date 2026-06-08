@@ -37,10 +37,11 @@ class NotificationController extends Controller
         'other' => 'Other',
     ];
 
-    public function index(): Response
+    public function index(\Illuminate\Http\Request $request): Response
     {
         $user = auth()->user();
         $user = $user instanceof User ? $user : null;
+        $clinicId = $request->attributes->get('active_clinic_id');
 
         if ($user?->isCustomer()) {
             $notifications = $user->client_id
@@ -53,9 +54,9 @@ class NotificationController extends Controller
             ]);
         }
 
-        $expired = Medicine::expired()->orderBy('expiry_date')->get();
-        $critical = Medicine::criticalStock()->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
-        $expiringSoon = Medicine::expiringSoon()->whereDate('expiry_date', '>=', now())->get();
+        $expired     = Medicine::expired()->forClinic($clinicId)->orderBy('expiry_date')->get();
+        $critical    = Medicine::criticalStock()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
+        $expiringSoon = Medicine::expiringSoon()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->get();
 
         $notifications = collect();
 

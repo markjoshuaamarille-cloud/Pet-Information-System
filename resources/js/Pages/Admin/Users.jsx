@@ -7,8 +7,9 @@ import TextInput from '@/Components/TextInput';
 import ListDisplayControls from '@/Components/ListDisplayControls';
 import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, router, useForm } from '@inertiajs/react';
+import { useState } from 'react';
 
-export default function AdminUsers({ users, roles }) {
+export default function AdminUsers({ users, roles, clinics = [] }) {
     const form = useForm({
         name: '',
         email: '',
@@ -16,6 +17,10 @@ export default function AdminUsers({ users, roles }) {
         password: '',
         password_confirmation: '',
     });
+
+    const [clinicModalUser, setClinicModalUser] = useState(null);
+    const [selectedClinicIds, setSelectedClinicIds] = useState([]);
+    const [primaryClinicId, setPrimaryClinicId] = useState('');
 
     const submit = (e) => {
         e.preventDefault();
@@ -33,6 +38,30 @@ export default function AdminUsers({ users, roles }) {
             return;
         }
         router.delete(route('admin.users.destroy', user.id));
+    };
+
+    const openClinicModal = (user) => {
+        setClinicModalUser(user);
+        const ids = (user.clinics ?? []).map(c => String(c.id));
+        setSelectedClinicIds(ids);
+        const primary = (user.clinics ?? []).find(c => c.pivot?.is_primary);
+        setPrimaryClinicId(primary ? String(primary.id) : (ids[0] ?? ''));
+    };
+
+    const saveClinicAssignment = () => {
+        router.put(route('admin.users.clinics.update', clinicModalUser.id), {
+            clinic_ids: selectedClinicIds.map(Number),
+            primary_clinic_id: primaryClinicId ? Number(primaryClinicId) : null,
+        }, {
+            onSuccess: () => setClinicModalUser(null),
+        });
+    };
+
+    const toggleClinic = (id) => {
+        const str = String(id);
+        setSelectedClinicIds(prev =>
+            prev.includes(str) ? prev.filter(x => x !== str) : [...prev, str]
+        );
     };
 
     const {
@@ -99,6 +128,7 @@ export default function AdminUsers({ users, roles }) {
                                     <th className="px-4 py-3 text-left">Name</th>
                                     <th className="px-4 py-3 text-left">Email</th>
                                     <th className="px-4 py-3 text-left">Role</th>
+                                    <th className="px-4 py-3 text-left">Clinics</th>
                                     <th className="px-4 py-3 text-left">Created</th>
                                     <th className="px-4 py-3 text-right">Actions</th>
                                 </tr>
@@ -119,8 +149,22 @@ export default function AdminUsers({ users, roles }) {
                                                 ))}
                                             </select>
                                         </td>
+                                        <td className="px-4 py-3">
+                                            {user.clinics && user.clinics.length > 0 ? (
+                                                <div className="flex flex-wrap gap-1">
+                                                    {user.clinics.map(c => (
+                                                        <span key={c.id} className="rounded bg-indigo-100 px-1.5 py-0.5 text-xs text-indigo-700">{c.name}</span>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <span className="text-xs text-gray-400">—</span>
+                                            )}
+                                        </td>
                                         <td className="px-4 py-3">{new Date(user.created_at).toLocaleDateString()}</td>
-                                        <td className="px-4 py-3 text-right">
+                                        <td className="px-4 py-3 text-right space-x-2">
+                                            <button className="text-indigo-600 hover:underline text-sm" onClick={() => openClinicModal(user)}>
+                                                Clinics
+                                            </button>
                                             <button className="text-red-600 hover:underline" onClick={() => deleteUser(user)}>
                                                 Delete
                                             </button>
@@ -138,6 +182,46 @@ export default function AdminUsers({ users, roles }) {
                     </div>
                 </div>
             </div>
+            {clinicModalUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setClinicModalUser(null)}>
+                    <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+                        <h3 className="mb-4 font-semibold text-gray-800">Assign Clinics — {clinicModalUser.name}</h3>
+                        <div className="mb-4 max-h-48 overflow-y-auto space-y-2">
+                            {clinics.map(clinic => (
+                                <label key={clinic.id} className="flex items-center gap-2 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedClinicIds.includes(String(clinic.id))}
+                                        onChange={() => toggleClinic(clinic.id)}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600"
+                                    />
+                                    {clinic.name}
+                                </label>
+                            ))}
+                            {clinics.length === 0 && <p className="text-xs text-gray-400">No active clinics found.</p>}
+                        </div>
+                        {selectedClinicIds.length > 0 && (
+                            <div className="mb-4">
+                                <label className="block text-xs font-medium text-gray-600 mb-1">Primary Clinic</label>
+                                <select
+                                    className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+                                    value={primaryClinicId}
+                                    onChange={e => setPrimaryClinicId(e.target.value)}
+                                >
+                                    {selectedClinicIds.map(id => {
+                                        const c = clinics.find(cl => String(cl.id) === id);
+                                        return <option key={id} value={id}>{c?.name ?? id}</option>;
+                                    })}
+                                </select>
+                            </div>
+                        )}
+                        <div className="flex justify-end gap-2">
+                            <button onClick={() => setClinicModalUser(null)} className="rounded border border-gray-300 px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-50">Cancel</button>
+                            <button onClick={saveClinicAssignment} className="rounded bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700">Save</button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </AuthenticatedLayout>
     );
 }

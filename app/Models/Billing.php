@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\BelongsToClinic;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,9 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Billing extends Model
 {
-    use HasFactory;
+    use HasFactory, BelongsToClinic;
 
     protected $fillable = [
+        'clinic_id',
         'invoice_number',
         'sale_type',
         'client_id',

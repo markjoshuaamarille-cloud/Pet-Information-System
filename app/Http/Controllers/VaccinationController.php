@@ -19,15 +19,18 @@ class VaccinationController extends Controller
 {
     private const VACCINE_CATEGORY = 'vaccine';
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = auth()->user();
+        $clinicId = $request->attributes->get('active_clinic_id');
 
         return Inertia::render('Vaccinations/Index', [
             'vaccinations' => Vaccination::with(['pet.client', 'appointment', 'medicine:id,name,unit,quantity', 'administeredBy:id,name'])
+                ->forClinic($clinicId)
                 ->orderByDesc('administered_on')
                 ->get(),
             'vaccines' => Medicine::where('category', self::VACCINE_CATEGORY)
+                ->forClinic($clinicId)
                 ->orderBy('name')
                 ->get(['id', 'name', 'unit', 'quantity']),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
@@ -36,21 +39,23 @@ class VaccinationController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name']),
             'vaccinationAppointments' => Appointment::with(['pet', 'client'])
+                ->forClinic($clinicId)
                 ->where('type', 'vaccination')
                 ->where('status', 'scheduled')
                 ->whereDoesntHave('vaccinations')
                 ->orderByDesc('scheduled_at')
                 ->get(),
             'can_manage_records' => $user instanceof User
-                && $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']),
+                && $user->canManageVaccinationRecords(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatePayload($request);
+        $clinicId = $request->attributes->get('active_clinic_id');
 
-        DB::transaction(function () use ($validated): void {
+        DB::transaction(function () use ($validated, $clinicId): void {
             $vaccine = Medicine::where('category', self::VACCINE_CATEGORY)
                 ->whereKey($validated['medicine_id'])
                 ->lockForUpdate()
@@ -64,6 +69,7 @@ class VaccinationController extends Controller
 
             Vaccination::create([
                 ...$validated,
+                'clinic_id'    => $clinicId,
                 'vaccine_name' => $vaccine->name,
             ]);
 

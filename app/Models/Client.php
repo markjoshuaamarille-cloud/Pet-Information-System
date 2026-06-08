@@ -15,6 +15,21 @@ class Client extends Model
         'contact',
         'email',
         'address',
+        'address_line1',
+        'address_line2',
+        'barangay',
+        'city',
+        'province',
+        'postal_code',
+        'country',
+        'latitude',
+        'longitude',
+        'address_formatted',
+    ];
+
+    protected $casts = [
+        'latitude'  => 'float',
+        'longitude' => 'float',
     ];
 
     public function pets(): HasMany

@@ -21,10 +21,12 @@ class MedicineController extends Controller
         'pet_food',
     ];
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         return Inertia::render('Medicines/Index', [
-            'medicines' => Medicine::orderBy('name')->get()->map(fn (Medicine $m) => [
+            'medicines' => Medicine::forClinic($clinicId)->orderBy('name')->get()->map(fn (Medicine $m) => [
                 ...$m->toArray(),
                 'stock_status' => $m->stockStatus(),
             ]),
@@ -43,6 +45,8 @@ class MedicineController extends Controller
             'expiry_date' => 'required|date',
             'reorder_level' => 'required|integer|min:0',
         ]);
+
+        $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
 
         Medicine::create($validated);
 

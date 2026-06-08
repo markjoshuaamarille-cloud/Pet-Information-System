@@ -4,9 +4,11 @@ namespace App\Http\Controllers;
 
 use App\Models\Billing;
 use App\Models\BillingLineItem;
+use App\Models\Clinic;
 use App\Models\Client;
 use App\Models\Medicine;
 use App\Models\User;
+use App\Support\GeoLocation;
 use App\Support\PetShopCategories;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,39 +21,114 @@ use Inertia\Response;
 class PetShopController extends Controller
 {
     private const PRODUCT_IMAGE_PATH = 'pets/pet-shop';
-    public function index(): Response
+
+    /**
+     * Store list for customers — all active pet-shop clinics sorted by distance.
+     * Staff default: products for their active clinic.
+     */
+    public function index(Request $request): Response
     {
         $user = $this->currentUser();
-        $canManageProducts = (bool) $user?->hasRole('super_admin');
+        $canManageProducts = (bool) $user?->hasAnyRole(['super_admin', 'clinic_owner']);
         $isCustomer = (bool) $user?->isCustomer();
-        $canCheckout = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'customer']);
-        $canSelectClient = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist']);
+        $canCheckout = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'customer', 'clinic_owner']);
+        $canSelectClient = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'clinic_owner']);
         $customerClientId = $isCustomer && $user?->client_id ? (int) $user->client_id : null;
 
-        $products = Medicine::query()
+        // For customers: show store list
+        if ($isCustomer) {
+            $client = $user?->client;
+            $clientLat = $client?->latitude;
+            $clientLng = $client?->longitude;
+
+            $stores = Clinic::active()
+                ->where('has_pet_shop', true)
+                ->whereJsonContains('enabled_modules', 'pet_shop')
+                ->get(['id', 'name', 'address_formatted', 'latitude', 'longitude'])
+                ->map(function (Clinic $clinic) use ($clientLat, $clientLng) {
+                    $distanceKm = null;
+                    $distanceFormatted = null;
+
+                    if ($clientLat && $clientLng && $clinic->latitude && $clinic->longitude) {
+                        $meters = GeoLocation::distanceMeters($clientLat, $clientLng, $clinic->latitude, $clinic->longitude);
+                        $distanceKm = round($meters / 1000, 1);
+                        $distanceFormatted = GeoLocation::formatDistance($meters);
+                    }
+
+                    return [
+                        'id'                 => $clinic->id,
+                        'name'               => $clinic->name,
+                        'address'            => $clinic->address_formatted,
+                        'distance_km'        => $distanceKm,
+                        'distance_formatted' => $distanceFormatted,
+                    ];
+                })
+                ->sortBy('distance_km')
+                ->values();
+
+            // If a specific store is selected, show its products
+            $selectedClinicId = $request->query('clinic_id');
+            $products = collect();
+
+            if ($selectedClinicId) {
+                $products = $this->buildProductList($selectedClinicId);
+            }
+
+            return Inertia::render('PetShop/Index', [
+                'stores'           => $stores,
+                'selectedClinicId' => $selectedClinicId ? (int) $selectedClinicId : null,
+                'products'         => $products,
+                'categories'       => $this->categoryList(),
+                'clients'          => [],
+                'canManageProducts'=> false,
+                'canCheckout'      => $canCheckout,
+                'canSelectClient'  => false,
+                'customerClientId' => $customerClientId,
+                'isCustomer'       => true,
+            ]);
+        }
+
+        // For staff: scoped to their active clinic
+        $clinicId = $request->attributes->get('active_clinic_id');
+        $products = $this->buildProductList($clinicId);
+
+        return Inertia::render('PetShop/Index', [
+            'stores'           => [],
+            'selectedClinicId' => null,
+            'products'         => $products,
+            'categories'       => $this->categoryList(),
+            'clients'          => $canSelectClient ? Client::orderBy('name')->get(['id', 'name']) : [],
+            'canManageProducts'=> $canManageProducts,
+            'canCheckout'      => $canCheckout,
+            'canSelectClient'  => $canSelectClient,
+            'customerClientId' => $customerClientId,
+            'isCustomer'       => false,
+        ]);
+    }
+
+    private function buildProductList(?int $clinicId): \Illuminate\Support\Collection
+    {
+        return Medicine::query()
+            ->forClinic($clinicId)
+            ->where('is_active', true)
             ->whereIn('category', PetShopCategories::shopCategories())
             ->where('quantity', '>', 0)
             ->whereDate('expiry_date', '>=', now()->toDateString())
             ->orderBy('name')
             ->get()
-            ->map(fn (Medicine $medicine) => [
-                ...$medicine->toArray(),
-                'category_label' => PetShopCategories::label($medicine->category),
-                'stock_status' => $medicine->stockStatus(),
+            ->map(fn (Medicine $m) => [
+                ...$m->toArray(),
+                'category_label' => PetShopCategories::label($m->category),
+                'stock_status'   => $m->stockStatus(),
             ])
             ->values();
+    }
 
-        return Inertia::render('PetShop/Index', [
-            'products' => $products,
-            'categories' => collect(PetShopCategories::labels())
-                ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
-                ->values(),
-            'clients' => $canSelectClient ? Client::orderBy('name')->get(['id', 'name']) : [],
-            'canManageProducts' => $canManageProducts,
-            'canCheckout' => $canCheckout,
-            'canSelectClient' => $canSelectClient,
-            'customerClientId' => $customerClientId,
-        ]);
+    private function categoryList(): \Illuminate\Support\Collection
+    {
+        return collect(PetShopCategories::labels())
+            ->map(fn (string $label, string $value) => ['value' => $value, 'label' => $label])
+            ->values();
     }
 
     public function update(Request $request, Medicine $medicine): RedirectResponse
@@ -104,6 +181,7 @@ class PetShopController extends Controller
         $user = $this->currentUser();
 
         $validated = $request->validate([
+            'clinic_id' => 'nullable|exists:clinics,id',
             'client_id' => 'required|exists:clients,id',
             'items' => 'required|array|min:1',
             'items.*.medicine_id' => 'required|integer|exists:medicines,id',
@@ -173,8 +251,12 @@ class PetShopController extends Controller
 
         $totalAmount = max(round($subtotal, 2), 0);
 
-        $billing = DB::transaction(function () use ($validated, $lineItems, $subtotal, $totalAmount) {
+        // Resolve clinic: from form (customer chose a store) or staff context
+        $clinicId = $validated['clinic_id'] ?? $request->attributes->get('active_clinic_id');
+
+        $billing = DB::transaction(function () use ($validated, $lineItems, $subtotal, $totalAmount, $clinicId) {
             $billing = Billing::create([
+                'clinic_id'      => $clinicId,
                 'invoice_number' => $this->generateInvoiceNumber(),
                 'sale_type' => 'pet_shop_retail',
                 'client_id' => $validated['client_id'],

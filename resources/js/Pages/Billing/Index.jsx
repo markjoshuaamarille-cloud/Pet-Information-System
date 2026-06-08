@@ -5,8 +5,9 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import ListDisplayControls from "@/Components/ListDisplayControls";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
-import { Head, Link, router, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
+import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
 const billingStatuses = ["unpaid", "partial", "paid", "cancelled"];
@@ -82,11 +83,13 @@ export default function BillingIndex({
     billablePets = [],
     can_manage_billing = true,
 }) {
+    const activeClinic = usePage().props.activeClinic;
+    const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const [editing, setEditing] = useState(null);
     const [payingBillingId, setPayingBillingId] = useState(null);
     const [generatePetId, setGeneratePetId] = useState("");
     const [generating, setGenerating] = useState(false);
-    const [saleTypeFilter, setSaleTypeFilter] = useState("all");
+    const [saleTypeFilter, setSaleTypeFilter] = useState("clinic_service");
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
 
@@ -439,9 +442,16 @@ export default function BillingIndex({
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold text-gray-800">
-                    Billing & Payments
-                </h2>
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {clinicScopeTitle("Billing & Payments", activeClinic, isPlatformAdmin)}
+                    </h2>
+                    {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
+                        <p className="mt-1 text-sm text-gray-500">
+                            {clinicScopeSubtitle(activeClinic, isPlatformAdmin)}
+                        </p>
+                    )}
+                </div>
             }
         >
             <Head title="Billing" />
@@ -482,8 +492,10 @@ export default function BillingIndex({
                                 Generate Invoice from Services
                             </h3>
                             <p className="mb-4 text-sm text-emerald-800">
-                                Pick a pet to auto-total the services the vet
-                                already recorded. No manual computing needed.
+                                Pick a pet to combine any remaining unbilled
+                                services for this clinic. New priced services
+                                recorded on a pet profile are invoiced
+                                automatically.
                             </p>
                             <div className="grid gap-4 sm:grid-cols-3">
                                 <div className="sm:col-span-2">

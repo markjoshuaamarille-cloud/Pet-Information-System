@@ -14,26 +14,32 @@ use Inertia\Response;
 
 class GroomingRecordController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = auth()->user();
+        $clinicId = $request->attributes->get('active_clinic_id');
 
         return Inertia::render('Grooming/Index', [
-            'records' => GroomingRecord::with(['pet.client', 'appointment'])->orderByDesc('service_date')->get(),
+            'records' => GroomingRecord::with(['pet.client', 'appointment'])
+                ->forClinic($clinicId)
+                ->orderByDesc('service_date')
+                ->get(),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
             'groomingAppointments' => Appointment::with(['pet', 'client'])
+                ->forClinic($clinicId)
                 ->where('type', 'grooming')
                 ->where('status', 'scheduled')
                 ->orderByDesc('scheduled_at')
                 ->get(),
             'can_manage_records' => $user instanceof User
-                && $user->hasAnyRole(['super_admin', 'groomer', 'receptionist']),
+                && $user->canManageGroomingRecords(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatePayload($request);
+        $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
 
         $record = GroomingRecord::create($validated);
         $this->syncAppointmentStatus($record->appointment_id, $record->status);

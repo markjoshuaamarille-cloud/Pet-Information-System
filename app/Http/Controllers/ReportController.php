@@ -7,22 +7,32 @@ use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\Vaccination;
+use App\Support\ClinicPatientScope;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
-use Symfony\Component\HttpFoundation\StreamedResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ReportController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         $healthRecordCounts = HealthRecord::query()
+            ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
             ->selectRaw('type, COUNT(*) as total')
             ->groupBy('type')
             ->pluck('total', 'type');
 
-        $vaccinationModuleCount = Vaccination::count();
-        $groomingModuleCount = GroomingRecord::count();
+        $vaccinationModuleCount = Vaccination::query()
+            ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
+            ->count();
+
+        $groomingModuleCount = GroomingRecord::query()
+            ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
+            ->count();
 
         $consultations = (int) ($healthRecordCounts['consultation'] ?? 0);
         $vaccinations = (int) ($healthRecordCounts['vaccination'] ?? 0) + $vaccinationModuleCount;
@@ -31,11 +41,16 @@ class ReportController extends Controller
         $surgeries = (int) ($healthRecordCounts['surgery'] ?? 0);
         $boarding = (int) ($healthRecordCounts['boarding'] ?? 0);
         $emergencyCare = (int) ($healthRecordCounts['emergency_care'] ?? 0);
-        $healthRecordTotal = HealthRecord::count();
+
+        $healthRecordTotal = HealthRecord::query()
+            ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
+            ->count();
+
+        $medicineQuery = Medicine::query()->when($clinicId, fn ($query) => $query->forClinic($clinicId));
 
         return Inertia::render('Reports/Index', [
             'summary' => [
-                'total_pets' => Pet::count(),
+                'total_pets' => ClinicPatientScope::petsQuery($clinicId)->count(),
                 'total_health_records' => $healthRecordTotal + $vaccinationModuleCount + $groomingModuleCount,
                 'consultations' => $consultations,
                 'vaccinations' => $vaccinations,
@@ -44,33 +59,53 @@ class ReportController extends Controller
                 'surgeries' => $surgeries,
                 'boarding_stays' => $boarding,
                 'emergency_care' => $emergencyCare,
-                'inventory_items' => Medicine::count(),
-                'expired_items' => Medicine::expired()->count(),
-                'critical_items' => Medicine::criticalStock()->count(),
+                'inventory_items' => (clone $medicineQuery)->count(),
+                'expired_items' => (clone $medicineQuery)->expired()->count(),
+                'critical_items' => (clone $medicineQuery)->criticalStock()->count(),
             ],
         ]);
     }
 
-    public function pets(): Response
+    public function pets(Request $request): Response
     {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         return Inertia::render('Reports/Pets', [
-            'pets' => Pet::with(['client', 'healthRecords'])->orderBy('pet_name')->get(),
+            'pets' => ClinicPatientScope::petsQuery($clinicId)
+                ->with([
+                    'client',
+                    'healthRecords' => fn ($query) => $query->when($clinicId, fn ($q) => $q->forClinic($clinicId)),
+                ])
+                ->orderBy('pet_name')
+                ->get(),
         ]);
     }
 
-    public function inventory(): Response
+    public function inventory(Request $request): Response
     {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         return Inertia::render('Reports/Inventory', [
-            'medicines' => Medicine::orderBy('name')->get()->map(fn (Medicine $m) => [
-                ...$m->toArray(),
-                'stock_status' => $m->stockStatus(),
-            ]),
+            'medicines' => Medicine::query()
+                ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
+                ->orderBy('name')
+                ->get()
+                ->map(fn (Medicine $m) => [
+                    ...$m->toArray(),
+                    'stock_status' => $m->stockStatus(),
+                ]),
         ]);
     }
 
-    public function exportPets(): StreamedResponse
+    public function exportPets(Request $request): StreamedResponse
     {
-        $pets = Pet::with(['client', 'healthRecords'])
+        $clinicId = $request->attributes->get('active_clinic_id');
+
+        $pets = ClinicPatientScope::petsQuery($clinicId)
+            ->with([
+                'client',
+                'healthRecords' => fn ($query) => $query->when($clinicId, fn ($q) => $q->forClinic($clinicId)),
+            ])
             ->orderBy('pet_name')
             ->get();
 
@@ -96,9 +131,14 @@ class ReportController extends Controller
         ]);
     }
 
-    public function exportInventory(): StreamedResponse
+    public function exportInventory(Request $request): StreamedResponse
     {
-        $medicines = Medicine::orderBy('name')->get();
+        $clinicId = $request->attributes->get('active_clinic_id');
+
+        $medicines = Medicine::query()
+            ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
+            ->orderBy('name')
+            ->get();
 
         return response()->streamDownload(function () use ($medicines) {
             $handle = fopen('php://output', 'w');
