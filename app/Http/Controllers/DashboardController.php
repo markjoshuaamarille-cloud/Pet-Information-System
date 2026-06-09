@@ -3,12 +3,14 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\Client;
 use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\User;
 use App\Models\Vaccination;
 use App\Support\ClinicPatientScope;
+use App\Support\ClinicScope;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -103,12 +105,15 @@ class DashboardController extends Controller
             ]);
         }
 
-        $expiredMedicines = Medicine::expired()->forClinic($clinicId)->orderBy('expiry_date')->get();
-        $criticalMedicines = Medicine::criticalStock()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
-        $expiringSoon = Medicine::expiringSoon()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->get();
+        $expiredMedicines = ClinicScope::forClinicQuery(Medicine::expired(), $clinicId, $user)->orderBy('expiry_date')->get();
+        $criticalMedicines = ClinicScope::forClinicQuery(Medicine::criticalStock(), $clinicId, $user)->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
+        $expiringSoon = ClinicScope::forClinicQuery(Medicine::expiringSoon(), $clinicId, $user)->whereDate('expiry_date', '>=', now())->get();
 
-        $upcomingAppointmentsQuery = Appointment::with(['pet', 'client', 'clinic'])
-            ->forClinic($clinicId)
+        $upcomingAppointmentsQuery = ClinicScope::forClinicQuery(
+            Appointment::with(['pet', 'client', 'clinic']),
+            $clinicId,
+            $user,
+        )
             ->where('status', '!=', 'cancelled')
             ->where(function ($query): void {
                 $this->applyTodayRecentAndUpcomingAppointmentsScope($query);
@@ -122,13 +127,20 @@ class DashboardController extends Controller
 
         $upcomingAppointments = $upcomingAppointmentsQuery->get();
 
-        $dueHealthRecords = $this->upcomingHealthEvents(clinicId: $clinicId);
+        $dueHealthRecords = $this->upcomingHealthEvents(clinicId: $clinicId, user: $user);
 
-        $petsQuery = ClinicPatientScope::petsQuery($clinicId);
-        $clientsQuery = ClinicPatientScope::clientsQuery($clinicId);
+        $petsQuery = $clinicId !== null || ! ClinicScope::restrictsUnscopedData($user)
+            ? ClinicPatientScope::petsQuery($clinicId)
+            : Pet::query()->whereRaw('0 = 1');
+        $clientsQuery = $clinicId !== null || ! ClinicScope::restrictsUnscopedData($user)
+            ? ClinicPatientScope::clientsQuery($clinicId)
+            : Client::query()->whereRaw('0 = 1');
 
-        $statAppointmentsQuery = Appointment::with(['pet', 'client', 'clinic'])
-            ->forClinic($clinicId)
+        $statAppointmentsQuery = ClinicScope::forClinicQuery(
+            Appointment::with(['pet', 'client', 'clinic']),
+            $clinicId,
+            $user,
+        )
             ->where('status', '!=', 'cancelled')
             ->where(function ($query): void {
                 $this->applyTodayAndRecentAppointmentsScope($query);
@@ -139,7 +151,7 @@ class DashboardController extends Controller
                 'pets' => (clone $petsQuery)->count(),
                 'clients' => (clone $clientsQuery)->count(),
                 'appointments_today' => (clone $statAppointmentsQuery)->count(),
-                'medicines' => Medicine::forClinic($clinicId)->count(),
+                'medicines' => ClinicScope::forClinicQuery(Medicine::query(), $clinicId, $user)->count(),
             ],
             'statPets' => (clone $petsQuery)->with('client')->orderBy('pet_name')->limit(50)->get(),
             'statClients' => (clone $clientsQuery)->orderBy('name')->limit(50)->get(),
@@ -147,7 +159,7 @@ class DashboardController extends Controller
                 ->orderByDesc('scheduled_at')
                 ->limit(50)
                 ->get(),
-            'statMedicines' => Medicine::forClinic($clinicId)->orderBy('name')->limit(50)->get(),
+            'statMedicines' => ClinicScope::forClinicQuery(Medicine::query(), $clinicId, $user)->orderBy('name')->limit(50)->get(),
             'expiredMedicines' => $expiredMedicines,
             'criticalMedicines' => $criticalMedicines,
             'expiringSoon' => $expiringSoon,
@@ -198,8 +210,12 @@ class DashboardController extends Controller
     /**
      * @return list<array<string, mixed>>
      */
-    private function upcomingHealthEvents(?int $clientId = null, ?int $clinicId = null, int $daysAhead = 30): array
+    private function upcomingHealthEvents(?int $clientId = null, ?int $clinicId = null, ?User $user = null, int $daysAhead = 30): array
     {
+        if (ClinicScope::restrictsUnscopedData($user) && $clinicId === null) {
+            return [];
+        }
+
         $healthRecordsQuery = HealthRecord::with(['pet', 'medicine'])
             ->when($clinicId, fn ($query) => $query->forClinic($clinicId))
             ->whereNotNull('next_due_date')

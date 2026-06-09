@@ -33,6 +33,12 @@ class ClinicBilling
             return null;
         }
 
+        $details = self::serviceDetailsFromDescription($record->description);
+        $subtotal = (float) ($details['billing_subtotal'] ?? $record->line_total);
+        $tax = (float) ($details['billing_tax_amount'] ?? 0);
+        $discount = (float) ($details['billing_discount'] ?? 0);
+        $total = (float) $record->line_total;
+
         $billing = Billing::create([
             'clinic_id'          => $record->clinic_id,
             'invoice_number'     => self::generateInvoiceNumber(),
@@ -42,10 +48,12 @@ class ClinicBilling
             'service_catalog_id' => $record->service_catalog_id,
             'service_unit_price' => $record->unit_price ?? 0,
             'service_quantity'   => $record->quantity ?? 1,
-            'subtotal'           => $record->line_total,
-            'tax'                => 0,
-            'discount'           => 0,
-            'total_amount'       => $record->line_total,
+            'subtotal'           => $subtotal > 0 ? $subtotal : $total,
+            'tax'                => $tax,
+            'tax_applied'        => ! empty($details['billing_tax_enabled']),
+            'tax_rate'           => (float) ($details['billing_tax_rate'] ?? 0),
+            'discount'           => $discount,
+            'total_amount'       => $total,
             'amount_paid'        => 0,
             'status'             => 'unpaid',
             'notes'              => "Auto-generated from service: {$record->title}",
@@ -56,6 +64,22 @@ class ClinicBilling
         return $billing;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    private static function serviceDetailsFromDescription(?string $description): array
+    {
+        if (! $description || ! str_contains($description, '__SERVICE_FIELDS__:')) {
+            return [];
+        }
+
+        $marker = '__SERVICE_FIELDS__:';
+        $json = substr($description, strpos($description, $marker) + strlen($marker));
+        $details = json_decode($json, true);
+
+        return is_array($details) ? $details : [];
+    }
+
     public static function unbilledRecordsQuery(int $petId, ?int $clinicId): Builder
     {
         return HealthRecord::query()
@@ -63,6 +87,48 @@ class ClinicBilling
             ->whereNull('billing_id')
             ->where('line_total', '>', 0)
             ->when($clinicId, fn (Builder $query) => $query->where('clinic_id', $clinicId));
+    }
+
+    /**
+     * Sum the subtotal / tax / discount breakdown across a set of unbilled
+     * health records so a combined invoice preserves the VAT and discount the
+     * staff entered per service line.
+     *
+     * @param  Collection<int, HealthRecord>  $records
+     * @return array{subtotal: float, tax: float, discount: float, total: float, tax_applied: bool, tax_rate: float}
+     */
+    public static function aggregateServiceCharges(Collection $records): array
+    {
+        $subtotal = 0.0;
+        $tax = 0.0;
+        $discount = 0.0;
+        $total = 0.0;
+        $taxApplied = false;
+        $taxRate = 0.0;
+
+        foreach ($records as $record) {
+            $details = self::serviceDetailsFromDescription($record->description);
+            $lineTotal = (float) $record->line_total;
+
+            $subtotal += (float) ($details['billing_subtotal'] ?? $lineTotal);
+            $tax += (float) ($details['billing_tax_amount'] ?? 0);
+            $discount += (float) ($details['billing_discount'] ?? 0);
+            $total += $lineTotal;
+
+            if (! empty($details['billing_tax_enabled'])) {
+                $taxApplied = true;
+                $taxRate = (float) ($details['billing_tax_rate'] ?? $taxRate);
+            }
+        }
+
+        return [
+            'subtotal'    => round($subtotal, 2),
+            'tax'         => round($tax, 2),
+            'discount'    => round($discount, 2),
+            'total'       => round($total, 2),
+            'tax_applied' => $taxApplied,
+            'tax_rate'    => $taxRate,
+        ];
     }
 
     /**

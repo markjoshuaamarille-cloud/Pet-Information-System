@@ -36,6 +36,7 @@ class VaccinationController extends Controller
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
             'veterinarians' => User::query()
                 ->where('role', 'veterinarian')
+                ->assignedToClinic($clinicId)
                 ->orderBy('name')
                 ->get(['id', 'name']),
             'vaccinationAppointments' => Appointment::with(['pet', 'client'])
@@ -136,6 +137,8 @@ class VaccinationController extends Controller
 
     private function validatePayload(Request $request, ?Vaccination $vaccination = null): array
     {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         $validated = $request->validate([
             'pet_id' => 'required|exists:pets,id',
             'appointment_id' => [
@@ -196,6 +199,20 @@ class VaccinationController extends Controller
             throw ValidationException::withMessages([
                 'appointment_id' => 'Only scheduled vaccination appointments can be used for new records.',
             ]);
+        }
+
+        if ($clinicId !== null) {
+            $vetAssigned = User::query()
+                ->whereKey($validated['administered_by_user_id'])
+                ->where('role', 'veterinarian')
+                ->assignedToClinic($clinicId)
+                ->exists();
+
+            if (! $vetAssigned) {
+                throw ValidationException::withMessages([
+                    'administered_by_user_id' => 'Select a veterinarian assigned to this clinic.',
+                ]);
+            }
         }
 
         return $validated;

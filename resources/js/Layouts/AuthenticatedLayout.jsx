@@ -146,18 +146,22 @@ const navItems = [
     { href: 'reports.index', label: 'Reports', roles: ['super_admin', 'veterinarian', 'receptionist', 'cashier', 'clinic_owner'], module: 'reports' },
     { href: 'admin.users.index', label: 'Admin Users', roles: ['super_admin'] },
     { href: 'admin.clinics.index', label: 'Clinic Management', roles: ['super_admin'] },
-    { href: 'survey.create', label: 'Service Survey', roles: [], module: 'survey' },
     { href: 'nearby-places.index', label: 'Nearby Clinics', roles: ['super_admin', 'veterinarian', 'receptionist', 'customer', 'cashier', 'groomer'] },
     { href: 'clinic-registration.create', label: 'Register My Clinic', roles: ['clinic_owner'] },
 ];
 
-function filterNavItems(items, user, activeClinic, assignedClinics) {
+function filterNavItems(items, user, activeClinic, assignedClinics, hasDeactivatedClinicOnly = false) {
     const enabledModules = activeClinic?.enabled_modules ?? [];
     const isClinicOwner = user.role === 'clinic_owner';
-    const needsRegistration = isClinicOwner && assignedClinics.length === 0;
+    const isClinicStaff = ['veterinarian', 'receptionist', 'groomer', 'cashier', 'clinic_owner'].includes(user.role);
+    const needsRegistration = isClinicOwner && assignedClinics.length === 0 && !hasDeactivatedClinicOnly;
 
     if (needsRegistration) {
         return items.filter((item) => item.href === 'clinic-registration.create');
+    }
+
+    if (hasDeactivatedClinicOnly) {
+        return items.filter((item) => item.href === 'dashboard');
     }
 
     return items.filter((item) => {
@@ -165,7 +169,7 @@ function filterNavItems(items, user, activeClinic, assignedClinics) {
             return false;
         }
 
-        if (isClinicOwner && item.module && !enabledModules.includes(item.module)) {
+        if (isClinicStaff && item.module && activeClinic && !enabledModules.includes(item.module)) {
             return false;
         }
 
@@ -214,9 +218,10 @@ export default function AuthenticatedLayout({ header, children }) {
     const activeClinic = page.props.activeClinic;
     const assignedClinics = page.props.assignedClinics ?? [];
     const isPlatformAdmin = page.props.isPlatformAdmin ?? false;
+    const hasDeactivatedClinicOnly = page.props.hasDeactivatedClinicOnly ?? false;
     const [showingNavigationDropdown, setShowingNavigationDropdown] = useState(false);
     const [customerAlertModal, setCustomerAlertModal] = useState(null);
-    const allowedNavItems = filterNavItems(navItems, user, activeClinic, assignedClinics);
+    const allowedNavItems = filterNavItems(navItems, user, activeClinic, assignedClinics, hasDeactivatedClinicOnly);
 
     const openCustomerAlerts = (type) => {
         setCustomerAlertModal(type);
@@ -370,6 +375,13 @@ export default function AuthenticatedLayout({ header, children }) {
             </nav>
 
             <AdminClinicMonitor />
+
+            {hasDeactivatedClinicOnly && (
+                <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900 sm:px-6 lg:px-8">
+                    Your assigned clinic has been deactivated by the administrator.
+                    Appointments, transactions, and other clinic activity are disabled until it is reactivated.
+                </div>
+            )}
 
             {header && (
                 <header className="bg-white shadow">

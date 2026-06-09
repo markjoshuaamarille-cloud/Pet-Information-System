@@ -18,6 +18,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \App\Http\Middleware\SetClinicContext::class,
             \App\Http\Middleware\RedirectUnassignedClinicOwner::class,
             \App\Http\Middleware\EnsureClinicModule::class,
+            \App\Http\Middleware\EnsureActiveClinic::class,
         ]);
 
         $middleware->alias([

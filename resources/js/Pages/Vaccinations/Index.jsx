@@ -310,7 +310,7 @@ export default function VaccinationsIndex({
                                 />
                                 {veterinarians.length === 0 && (
                                     <p className="mt-1 text-xs text-amber-600">
-                                        No veterinarians found. Add a user with the veterinarian role in Admin → Users.
+                                        No veterinarians assigned to this clinic. Assign staff in Admin → Users.
                                     </p>
                                 )}
                             </div>

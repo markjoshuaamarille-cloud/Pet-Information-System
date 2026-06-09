@@ -22,11 +22,16 @@ class ClinicContextController extends Controller
             // Admin can switch to any clinic or clear (null = all clinics)
             $request->session()->put('active_clinic_id', $clinicId ?: null);
         } else {
-            // Non-admin must own that clinic assignment
-            $assignedIds = $user->clinics()->pluck('clinics.id')->all();
+            // Non-admin must own that clinic assignment and it must be active
+            $assignedIds = $user->clinics()
+                ->where('clinics.status', 'active')
+                ->pluck('clinics.id')
+                ->all();
 
             if ($clinicId && in_array((int) $clinicId, $assignedIds, true)) {
                 $request->session()->put('active_clinic_id', (int) $clinicId);
+            } elseif ($clinicId) {
+                return redirect()->back()->with('error', 'You cannot switch to that clinic.');
             }
         }
 

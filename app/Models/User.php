@@ -131,6 +131,15 @@ class User extends Authenticatable
         return $this->hasRole('super_admin');
     }
 
+    public function isClinicAssignedStaff(): bool
+    {
+        if ($this->isPlatformAdmin() || $this->isCustomer()) {
+            return false;
+        }
+
+        return $this->clinics()->exists();
+    }
+
     public function hasActiveClinicAssignment(): bool
     {
         return $this->clinics()
@@ -138,9 +147,15 @@ class User extends Authenticatable
             ->exists();
     }
 
+    public function hasDeactivatedClinicOnly(): bool
+    {
+        return $this->isClinicAssignedStaff()
+            && ! $this->hasActiveClinicAssignment();
+    }
+
     public function requiresClinicRegistration(): bool
     {
-        return $this->isClinicOwner() && ! $this->hasActiveClinicAssignment();
+        return $this->isClinicOwner() && ! $this->clinics()->exists();
     }
 
     public function postLoginRedirectUrl(): string

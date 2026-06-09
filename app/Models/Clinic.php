@@ -27,7 +27,6 @@ class Clinic extends Model
         'pets',
         'reports',
         'notifications',
-        'survey',
         'billing',
     ];
 
@@ -126,6 +125,11 @@ class Clinic extends Model
         return $query->where('status', 'active');
     }
 
+    public function isOperational(): bool
+    {
+        return $this->status === 'active';
+    }
+
     public function scopeWithPetShop(Builder $query): Builder
     {
         return $query->where('has_pet_shop', true);
@@ -143,7 +147,7 @@ class Clinic extends Model
      */
     public static function defaultModulesForFlags(bool $vet, bool $petShop, bool $grooming): array
     {
-        $modules = ['dashboard', 'pets', 'notifications', 'survey'];
+        $modules = ['dashboard', 'pets', 'notifications'];
 
         if ($vet) {
             array_push($modules, 'scheduling', 'vaccinations', 'inventory', 'service_catalog', 'billing', 'reports');

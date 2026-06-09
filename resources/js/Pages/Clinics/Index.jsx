@@ -16,7 +16,7 @@ const ALL_MODULES_LABELS = {
     dashboard: 'Dashboard', scheduling: 'Scheduling', vaccinations: 'Vaccinations',
     grooming: 'Grooming', pet_shop: 'Pet Shop', pet_shop_billing: 'Pet Shop Billing',
     inventory: 'Inventory', service_catalog: 'Service Catalog', pets: 'Pets',
-    reports: 'Reports', notifications: 'Notifications', survey: 'Survey', billing: 'Billing',
+    reports: 'Reports', notifications: 'Notifications', billing: 'Billing',
 };
 
 function FormField({ label, name, type = 'text', required, value, error, onChange }) {
@@ -192,6 +192,16 @@ export default function ClinicsIndex({ clinics, allModules }) {
         router.post(route('admin.clinics.reject', clinic.id));
     };
 
+    const deactivate = (clinic) => {
+        if (!confirm(`Deactivate "${clinic.name}"?\n\nThis clinic will no longer accept appointments, transactions, or any new activity until reactivated.`)) return;
+        router.post(route('admin.clinics.deactivate', clinic.id));
+    };
+
+    const activate = (clinic) => {
+        if (!confirm(`Reactivate "${clinic.name}"?\n\nThe clinic will be able to accept appointments and transactions again.`)) return;
+        router.post(route('admin.clinics.activate', clinic.id));
+    };
+
     const destroy = (clinic) => {
         if (!confirm(`Delete "${clinic.name}" permanently?`)) return;
         router.delete(route('admin.clinics.destroy', clinic.id));
@@ -286,6 +296,11 @@ export default function ClinicsIndex({ clinics, allModules }) {
                                             {clinic.submitted_by && (
                                                 <p className="mt-1 text-xs text-gray-400">Submitted by: {clinic.submitted_by.name}</p>
                                             )}
+                                            {clinic.status === 'inactive' && (
+                                                <p className="mt-2 text-xs text-gray-500">
+                                                    Deactivated — no new appointments or transactions are allowed.
+                                                </p>
+                                            )}
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                             {clinic.status === 'pending' && (
@@ -293,6 +308,22 @@ export default function ClinicsIndex({ clinics, allModules }) {
                                                     <button onClick={() => approve(clinic)} className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700">Approve</button>
                                                     <button onClick={() => reject(clinic)} className="rounded bg-red-500 px-3 py-1 text-xs font-medium text-white hover:bg-red-600">Reject</button>
                                                 </>
+                                            )}
+                                            {clinic.status === 'active' && (
+                                                <button
+                                                    onClick={() => deactivate(clinic)}
+                                                    className="rounded border border-amber-300 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800 hover:bg-amber-100"
+                                                >
+                                                    Deactivate
+                                                </button>
+                                            )}
+                                            {clinic.status === 'inactive' && (
+                                                <button
+                                                    onClick={() => activate(clinic)}
+                                                    className="rounded bg-green-600 px-3 py-1 text-xs font-medium text-white hover:bg-green-700"
+                                                >
+                                                    Reactivate
+                                                </button>
                                             )}
                                             <button onClick={() => setMode({ edit: clinic })} className="rounded border border-gray-300 px-3 py-1 text-xs text-gray-600 hover:bg-gray-50">Edit</button>
                                             <button onClick={() => destroy(clinic)} className="rounded border border-red-300 px-3 py-1 text-xs text-red-600 hover:bg-red-50">Delete</button>

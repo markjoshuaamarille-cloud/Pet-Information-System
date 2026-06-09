@@ -8,7 +8,7 @@ const ALL_MODULES_LABELS = {
     dashboard: 'Dashboard', scheduling: 'Scheduling', vaccinations: 'Vaccinations',
     grooming: 'Grooming', pet_shop: 'Pet Shop', pet_shop_billing: 'Pet Shop Billing',
     inventory: 'Inventory', service_catalog: 'Service Catalog', pets: 'Pets',
-    reports: 'Reports', notifications: 'Notifications', survey: 'Survey', billing: 'Billing',
+    reports: 'Reports', notifications: 'Notifications', billing: 'Billing',
 };
 
 export default function ClinicRegister({ allModules }) {

@@ -75,6 +75,11 @@ export default function AdminClinicMonitor() {
                             </option>
                         ))}
                     </select>
+                    {activeClinic?.status === 'inactive' && (
+                        <p className="max-w-xs text-right text-xs text-amber-800">
+                            This clinic is deactivated. Viewing only — no new activity allowed.
+                        </p>
+                    )}
                 </div>
             </div>
         </div>

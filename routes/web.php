@@ -21,7 +21,6 @@ use App\Http\Controllers\PetShopReportController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\ServiceCatalogController;
-use App\Http\Controllers\UsabilitySurveyController;
 use App\Http\Controllers\VaccinationController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
@@ -79,6 +78,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/medicines', [MedicineController::class, 'store'])->name('medicines.store');
         Route::put('/medicines/{medicine}', [MedicineController::class, 'update'])->name('medicines.update');
         Route::delete('/medicines/{medicine}', [MedicineController::class, 'destroy'])->name('medicines.destroy');
+    });
+
+    Route::middleware('role:super_admin,clinic_owner')->group(function () {
+        Route::patch('/medicines/{medicine}/toggle-active', [MedicineController::class, 'toggleActive'])->name('medicines.toggle-active');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer,clinic_owner')->group(function () {
@@ -149,6 +152,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/clinics/{clinic}', [ClinicController::class, 'destroy'])->name('clinics.destroy');
         Route::post('/clinics/{clinic}/approve', [ClinicController::class, 'approve'])->name('clinics.approve');
         Route::post('/clinics/{clinic}/reject', [ClinicController::class, 'reject'])->name('clinics.reject');
+        Route::post('/clinics/{clinic}/deactivate', [ClinicController::class, 'deactivate'])->name('clinics.deactivate');
+        Route::post('/clinics/{clinic}/activate', [ClinicController::class, 'activate'])->name('clinics.activate');
         Route::post('/clinics/geoapify-import', [ClinicController::class, 'importFromGeoapify'])->name('clinics.geoapify-import');
     });
 
@@ -187,10 +192,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'destroy'])->name('pet-shop-billing.destroy');
         Route::get('/pet-shop-reports', [PetShopReportController::class, 'index'])->name('pet-shop-reports.index');
     });
-
-    Route::get('/survey', [UsabilitySurveyController::class, 'create'])->name('survey.create');
-    Route::post('/survey', [UsabilitySurveyController::class, 'store'])->name('survey.store');
-    Route::get('/survey/results', [UsabilitySurveyController::class, 'results'])->name('survey.results');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');

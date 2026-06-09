@@ -29,17 +29,26 @@ class SetClinicContext
         // Staff/clinic_owner: resolve from session (must be one of their assigned clinics)
         $sessionClinicId = $request->session()->get('active_clinic_id');
 
-        $assignedIds = $user->clinics()->pluck('clinics.id')->all();
+        $assignedIds = $user->clinics()
+            ->where('clinics.status', 'active')
+            ->pluck('clinics.id')
+            ->all();
 
         if ($sessionClinicId && in_array((int) $sessionClinicId, $assignedIds, true)) {
             $request->attributes->set('active_clinic_id', (int) $sessionClinicId);
         } elseif (! empty($assignedIds)) {
-            // Auto-select primary or first assigned clinic
-            $primaryId = $user->clinics()->wherePivot('is_primary', true)->value('clinics.id');
+            // Auto-select primary or first assigned active clinic
+            $primaryId = $user->clinics()
+                ->where('clinics.status', 'active')
+                ->wherePivot('is_primary', true)
+                ->value('clinics.id');
             $clinicId = $primaryId ?? $assignedIds[0];
             $request->session()->put('active_clinic_id', $clinicId);
             $request->attributes->set('active_clinic_id', $clinicId);
         } else {
+            if ($sessionClinicId) {
+                $request->session()->forget('active_clinic_id');
+            }
             $request->attributes->set('active_clinic_id', null);
         }
 

@@ -7,6 +7,7 @@ use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\ServiceCatalog;
 use App\Models\User;
+use App\Support\ClinicContext;
 use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -38,13 +39,20 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated, $request->attributes->get('active_clinic_id'));
+        $clinicId = ClinicContext::activeClinicId($request);
 
-        $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
+        if (! $clinicId) {
+            return redirect()
+                ->route('pets.show', $pet)
+                ->withErrors(['clinic_id' => 'Select an active clinic before adding health records.']);
+        }
+
+        $this->applyPricing($validated, $clinicId);
+
+        $validated['clinic_id'] = $clinicId;
 
         $record = $pet->healthRecords()->create($validated);
-
-        \App\Support\ClinicBilling::createFromHealthRecord($record->fresh());
+        $record->load('pet');
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record added successfully.');
     }
@@ -72,15 +80,23 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated, $request->attributes->get('active_clinic_id'));
+        $clinicId = ClinicContext::activeClinicId($request) ?? $healthRecord->clinic_id;
+
+        if (! $clinicId) {
+            return redirect()
+                ->route('pets.show', $pet)
+                ->withErrors(['clinic_id' => 'Select an active clinic before updating health records.']);
+        }
+
+        $this->applyPricing($validated, $clinicId);
+
+        if (! $healthRecord->clinic_id) {
+            $validated['clinic_id'] = $clinicId;
+        }
 
         $healthRecord->update($validated);
 
         $healthRecord = $healthRecord->fresh();
-
-        if (! $healthRecord->billing_id) {
-            \App\Support\ClinicBilling::createFromHealthRecord($healthRecord);
-        }
 
         $this->refreshLinkedBilling($healthRecord);
 
@@ -351,6 +367,32 @@ class HealthRecordController extends Controller
      */
     private function applyPricing(array &$validated, ?int $clinicId = null): void
     {
+        $providedPrice = array_key_exists('unit_price', $validated)
+            && $validated['unit_price'] !== null
+            && $validated['unit_price'] !== ''
+            ? (float) $validated['unit_price']
+            : null;
+        $quantity = max((int) ($validated['quantity'] ?? 1), 1);
+
+        // Bundled billing total from Pets/Show (manual lines, meds, tax, discount).
+        if ($providedPrice !== null && $providedPrice > 0 && $quantity === 1) {
+            $validated['unit_price'] = $providedPrice;
+            $validated['quantity'] = 1;
+            $validated['line_total'] = round($providedPrice, 2);
+
+            if (($validated['type'] ?? '') !== 'medication') {
+                $catalogQuery = ServiceCatalog::query()
+                    ->where('code', ClinicServices::catalogCodeForType($validated['type']));
+                if ($clinicId) {
+                    $catalogQuery->where('clinic_id', $clinicId);
+                }
+                $validated['service_catalog_id'] = $validated['service_catalog_id']
+                    ?? $catalogQuery->value('id');
+            }
+
+            return;
+        }
+
         $type = $validated['type'];
         $providedPrice = $validated['unit_price'] ?? null;
 
@@ -413,10 +455,10 @@ class HealthRecordController extends Controller
             return;
         }
 
-        $subtotal = (float) $billing->healthRecords()->sum('line_total');
-        $tax = (float) $billing->tax;
-        $discount = (float) $billing->discount;
-        $total = max($subtotal + $tax - $discount, 0);
+        $charges = \App\Support\ClinicBilling::aggregateServiceCharges(
+            $billing->healthRecords()->get()
+        );
+        $total = $charges['total'];
 
         $status = $billing->status;
         if ($status !== 'cancelled') {
@@ -425,7 +467,11 @@ class HealthRecordController extends Controller
         }
 
         $billing->update([
-            'subtotal' => $subtotal,
+            'subtotal' => $charges['subtotal'],
+            'tax' => $charges['tax'],
+            'tax_applied' => $charges['tax_applied'],
+            'tax_rate' => $charges['tax_rate'],
+            'discount' => $charges['discount'],
             'total_amount' => $total,
             'status' => $status,
         ]);

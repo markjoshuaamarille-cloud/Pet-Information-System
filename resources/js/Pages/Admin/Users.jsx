@@ -7,7 +7,7 @@ import TextInput from '@/Components/TextInput';
 import ListDisplayControls from '@/Components/ListDisplayControls';
 import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, router, useForm } from '@inertiajs/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export default function AdminUsers({ users, roles, clinics = [] }) {
     const form = useForm({
@@ -21,6 +21,9 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
     const [clinicModalUser, setClinicModalUser] = useState(null);
     const [selectedClinicIds, setSelectedClinicIds] = useState([]);
     const [primaryClinicId, setPrimaryClinicId] = useState('');
+    const [search, setSearch] = useState('');
+    const [roleFilter, setRoleFilter] = useState('');
+    const [clinicFilter, setClinicFilter] = useState('');
 
     const submit = (e) => {
         e.preventDefault();
@@ -64,13 +67,56 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
         );
     };
 
+    const filteredUsers = useMemo(() => {
+        const query = search.trim().toLowerCase();
+
+        return users.filter((user) => {
+            if (roleFilter && user.role !== roleFilter) {
+                return false;
+            }
+
+            if (clinicFilter === 'unassigned') {
+                if ((user.clinics ?? []).length > 0) {
+                    return false;
+                }
+            } else if (clinicFilter) {
+                const hasClinic = (user.clinics ?? []).some(
+                    (clinic) => String(clinic.id) === clinicFilter,
+                );
+                if (!hasClinic) {
+                    return false;
+                }
+            }
+
+            if (!query) {
+                return true;
+            }
+
+            const clinicNames = (user.clinics ?? [])
+                .map((clinic) => clinic.name)
+                .join(' ');
+
+            return [user.name, user.email, user.role, clinicNames]
+                .filter(Boolean)
+                .some((value) => String(value).toLowerCase().includes(query));
+        });
+    }, [users, search, roleFilter, clinicFilter]);
+
+    const hasActiveFilters = Boolean(search || roleFilter || clinicFilter);
+
+    const clearFilters = () => {
+        setSearch('');
+        setRoleFilter('');
+        setClinicFilter('');
+    };
+
     const {
         visibleItems: visibleUsers,
         displayLimit,
         setDisplayLimit,
         totalCount: userListCount,
         showingCount: userShowingCount,
-    } = useListDisplayLimit(users);
+    } = useListDisplayLimit(filteredUsers);
 
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Admin User Management</h2>}>
@@ -121,6 +167,66 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                         <PrimaryButton className="mt-4" disabled={form.processing}>Create User</PrimaryButton>
                     </form>
 
+                    <div className="rounded-lg bg-white p-4 shadow">
+                        <div className="grid gap-4 sm:grid-cols-4">
+                            <div className="sm:col-span-2">
+                                <InputLabel value="Search" />
+                                <TextInput
+                                    type="search"
+                                    className="mt-1 block w-full"
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    placeholder="Name, email, role, or clinic..."
+                                />
+                            </div>
+                            <div>
+                                <InputLabel value="Role" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                                    value={roleFilter}
+                                    onChange={(e) => setRoleFilter(e.target.value)}
+                                >
+                                    <option value="">All roles</option>
+                                    {roles.map((role) => (
+                                        <option key={role} value={role}>
+                                            {role}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Clinic" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300 shadow-sm"
+                                    value={clinicFilter}
+                                    onChange={(e) => setClinicFilter(e.target.value)}
+                                >
+                                    <option value="">All clinics</option>
+                                    <option value="unassigned">No clinic assigned</option>
+                                    {clinics.map((clinic) => (
+                                        <option key={clinic.id} value={String(clinic.id)}>
+                                            {clinic.name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+                            <span>
+                                Showing {filteredUsers.length} of {users.length} users
+                            </span>
+                            {hasActiveFilters && (
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="font-medium text-indigo-600 hover:underline"
+                                >
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
                     <div className="overflow-hidden rounded-lg bg-white shadow">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
@@ -134,6 +240,18 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-200">
+                                {visibleUsers.length === 0 && (
+                                    <tr>
+                                        <td
+                                            colSpan={6}
+                                            className="px-4 py-8 text-center text-gray-500"
+                                        >
+                                            {hasActiveFilters
+                                                ? 'No users match your filters.'
+                                                : 'No users found.'}
+                                        </td>
+                                    </tr>
+                                )}
                                 {visibleUsers.map((user) => (
                                     <tr key={user.id}>
                                         <td className="px-4 py-3">{user.name}</td>

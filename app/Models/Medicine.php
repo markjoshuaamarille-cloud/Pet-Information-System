@@ -36,7 +36,13 @@ class Medicine extends Model
         return [
             'expiry_date' => 'date',
             'unit_price' => 'decimal:2',
+            'is_active' => 'boolean',
         ];
+    }
+
+    public function scopeSellable(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
     }
 
     public function healthRecords(): HasMany

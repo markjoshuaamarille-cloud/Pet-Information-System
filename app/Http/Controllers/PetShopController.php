@@ -71,7 +71,10 @@ class PetShopController extends Controller
             $products = collect();
 
             if ($selectedClinicId) {
-                $products = $this->buildProductList($selectedClinicId);
+                $storeIsActive = Clinic::active()->whereKey($selectedClinicId)->exists();
+                if ($storeIsActive) {
+                    $products = $this->buildProductList($selectedClinicId);
+                }
             }
 
             return Inertia::render('PetShop/Index', [
@@ -110,7 +113,7 @@ class PetShopController extends Controller
     {
         return Medicine::query()
             ->forClinic($clinicId)
-            ->where('is_active', true)
+            ->sellable()
             ->whereIn('category', PetShopCategories::shopCategories())
             ->where('quantity', '>', 0)
             ->whereDate('expiry_date', '>=', now()->toDateString())
@@ -204,6 +207,7 @@ class PetShopController extends Controller
         $medicineIds = collect($validated['items'])->pluck('medicine_id')->unique()->values();
         $medicines = Medicine::query()
             ->whereIn('id', $medicineIds)
+            ->sellable()
             ->whereIn('category', PetShopCategories::shopCategories())
             ->whereDate('expiry_date', '>=', now()->toDateString())
             ->get()
@@ -212,7 +216,7 @@ class PetShopController extends Controller
         if ($medicines->count() !== $medicineIds->count()) {
             return redirect()
                 ->back()
-                ->withErrors(['items' => 'One or more products are invalid for pet shop sale.']);
+                ->withErrors(['items' => 'One or more products are unavailable, deactivated, or invalid for pet shop sale.']);
         }
 
         $lineItems = [];

@@ -178,6 +178,11 @@ export default function PetsIndex({
     const activeClinic = usePage().props.activeClinic;
     const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const isCustomer = user?.role === "customer";
+    const canEditPet = (pet) =>
+        isPlatformAdmin ||
+        (isCustomer &&
+            user?.client_id != null &&
+            Number(user.client_id) === Number(pet.client_id));
     const [editingId, setEditingId] = useState(null);
     const [search, setSearch] = useState("");
     const [speciesFilter, setSpeciesFilter] = useState("");
@@ -805,7 +810,7 @@ export default function PetsIndex({
                                                 >
                                                     View
                                                 </Link>
-                                                {can_manage_records && (
+                                                {canEditPet(p) && (
                                                     <button
                                                         type="button"
                                                         onClick={() =>

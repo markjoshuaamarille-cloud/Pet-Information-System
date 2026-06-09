@@ -78,8 +78,8 @@ class HandleInertiaRequests extends Middleware
 
                 if ($user->isPlatformAdmin()) {
                     return Clinic::query()
-                        ->whereIn('status', ['active', 'pending'])
-                        ->orderByRaw("FIELD(status, 'active', 'pending')")
+                        ->whereIn('status', ['active', 'pending', 'inactive'])
+                        ->orderByRaw("FIELD(status, 'active', 'pending', 'inactive')")
                         ->orderBy('name')
                         ->get(['id', 'name', 'slug', 'status'])
                         ->toArray();
@@ -98,6 +98,7 @@ class HandleInertiaRequests extends Middleware
                     && $user->isPlatformAdmin()
                     && ! $request->attributes->get('active_clinic_id');
             },
+            'hasDeactivatedClinicOnly' => fn () => $request->user()?->hasDeactivatedClinicOnly() ?? false,
         ];
     }
 }

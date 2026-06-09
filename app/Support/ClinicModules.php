@@ -29,7 +29,7 @@ class ClinicModules
             str_starts_with($routeName, 'service-catalog.') => 'service_catalog',
             $routeName === 'notifications.index' => 'notifications',
             str_starts_with($routeName, 'reports.') => 'reports',
-            str_starts_with($routeName, 'survey.') => 'survey',
+            str_starts_with($routeName, 'clients.') => 'dashboard',
             default => null,
         };
     }

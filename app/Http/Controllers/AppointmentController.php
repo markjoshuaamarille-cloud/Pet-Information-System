@@ -7,6 +7,8 @@ use App\Models\Clinic;
 use App\Models\Client;
 use App\Models\Pet;
 use App\Models\User;
+use App\Support\ActiveClinicGuard;
+use App\Support\ClinicContext;
 use App\Support\ClinicDateTime;
 use App\Support\ClinicPatientScope;
 use App\Support\ClinicServices;
@@ -73,7 +75,7 @@ class AppointmentController extends Controller
         $isCustomer = (bool) $user?->isCustomer();
 
         $validated = $request->validate([
-            'clinic_id'    => 'nullable|exists:clinics,id',
+            'clinic_id'    => $isCustomer ? 'required|exists:clinics,id' : 'nullable|exists:clinics,id',
             'pet_id'       => 'required|exists:pets,id',
             'client_id'    => $isCustomer ? 'nullable|exists:clients,id' : 'required|exists:clients,id',
             'scheduled_at' => 'required|date',
@@ -89,7 +91,7 @@ class AppointmentController extends Controller
 
         // If no clinic passed, use the staff's active clinic context
         if (empty($validated['clinic_id']) && ! $isCustomer) {
-            $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
+            $validated['clinic_id'] = ClinicContext::activeClinicId($request);
         }
 
         $pet = Pet::findOrFail($validated['pet_id']);
@@ -105,16 +107,26 @@ class AppointmentController extends Controller
 
         // Validate clinic capabilities when a clinic is specified
         if (! empty($validated['clinic_id'])) {
+            if (! ActiveClinicGuard::isOperational((int) $validated['clinic_id'])) {
+                return redirect()->back()->withErrors([
+                    'clinic_id' => 'This clinic is deactivated and cannot accept new appointments.',
+                ]);
+            }
+
             $clinic = Clinic::find($validated['clinic_id']);
             if ($clinic) {
                 $needsGrooming = $validated['type'] === 'grooming';
-                if ($needsGrooming && ! $clinic->has_grooming) {
+                if ($needsGrooming && (! $clinic->has_grooming || ! $clinic->hasModule('grooming'))) {
                     return redirect()->back()->withErrors(['clinic_id' => 'This clinic does not offer grooming services.']);
                 }
                 if (! $needsGrooming && ! $clinic->has_veterinary) {
                     return redirect()->back()->withErrors(['clinic_id' => 'This clinic does not offer veterinary services.']);
                 }
             }
+        } elseif (! $isCustomer) {
+            return redirect()->back()->withErrors([
+                'clinic_id' => 'Select your clinic before scheduling appointments.',
+            ]);
         }
 
         $validated['scheduled_at'] = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);

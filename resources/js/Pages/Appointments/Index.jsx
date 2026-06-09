@@ -1,6 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
+import InputError from '@/Components/InputError';
 import ListDisplayControls from '@/Components/ListDisplayControls';
 import PrimaryButton from '@/Components/PrimaryButton';
 import TextInput from '@/Components/TextInput';
@@ -14,6 +15,12 @@ function ClinicPicker({ serviceType, clientLat, clientLng, hasLocation, selected
     const [clinics, setClinics] = useState([]);
     const [loading, setLoading] = useState(false);
     const [searched, setSearched] = useState(false);
+    const isGrooming = serviceType === 'grooming';
+
+    useEffect(() => {
+        setClinics([]);
+        setSearched(false);
+    }, [serviceType]);
 
     const search = useCallback(async () => {
         if (!serviceType) return;
@@ -24,86 +31,172 @@ function ClinicPicker({ serviceType, clientLat, clientLng, hasLocation, selected
                 lat: clientLat,
                 lng: clientLng,
             });
-            setClinics(res.data);
+            const results = Array.isArray(res.data) ? res.data : [];
+            const matching = isGrooming
+                ? results.filter((clinic) => clinic.has_grooming)
+                : results.filter((clinic) => clinic.has_veterinary);
+            setClinics(matching);
             setSearched(true);
         } catch {
             setClinics([]);
+            setSearched(true);
         } finally {
             setLoading(false);
         }
-    }, [serviceType, clientLat, clientLng]);
+    }, [serviceType, clientLat, clientLng, isGrooming]);
 
     return (
-        <div className="rounded-lg border border-indigo-100 bg-indigo-50 p-4">
-            <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold text-indigo-700">Select Clinic / Salon</p>
+        <div className="mt-2 overflow-hidden rounded-xl border border-indigo-200/70 bg-gradient-to-br from-indigo-50 via-white to-slate-50 shadow-sm">
+            <div className="flex flex-col gap-4 border-b border-indigo-100/80 bg-white/70 px-5 py-5 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-base font-semibold text-gray-900">
+                        Select Clinic / Salon
+                    </p>
+                    <p className="mt-1 text-sm text-gray-500">
+                        {isGrooming
+                            ? 'Find registered salons that offer grooming near you.'
+                            : 'Find registered clinics that match your service near you.'}
+                    </p>
+                </div>
                 <button
                     type="button"
                     onClick={search}
                     disabled={loading || !serviceType}
-                    className="rounded bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                    className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                    {loading ? 'Searching…' : 'Find Nearest'}
+                    {loading ? (
+                        <>
+                            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                            Searching…
+                        </>
+                    ) : (
+                        <>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+                                <path fillRule="evenodd" d="M9 3.5a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11ZM2 9a7 7 0 1 1 12.452 4.391l3.328 3.329a.75.75 0 1 1-1.06 1.06l-3.329-3.328A7 7 0 0 1 2 9Z" clipRule="evenodd" />
+                            </svg>
+                            Find Nearest
+                        </>
+                    )}
                 </button>
             </div>
 
-            {!hasLocation && (
-                <p className="mb-2 text-xs text-amber-700">
-                    Your home address is not set.{' '}
-                    <Link href={route('profile.edit')} className="underline">Update your profile</Link>
-                    {' '}to see distances.
-                </p>
-            )}
+            <div className="space-y-4 p-5">
+                {!hasLocation && (
+                    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" aria-hidden="true">
+                            <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495ZM10 6a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 10 6Zm0 9a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clipRule="evenodd" />
+                        </svg>
+                        <p>
+                            Your home address is not set.{' '}
+                            <Link href={route('profile.edit')} className="font-medium underline underline-offset-2">
+                                Update your profile
+                            </Link>
+                            {' '}to see distances from your location.
+                        </p>
+                    </div>
+                )}
 
-            {searched && clinics.length === 0 && (
-                <p className="text-xs text-gray-500">No matching registered clinics found for this service type.</p>
-            )}
+                {loading && (
+                    <div className="flex items-center justify-center gap-3 rounded-lg border border-dashed border-indigo-200 bg-white/80 px-4 py-10 text-sm text-gray-500">
+                        <span className="h-5 w-5 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                        Searching for nearby locations…
+                    </div>
+                )}
 
-            <div className="mt-2 space-y-2 max-h-56 overflow-y-auto">
-                {clinics.map(clinic => (
-                    <label
-                        key={clinic.id}
-                        className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                            String(selectedClinicId) === String(clinic.id)
-                                ? 'border-indigo-500 bg-white shadow-sm'
-                                : 'border-gray-200 bg-white hover:border-indigo-300'
-                        }`}
-                    >
-                        <input
-                            type="radio"
-                            name="clinic_id"
-                            value={clinic.id}
-                            checked={String(selectedClinicId) === String(clinic.id)}
-                            onChange={() => onSelect(clinic.id)}
-                            className="mt-0.5 h-4 w-4 text-indigo-600"
-                        />
-                        <div className="flex-1 text-xs">
-                            <p className="font-medium text-gray-800">{clinic.name}</p>
-                            {clinic.address && <p className="text-gray-500">{clinic.address}</p>}
-                            <div className="mt-1 flex flex-wrap gap-1">
-                                {clinic.has_veterinary && <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">Vet</span>}
-                                {clinic.has_pet_shop   && <span className="rounded bg-green-100 px-1.5 py-0.5 text-green-700">Pet Shop</span>}
-                                {clinic.has_grooming   && <span className="rounded bg-purple-100 px-1.5 py-0.5 text-purple-700">Grooming</span>}
-                                {clinic.distance_formatted && (
-                                    <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-indigo-700 font-semibold">
-                                        {clinic.distance_formatted}
-                                    </span>
-                                )}
-                            </div>
-                        </div>
-                    </label>
-                ))}
+                {!loading && searched && clinics.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-gray-200 bg-white/80 px-4 py-10 text-center">
+                        <p className="text-sm font-medium text-gray-700">No locations found</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                            {isGrooming
+                                ? 'No registered clinics or salons with grooming services were found for this search.'
+                                : 'No matching registered clinics were found for this service type.'}
+                        </p>
+                    </div>
+                )}
+
+                {!loading && clinics.length > 0 && (
+                    <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                        {clinics.map((clinic) => {
+                            const isSelected = String(selectedClinicId) === String(clinic.id);
+
+                            return (
+                                <label
+                                    key={clinic.id}
+                                    className={`group flex cursor-pointer items-start gap-4 rounded-xl border p-4 transition-all ${
+                                        isSelected
+                                            ? 'border-indigo-500 bg-white shadow-md ring-2 ring-indigo-500/20'
+                                            : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm'
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="clinic_id"
+                                        value={clinic.id}
+                                        checked={isSelected}
+                                        onChange={() => onSelect(clinic.id)}
+                                        className="mt-1 h-5 w-5 shrink-0 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex flex-wrap items-start justify-between gap-2">
+                                            <p className="text-base font-semibold text-gray-900">
+                                                {clinic.name}
+                                            </p>
+                                            {clinic.distance_formatted && (
+                                                <span className="rounded-full bg-indigo-100 px-3 py-1 text-xs font-semibold text-indigo-700">
+                                                    {clinic.distance_formatted}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {clinic.address && (
+                                            <p className="mt-1.5 text-sm leading-relaxed text-gray-600">
+                                                {clinic.address}
+                                            </p>
+                                        )}
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            {clinic.has_veterinary && (
+                                                <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
+                                                    Veterinary
+                                                </span>
+                                            )}
+                                            {clinic.has_pet_shop && (
+                                                <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-700">
+                                                    Pet Shop
+                                                </span>
+                                            )}
+                                            {clinic.has_grooming && (
+                                                <span className="rounded-full bg-purple-100 px-2.5 py-1 text-xs font-medium text-purple-700">
+                                                    Grooming
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </label>
+                            );
+                        })}
+                    </div>
+                )}
+
+                {!loading && !searched && clinics.length === 0 && (
+                    <div className="rounded-lg border border-dashed border-indigo-200 bg-white/60 px-4 py-10 text-center">
+                        <p className="text-sm font-medium text-gray-700">Ready to search</p>
+                        <p className="mt-1 text-sm text-gray-500">
+                            Click <span className="font-medium text-indigo-700">Find Nearest</span> to see clinics and salons for your selected service.
+                        </p>
+                    </div>
+                )}
+
+                {selectedClinicId && (
+                    <div className="flex justify-end border-t border-indigo-100/80 pt-4">
+                        <button
+                            type="button"
+                            onClick={() => onSelect('')}
+                            className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-600 transition hover:border-gray-400 hover:bg-gray-50 hover:text-gray-800"
+                        >
+                            Clear selection
+                        </button>
+                    </div>
+                )}
             </div>
-
-            {selectedClinicId && (
-                <button
-                    type="button"
-                    onClick={() => onSelect('')}
-                    className="mt-2 text-xs text-gray-400 hover:text-gray-600 underline"
-                >
-                    Clear selection
-                </button>
-            )}
         </div>
     );
 }
@@ -142,6 +235,17 @@ export default function AppointmentsIndex({
 
     const submit = (e) => {
         e.preventDefault();
+
+        if (isCustomer && !form.data.clinic_id) {
+            form.setError('clinic_id', 'Please select a clinic or salon.');
+            return;
+        }
+
+        if (!isCustomer && !form.data.client_id) {
+            form.setError('client_id', 'Please select a client.');
+            return;
+        }
+
         form.post(route('appointments.store'), {
             onSuccess: () => form.reset(),
         });
@@ -151,6 +255,15 @@ export default function AppointmentsIndex({
         form.setData('pet_id', petId);
         const pet = pets.find((p) => String(p.id) === petId);
         if (pet) form.setData('client_id', String(pet.client_id));
+    };
+
+    const onServiceTypeChange = (type) => {
+        form.setData({
+            ...form.data,
+            type,
+            clinic_id: '',
+        });
+        form.clearErrors('clinic_id');
     };
 
     const labelFor = (type) => serviceTypes?.[type] ?? type;
@@ -190,18 +303,21 @@ export default function AppointmentsIndex({
                                     onChange={(e) => form.setData('scheduled_at', e.target.value)}
                                     required
                                 />
+                                <InputError className="mt-1" message={form.errors.scheduled_at} />
                             </div>
                             <div>
                                 <InputLabel value="Service Type" />
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={form.data.type}
-                                    onChange={(e) => form.setData('type', e.target.value)}
+                                    onChange={(e) => onServiceTypeChange(e.target.value)}
+                                    required
                                 >
                                     {Object.entries(serviceTypes).map(([value, label]) => (
                                         <option key={value} value={value}>{label}</option>
                                     ))}
                                 </select>
+                                <InputError className="mt-1" message={form.errors.type} />
                             </div>
                         </div>
 
@@ -216,14 +332,12 @@ export default function AppointmentsIndex({
                                     selectedClinicId={form.data.clinic_id}
                                     onSelect={(id) => form.setData('clinic_id', id)}
                                 />
-                                {form.errors.clinic_id && (
-                                    <p className="mt-1 text-xs text-red-500">{form.errors.clinic_id}</p>
-                                )}
+                                <InputError className="mt-1" message={form.errors.clinic_id} />
                             </div>
                         )}
 
-                        {/* Staff clinic selector */}
-                        {!isCustomer && clients.length > 1 && (
+                        {/* Staff client selector */}
+                        {!isCustomer && (
                             <div className="mt-4 grid gap-4 sm:grid-cols-2">
                                 <div>
                                     <InputLabel value="Client" />
@@ -238,6 +352,7 @@ export default function AppointmentsIndex({
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}
                                     </select>
+                                    <InputError className="mt-1" message={form.errors.client_id} />
                                 </div>
                             </div>
                         )}

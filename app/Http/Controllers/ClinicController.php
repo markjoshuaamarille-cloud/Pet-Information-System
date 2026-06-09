@@ -78,6 +78,32 @@ class ClinicController extends Controller
         return redirect()->route('admin.clinics.index')->with('success', 'Clinic registration rejected.');
     }
 
+    public function deactivate(Clinic $clinic): RedirectResponse
+    {
+        if ($clinic->status !== 'active') {
+            return redirect()->route('admin.clinics.index')->with('error', 'Only active clinics can be deactivated.');
+        }
+
+        $clinic->update(['status' => 'inactive']);
+
+        return redirect()->route('admin.clinics.index')->with('success', '"'.$clinic->name.'" has been deactivated. It can no longer accept appointments or transactions.');
+    }
+
+    public function activate(Request $request, Clinic $clinic): RedirectResponse
+    {
+        if ($clinic->status !== 'inactive') {
+            return redirect()->route('admin.clinics.index')->with('error', 'Only inactive clinics can be reactivated.');
+        }
+
+        $clinic->update([
+            'status'              => 'active',
+            'approved_by_user_id' => $request->user()->id,
+            'approved_at'         => now(),
+        ]);
+
+        return redirect()->route('admin.clinics.index')->with('success', '"'.$clinic->name.'" has been reactivated.');
+    }
+
     /**
      * Pull clinic details from Geoapify places API and return as JSON
      * so the frontend can pre-fill the registration form.
