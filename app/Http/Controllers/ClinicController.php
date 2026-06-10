@@ -8,9 +8,11 @@ use App\Support\GeoapifyAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -53,8 +55,20 @@ class ClinicController extends Controller
         return redirect()->route('admin.clinics.index')->with('success', 'Clinic updated.');
     }
 
-    public function destroy(Clinic $clinic): RedirectResponse
+    public function destroy(Request $request, Clinic $clinic): RedirectResponse
     {
+        $request->validate([
+            'password' => ['required', 'string'],
+        ], [
+            'password.required' => 'Your password is required to delete a clinic.',
+        ]);
+
+        if (! Hash::check($request->input('password'), $request->user()->password)) {
+            throw ValidationException::withMessages([
+                'password' => 'The password you entered is incorrect.',
+            ]);
+        }
+
         $clinic->delete();
 
         return redirect()->route('admin.clinics.index')->with('success', 'Clinic deleted.');

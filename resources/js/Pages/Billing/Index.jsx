@@ -8,6 +8,7 @@ import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
+import { formatClinicDate } from "@/utils/formatDateTime";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
 const billingStatuses = ["unpaid", "partial", "paid", "cancelled"];
@@ -25,26 +26,6 @@ const SERVICE_LABELS = {
     other: "Other",
 };
 
-const formatAppointmentDate = (scheduledAt) => {
-    if (!scheduledAt) {
-        return "No date";
-    }
-
-    const iso = String(scheduledAt);
-    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-        const [, year, month, day] = match;
-        return `${Number(month)}/${Number(day)}/${year}`;
-    }
-
-    const date = new Date(scheduledAt);
-    if (Number.isNaN(date.getTime())) {
-        return "No date";
-    }
-
-    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-};
-
 const formatAppointmentOption = (appt) => {
     const petName = (appt.pet?.pet_name ?? "Unknown pet").toUpperCase();
     const service =
@@ -52,7 +33,7 @@ const formatAppointmentOption = (appt) => {
         SERVICE_LABELS[appt.service_type] ??
         SERVICE_LABELS[appt["type"]] ??
         "Other";
-    const date = formatAppointmentDate(appt.scheduled_at);
+    const date = formatClinicDate(appt.scheduled_at) ?? "No date";
 
     return `${petName} - ${date}(${service})`;
 };

@@ -63,30 +63,93 @@ function formatDate(value) {
 
 function StoreList({ stores, onSelectStore }) {
     return (
-        <div className="mb-8">
-            <h3 className="mb-4 text-lg font-semibold text-gray-800">Choose a Pet Store Near You</h3>
-            {stores.length === 0 ? (
-                <p className="text-sm text-gray-500">No registered pet stores available at this time.</p>
-            ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                    {stores.map(store => (
-                        <button
-                            key={store.id}
-                            type="button"
-                            onClick={() => onSelectStore(store.id)}
-                            className="text-left rounded-xl border border-gray-200 bg-white p-5 shadow-sm hover:border-indigo-400 hover:shadow-md transition"
-                        >
-                            <p className="font-semibold text-gray-800">{store.name}</p>
-                            {store.address && <p className="mt-1 text-xs text-gray-500">{store.address}</p>}
-                            {store.distance_formatted && (
-                                <span className="mt-2 inline-block rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                                    {store.distance_formatted} away
+        <div className="mb-8 overflow-hidden rounded-2xl border border-emerald-200/70 bg-gradient-to-br from-emerald-50 via-white to-slate-50 shadow-sm">
+            <div className="border-b border-emerald-100/80 bg-white/70 px-6 py-5">
+                <p className="text-base font-semibold text-gray-900">
+                    Choose a Pet Store Near You
+                </p>
+                <p className="mt-1 text-sm text-gray-500">
+                    Browse products from a registered pet shop in your area.
+                </p>
+            </div>
+
+            <div className="p-5">
+                {stores.length === 0 ? (
+                    <div className="rounded-xl border border-dashed border-gray-200 bg-white/80 px-4 py-10 text-center">
+                        <p className="text-sm font-medium text-gray-700">
+                            No pet stores available
+                        </p>
+                        <p className="mt-1 text-sm text-gray-500">
+                            No registered pet stores are available at this time.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                        {stores.map((store) => (
+                            <button
+                                key={store.id}
+                                type="button"
+                                onClick={() => onSelectStore(store.id)}
+                                className="group flex w-full items-start gap-4 rounded-xl border border-gray-200/90 bg-white p-4 text-left shadow-sm transition-all hover:border-emerald-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                            >
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-700 transition group-hover:bg-emerald-600 group-hover:text-white">
+                                    <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        strokeWidth="1.75"
+                                        className="h-5 w-5"
+                                        aria-hidden="true"
+                                    >
+                                        <path
+                                            strokeLinecap="round"
+                                            strokeLinejoin="round"
+                                            d="M3 9.5 12 4l9 5.5M5 10v8a1 1 0 0 0 1 1h4v-5h4v5h4a1 1 0 0 0 1-1v-8"
+                                        />
+                                    </svg>
                                 </span>
-                            )}
-                        </button>
-                    ))}
-                </div>
-            )}
+
+                                <div className="min-w-0 flex-1">
+                                    <div className="flex flex-wrap items-start justify-between gap-2">
+                                        <p className="text-base font-semibold text-gray-900 group-hover:text-emerald-900">
+                                            {store.name}
+                                        </p>
+                                        {store.distance_formatted && (
+                                            <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
+                                                {store.distance_formatted}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {store.address && (
+                                        <p className="mt-2 flex items-start gap-1.5 text-sm leading-relaxed text-gray-600">
+                                            <svg
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                viewBox="0 0 20 20"
+                                                fill="currentColor"
+                                                className="mt-0.5 h-4 w-4 shrink-0 text-gray-400"
+                                                aria-hidden="true"
+                                            >
+                                                <path
+                                                    fillRule="evenodd"
+                                                    d="M9.69 18.933 3.75 12.75a6 6 0 0 1 8.48-8.48l5.19 5.19a6 6 0 0 1-8.48 8.48Zm1.06-3.712a2.25 2.25 0 1 0-2.25-2.25 2.25 2.25 0 0 0 2.25 2.25Z"
+                                                    clipRule="evenodd"
+                                                />
+                                            </svg>
+                                            <span>{store.address}</span>
+                                        </p>
+                                    )}
+
+                                    <p className="mt-3 text-xs font-medium text-emerald-600 opacity-0 transition group-hover:opacity-100">
+                                        Browse this store →
+                                    </p>
+                                </div>
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
@@ -101,6 +164,8 @@ export default function PetShopIndex({
     customerClientId = null,
     stores = [],
     selectedClinicId = null,
+    selectedStore = null,
+    browseStores = false,
     isCustomer = false,
 }) {
     const [search, setSearch] = useState("");
@@ -387,23 +452,45 @@ export default function PetShopIndex({
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
-                    {/* Customer store list — shown when no store is selected */}
-                    {isCustomer && stores.length > 0 && !selectedClinicId && (
+                    {/* Customer store list — shown when browsing all stores */}
+                    {isCustomer && stores.length > 0 && browseStores && !selectedClinicId && (
                         <StoreList
                             stores={stores}
                             onSelectStore={(id) => router.get(route('pet-shop.index'), { clinic_id: id }, { preserveState: false })}
                         />
                     )}
 
-                    {/* Back button for customer who selected a store */}
-                    {isCustomer && selectedClinicId && (
-                        <button
-                            type="button"
-                            onClick={() => router.get(route('pet-shop.index'))}
-                            className="mb-4 flex items-center gap-2 text-sm text-indigo-600 hover:underline"
-                        >
-                            ← Back to Store List
-                        </button>
+                    {/* Customer: current store + option to change */}
+                    {isCustomer && selectedClinicId && selectedStore && (
+                        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/50 px-4 py-3">
+                            <div className="min-w-0">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                                    Shopping at
+                                </p>
+                                <p className="font-semibold text-gray-900">
+                                    {selectedStore.name}
+                                </p>
+                                {selectedStore.address && (
+                                    <p className="mt-0.5 text-sm text-gray-600">
+                                        {selectedStore.address}
+                                        {selectedStore.distance_formatted && (
+                                            <span className="ms-2 text-emerald-700">
+                                                · {selectedStore.distance_formatted}
+                                            </span>
+                                        )}
+                                    </p>
+                                )}
+                            </div>
+                            {stores.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => router.get(route('pet-shop.index'), { browse: 1 })}
+                                    className="shrink-0 text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
+                                >
+                                    Change store
+                                </button>
+                            )}
+                        </div>
                     )}
 
                     <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">

@@ -7,7 +7,7 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
 import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const OTHERS_VALUE = "__others__";
 
@@ -104,14 +104,6 @@ const vaccinationStatusOptions = [
     { value: "not_vaccinated", label: "Not Vaccinated" },
 ];
 
-function resolveSelectValue(value, options) {
-    if (!value) {
-        return "";
-    }
-
-    return options.includes(value) ? value : OTHERS_VALUE;
-}
-
 function SelectOrOtherField({
     label,
     value,
@@ -122,7 +114,20 @@ function SelectOrOtherField({
     placeholder,
     disabled = false,
 }) {
-    const selectValue = resolveSelectValue(value, options);
+    const isCustomValue = Boolean(value) && !options.includes(value);
+    const [othersMode, setOthersMode] = useState(isCustomValue);
+
+    useEffect(() => {
+        if (!value) {
+            setOthersMode(false);
+            return;
+        }
+
+        setOthersMode(!options.includes(value));
+    }, [value, options]);
+
+    const selectValue =
+        othersMode || isCustomValue ? OTHERS_VALUE : value || "";
     const showOtherInput = selectValue === OTHERS_VALUE;
 
     return (
@@ -136,12 +141,12 @@ function SelectOrOtherField({
                     const next = e.target.value;
 
                     if (next === OTHERS_VALUE) {
-                        onChange(
-                            value && !options.includes(value) ? value : "",
-                        );
+                        setOthersMode(true);
+                        onChange(isCustomValue ? value : "");
                         return;
                     }
 
+                    setOthersMode(false);
                     onChange(next);
                 }}
                 required={required && !showOtherInput}
@@ -152,16 +157,24 @@ function SelectOrOtherField({
                         {option}
                     </option>
                 ))}
-                <option value={OTHERS_VALUE}>Others</option>
+                <option value={OTHERS_VALUE}>Other (not in list)</option>
             </select>
             {showOtherInput && (
-                <TextInput
-                    className="mt-2 block w-full"
-                    value={value}
-                    onChange={(e) => onChange(e.target.value)}
-                    placeholder={placeholder ?? `Specify ${label.toLowerCase()}`}
-                    required={required}
-                />
+                <>
+                    <TextInput
+                        className="mt-2 block w-full"
+                        value={value}
+                        onChange={(e) => onChange(e.target.value)}
+                        placeholder={
+                            placeholder ?? `Specify ${label.toLowerCase()}`
+                        }
+                        required={required}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                        Enter your {label.toLowerCase()} because it is not in
+                        the list above.
+                    </p>
+                </>
             )}
             {error && <InputError message={error} className="mt-1" />}
         </div>
@@ -206,6 +219,10 @@ export default function PetsIndex({
 
     const submit = (e) => {
         e.preventDefault();
+
+        if (!validateOthersFields()) {
+            return;
+        }
 
         const submitOptions = {
             preserveScroll: true,
@@ -288,6 +305,64 @@ export default function PetsIndex({
 
         return defaultBreedOptions;
     }, [form.data.species]);
+
+    const validateOthersFields = () => {
+        const checks = [
+            {
+                field: "species",
+                options: speciesOptions,
+                label: "Species",
+                required: true,
+            },
+            {
+                field: "breed",
+                options: formBreedOptions,
+                label: "Breed",
+                required: false,
+            },
+            {
+                field: "gender",
+                options: genderOptions,
+                label: "Gender",
+                required: false,
+            },
+            {
+                field: "color",
+                options: colorOptions,
+                label: "Color",
+                required: false,
+            },
+        ];
+
+        form.clearErrors(...checks.map((check) => check.field));
+
+        for (const check of checks) {
+            const raw = form.data[check.field];
+            const trimmed = String(raw ?? "").trim();
+
+            if (check.required && !trimmed) {
+                form.setError(
+                    check.field,
+                    `${check.label} is required. Select from the list or choose Other (not in list).`,
+                );
+                return false;
+            }
+
+            if (!trimmed) {
+                continue;
+            }
+
+            if (trimmed === OTHERS_VALUE) {
+                form.setError(
+                    check.field,
+                    `Please specify ${check.label.toLowerCase()} when choosing Other (not in list).`,
+                );
+                return false;
+            }
+        }
+
+        return true;
+    };
 
     const filteredPets = useMemo(() => {
         const query = search.trim().toLowerCase();

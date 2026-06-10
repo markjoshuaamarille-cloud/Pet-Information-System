@@ -11,6 +11,15 @@ import { formatClinicDateTime } from '@/utils/formatDateTime';
 import { Head, useForm, router, usePage, Link } from '@inertiajs/react';
 import axios from 'axios';
 
+const appointmentStatusStyles = {
+    scheduled: 'bg-blue-50 text-blue-700 ring-blue-100',
+    completed: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+    cancelled: 'bg-red-50 text-red-700 ring-red-100',
+};
+
+const formatAppointmentStatus = (status) =>
+    status ? status.charAt(0).toUpperCase() + status.slice(1) : '—';
+
 function ClinicPicker({ serviceType, clientLat, clientLng, hasLocation, selectedClinicId, onSelect }) {
     const [clinics, setClinics] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -385,9 +394,18 @@ export default function AppointmentsIndex({
                                             {formatClinicDateTime(a.scheduled_at, appTimezone)}
                                         </td>
                                         <td className="px-4 py-3">{labelFor(a.type)}</td>
-                                        <td className="px-4 py-3">{a.status}</td>
+                                        <td className="px-4 py-3">
+                                            <span
+                                                className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ring-1 ${
+                                                    appointmentStatusStyles[a.status] ??
+                                                    'bg-gray-50 text-gray-700 ring-gray-100'
+                                                }`}
+                                            >
+                                                {formatAppointmentStatus(a.status)}
+                                            </span>
+                                        </td>
                                         <td className="px-4 py-3 text-right">
-                                            {can_manage_status && a.status !== 'completed' && (
+                                            {can_manage_status && a.status === 'scheduled' && (
                                                 <button
                                                     onClick={() => router.put(route('appointments.update', a.id), { ...a, status: 'completed' })}
                                                     className="text-green-600 hover:underline"
@@ -395,13 +413,18 @@ export default function AppointmentsIndex({
                                                     Complete
                                                 </button>
                                             )}
-                                            {a.status !== 'completed' && (
+                                            {a.status === 'scheduled' && (
                                                 <button
                                                     onClick={() => confirm('Cancel this appointment?') && router.delete(route('appointments.destroy', a.id))}
                                                     className="ms-3 text-red-600 hover:underline"
                                                 >
                                                     {can_manage_status ? 'Delete' : 'Cancel'}
                                                 </button>
+                                            )}
+                                            {a.status === 'cancelled' && (
+                                                <span className="text-xs text-gray-400">
+                                                    Cancelled
+                                                </span>
                                             )}
                                         </td>
                                     </tr>

@@ -2703,6 +2703,23 @@ export default function PetShow({
                                         )}
                                     </div>
 
+                                    {!showBillingSummary &&
+                                        healthForm.data.type !==
+                                            "medication" && (
+                                            <p className="mb-3 text-xs text-indigo-700">
+                                                Press{" "}
+                                                <span className="font-semibold">
+                                                    +
+                                                </span>{" "}
+                                                to bill this service
+                                                automatically — it will appear
+                                                under "Generate Invoice from
+                                                Services" in Billing. Leave it
+                                                empty to bill manually later via
+                                                "Create Invoice (Manual)".
+                                            </p>
+                                        )}
+
                                     {showBillingSummary ? (
                                         <div className="space-y-3">
                                             {healthForm.data.type ===

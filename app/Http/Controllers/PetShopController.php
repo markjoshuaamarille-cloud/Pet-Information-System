@@ -63,23 +63,38 @@ class PetShopController extends Controller
                         'distance_formatted' => $distanceFormatted,
                     ];
                 })
-                ->sortBy('distance_km')
+                ->sortBy(fn (array $store) => $store['distance_km'] ?? PHP_FLOAT_MAX)
                 ->values();
 
-            // If a specific store is selected, show its products
+            $browseStores = $request->boolean('browse');
             $selectedClinicId = $request->query('clinic_id');
+
+            // Open directly into the nearest registered pet shop unless browsing all stores.
+            if (! $browseStores && ! $selectedClinicId && $stores->isNotEmpty()) {
+                $selectedClinicId = $stores->first()['id'];
+            }
+
             $products = collect();
+            $selectedStore = null;
 
             if ($selectedClinicId) {
-                $storeIsActive = Clinic::active()->whereKey($selectedClinicId)->exists();
+                $selectedStore = $stores->firstWhere('id', (int) $selectedClinicId);
+                $storeIsActive = Clinic::active()
+                    ->whereKey($selectedClinicId)
+                    ->where('has_pet_shop', true)
+                    ->whereJsonContains('enabled_modules', 'pet_shop')
+                    ->exists();
+
                 if ($storeIsActive) {
-                    $products = $this->buildProductList($selectedClinicId);
+                    $products = $this->buildProductList((int) $selectedClinicId);
                 }
             }
 
             return Inertia::render('PetShop/Index', [
                 'stores'           => $stores,
                 'selectedClinicId' => $selectedClinicId ? (int) $selectedClinicId : null,
+                'selectedStore'    => $selectedStore,
+                'browseStores'     => $browseStores,
                 'products'         => $products,
                 'categories'       => $this->categoryList(),
                 'clients'          => [],

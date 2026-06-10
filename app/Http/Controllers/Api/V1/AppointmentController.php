@@ -22,7 +22,9 @@ class AppointmentController extends Controller
     {
         $user = $this->currentUser();
 
-        $appointmentsQuery = Appointment::with(['pet', 'client'])->orderByDesc('scheduled_at');
+        $appointmentsQuery = Appointment::with(['pet', 'client'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
         $petsQuery = Pet::with('client')->orderBy('pet_name');
         $clientsQuery = Client::orderBy('name');
 

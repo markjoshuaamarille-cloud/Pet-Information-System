@@ -157,10 +157,71 @@ function ClinicForm({ initial = {}, allModules, onSubmit, onCancel, submitLabel 
     );
 }
 
+function DeleteClinicModal({ clinic, onClose }) {
+    const form = useForm({ password: '' });
+
+    const submit = (e) => {
+        e.preventDefault();
+        form.delete(route('admin.clinics.destroy', clinic.id), {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-800">Delete clinic</h3>
+                <p className="mt-2 text-sm text-gray-600">
+                    You are about to permanently delete{' '}
+                    <span className="font-semibold text-gray-800">{clinic.name}</span>. This
+                    action cannot be undone.
+                </p>
+                <form onSubmit={submit} className="mt-4 space-y-4">
+                    <div>
+                        <label htmlFor="delete_clinic_password" className="block text-xs font-medium text-gray-600">
+                            Confirm your super admin password *
+                        </label>
+                        <input
+                            id="delete_clinic_password"
+                            type="password"
+                            autoFocus
+                            autoComplete="current-password"
+                            className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                            value={form.data.password}
+                            onChange={(e) => form.setData('password', e.target.value)}
+                        />
+                        {form.errors.password && (
+                            <p className="mt-1 text-xs text-red-500">{form.errors.password}</p>
+                        )}
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={form.processing || !form.data.password}
+                            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                            {form.processing ? 'Deleting…' : 'Delete clinic'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 export default function ClinicsIndex({ clinics, allModules }) {
     const [mode, setMode] = useState(null); // null | 'create' | { edit: clinic }
     const [statusFilter, setStatusFilter] = useState('all');
     const [search, setSearch] = useState('');
+    const [deleteTarget, setDeleteTarget] = useState(null);
 
     const visible = useMemo(() => {
         return clinics.filter(c => {
@@ -203,8 +264,7 @@ export default function ClinicsIndex({ clinics, allModules }) {
     };
 
     const destroy = (clinic) => {
-        if (!confirm(`Delete "${clinic.name}" permanently?`)) return;
-        router.delete(route('admin.clinics.destroy', clinic.id));
+        setDeleteTarget(clinic);
     };
 
     const pendingCount = clinics.filter(c => c.status === 'pending').length;
@@ -341,6 +401,13 @@ export default function ClinicsIndex({ clinics, allModules }) {
                     </div>
                 </div>
             </div>
+
+            {deleteTarget && (
+                <DeleteClinicModal
+                    clinic={deleteTarget}
+                    onClose={() => setDeleteTarget(null)}
+                />
+            )}
         </AuthenticatedLayout>
     );
 }

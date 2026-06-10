@@ -22,7 +22,8 @@ class GroomingRecordController extends Controller
         return Inertia::render('Grooming/Index', [
             'records' => GroomingRecord::with(['pet.client', 'appointment'])
                 ->forClinic($clinicId)
-                ->orderByDesc('service_date')
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
                 ->get(),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
             'groomingAppointments' => Appointment::with(['pet', 'client'])
@@ -72,7 +73,7 @@ class GroomingRecordController extends Controller
 
     private function validatePayload(Request $request): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'pet_id' => 'required|exists:pets,id',
             'appointment_id' => [
                 'required',
@@ -80,21 +81,33 @@ class GroomingRecordController extends Controller
                     fn ($query) => $query->where('type', 'grooming')
                 ),
             ],
-            'service_type' => 'required|string|max:255',
+            'service_type' => [
+                Rule::requiredIf(fn () => $request->input('status') !== 'cancelled'),
+                'nullable',
+                'string',
+                'max:255',
+            ],
             'service_date' => 'required|date',
             'status' => 'required|in:completed,cancelled',
             'notes' => 'nullable|string',
         ]);
+
+        if ($validated['status'] === 'cancelled' && empty($validated['service_type'])) {
+            $validated['service_type'] = 'Cancelled appointment';
+        }
+
+        return $validated;
     }
 
     private function syncAppointmentStatus(?int $appointmentId, string $status): void
     {
-        if (! $appointmentId) {
+        if (! $appointmentId || ! in_array($status, ['completed', 'cancelled'], true)) {
             return;
         }
 
         Appointment::whereKey($appointmentId)
             ->where('type', 'grooming')
+            ->whereIn('status', ['scheduled', 'completed', 'cancelled'])
             ->update(['status' => $status]);
     }
 }

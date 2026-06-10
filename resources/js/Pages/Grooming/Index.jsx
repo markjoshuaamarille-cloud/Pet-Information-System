@@ -7,6 +7,11 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import ListDisplayControls from "@/Components/ListDisplayControls";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
+import {
+    formatClinicDate,
+    formatClinicDateTime,
+    toClinicDateInput,
+} from "@/utils/formatDateTime";
 import { Head, useForm } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
@@ -77,43 +82,15 @@ const syncServiceFields = (services, customNotes) => ({
     notes: buildNotes(services, customNotes),
 });
 
-const formatDate = (value) => {
-    if (!value) {
-        return null;
-    }
-
-    const iso = String(value);
-    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-        const [, year, month, day] = match;
-        return `${Number(month)}/${Number(day)}/${year}`;
-    }
-
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return null;
-    }
-
-    return date.toLocaleDateString();
-};
+const formatDate = (value) => formatClinicDate(value);
 
 const formatDateTime = (value) => {
     if (!value) {
         return null;
     }
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
-        return null;
-    }
-
-    return date.toLocaleString(undefined, {
-        month: "short",
-        day: "numeric",
-        year: "numeric",
-        hour: "numeric",
-        minute: "2-digit",
-    });
+    const formatted = formatClinicDateTime(value);
+    return formatted === "—" ? null : formatted;
 };
 
 export default function GroomingIndex({
@@ -169,7 +146,10 @@ export default function GroomingIndex({
     const submit = (e) => {
         e.preventDefault();
 
-        if (selectedServices.length === 0) {
+        if (
+            form.data.status !== "cancelled" &&
+            selectedServices.length === 0
+        ) {
             form.setError(
                 "service_type",
                 "Select at least one grooming service.",
@@ -188,19 +168,30 @@ export default function GroomingIndex({
     };
 
     const onAppointmentChange = (appointmentId) => {
-        form.setData("appointment_id", appointmentId);
-        if (!appointmentId) return;
+        if (!appointmentId) {
+            form.setData({
+                ...form.data,
+                appointment_id: "",
+                service_date: "",
+            });
+            return;
+        }
 
         const selected = groomingAppointments.find(
             (appt) => String(appt.id) === appointmentId,
         );
+
         if (selected) {
-            form.setData("pet_id", String(selected.pet_id));
-            form.setData(
-                "service_date",
-                selected.scheduled_at?.slice(0, 10) || "",
-            );
+            form.setData({
+                ...form.data,
+                appointment_id: appointmentId,
+                pet_id: String(selected.pet_id),
+                service_date: toClinicDateInput(selected.scheduled_at),
+            });
+            return;
         }
+
+        form.setData("appointment_id", appointmentId);
     };
 
     const filteredPets = useMemo(() => {
@@ -317,7 +308,15 @@ export default function GroomingIndex({
                                         </option>
                                     ))}
                                 </select>
+                                {form.data.status === "cancelled" && (
+                                    <p className="mt-1 text-xs text-amber-700">
+                                        The linked grooming appointment will be
+                                        marked cancelled in Scheduling for the
+                                        pet owner.
+                                    </p>
+                                )}
                             </div>
+                            {form.data.status !== "cancelled" && (
                             <div className="sm:col-span-3">
                                 <InputLabel value="Service Type" />
                                 <div className="mt-1 grid grid-cols-1 gap-2 rounded-md border border-gray-300 p-3 text-sm sm:grid-cols-2">
@@ -351,6 +350,7 @@ export default function GroomingIndex({
                                     </p>
                                 )}
                             </div>
+                            )}
                             <div className="sm:col-span-3">
                                 <InputLabel value="Notes" />
                                 <textarea
@@ -407,7 +407,8 @@ export default function GroomingIndex({
                                             {record.service_type}
                                         </td>
                                         <td className="px-4 py-3">
-                                            {record.service_date?.slice(0, 10)}
+                                            {formatDate(record.service_date) ??
+                                                "—"}
                                         </td>
                                         {/* <td className="px-4 py-3">
                                             {record.price}

@@ -25,7 +25,9 @@ class AppointmentController extends Controller
 
         Pet::purgeDeactivatedBeyondOneYear();
 
-        $appointmentsQuery = Appointment::with(['pet', 'client', 'clinic'])->orderByDesc('scheduled_at');
+        $appointmentsQuery = Appointment::with(['pet', 'client', 'clinic'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
         $petsQuery = Pet::with('client')->orderBy('pet_name');
         $clientsQuery = Client::orderBy('name');
 

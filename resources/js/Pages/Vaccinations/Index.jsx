@@ -11,7 +11,7 @@ import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, useForm, router } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
-const statuses = ["scheduled", "completed", "missed"];
+const statuses = ["scheduled", "completed"];
 
 const formatDate = (value) => {
     if (!value) {

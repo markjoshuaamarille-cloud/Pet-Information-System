@@ -433,9 +433,11 @@ class HealthRecordController extends Controller
         }
         $catalog = $catalogQuery->first();
         $quantity = max((int) ($validated['quantity'] ?? 1), 1);
-        $unitPrice = $providedPrice !== null
-            ? (float) $providedPrice
-            : (float) ($catalog?->default_price ?? 0);
+
+        // Without an explicit price (staff did not add a billing line), the record
+        // stays non-billable so it is not auto-listed under "Generate Invoice from
+        // Services". Staff can bill it later via "Create Invoice (Manual)".
+        $unitPrice = $providedPrice !== null ? (float) $providedPrice : 0.0;
 
         $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? $catalog?->id;
         $validated['unit_price'] = $unitPrice;
