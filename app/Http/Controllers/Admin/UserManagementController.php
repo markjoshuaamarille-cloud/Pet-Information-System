@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Client;
+use App\Models\Clinic;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -17,9 +18,14 @@ class UserManagementController extends Controller
 {
     public function index(): Response
     {
+        $users = User::with(['clinics:id,name'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'email', 'role', 'created_at', 'client_id']);
+
         return Inertia::render('Admin/Users', [
-            'users' => User::orderBy('name')->get(['id', 'name', 'email', 'role', 'created_at']),
-            'roles' => $this->roles(),
+            'users'   => $users,
+            'roles'   => $this->roles(),
+            'clinics' => Clinic::active()->get(['id', 'name']),
         ]);
     }
 
@@ -85,6 +91,27 @@ class UserManagementController extends Controller
         return redirect()->back()->with('success', 'User role updated.');
     }
 
+    public function updateClinics(Request $request, User $user): RedirectResponse
+    {
+        $validated = $request->validate([
+            'clinic_ids'   => ['nullable', 'array'],
+            'clinic_ids.*' => ['integer', 'exists:clinics,id'],
+            'primary_clinic_id' => ['nullable', 'integer', 'exists:clinics,id'],
+        ]);
+
+        $clinicIds = $validated['clinic_ids'] ?? [];
+        $primaryId = $validated['primary_clinic_id'] ?? null;
+
+        $syncData = [];
+        foreach ($clinicIds as $id) {
+            $syncData[(int) $id] = ['is_primary' => (int) $id === (int) $primaryId];
+        }
+
+        $user->clinics()->sync($syncData);
+
+        return redirect()->back()->with('success', 'Clinic assignments updated.');
+    }
+
     public function destroy(Request $request, User $user): RedirectResponse
     {
         if ($request->user()?->id === $user->id) {
@@ -98,6 +125,6 @@ class UserManagementController extends Controller
 
     private function roles(): array
     {
-        return ['super_admin', 'veterinarian', 'receptionist', 'groomer', 'customer', 'cashier'];
+        return ['super_admin', 'veterinarian', 'receptionist', 'groomer', 'customer', 'cashier', 'clinic_owner'];
     }
 }

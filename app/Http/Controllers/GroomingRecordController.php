@@ -14,26 +14,33 @@ use Inertia\Response;
 
 class GroomingRecordController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = auth()->user();
+        $clinicId = $request->attributes->get('active_clinic_id');
 
         return Inertia::render('Grooming/Index', [
-            'records' => GroomingRecord::with(['pet.client', 'appointment'])->orderByDesc('service_date')->get(),
+            'records' => GroomingRecord::with(['pet.client', 'appointment'])
+                ->forClinic($clinicId)
+                ->orderByDesc('created_at')
+                ->orderByDesc('id')
+                ->get(),
             'pets' => Pet::with('client')->orderBy('pet_name')->get(),
             'groomingAppointments' => Appointment::with(['pet', 'client'])
+                ->forClinic($clinicId)
                 ->where('type', 'grooming')
                 ->where('status', 'scheduled')
                 ->orderByDesc('scheduled_at')
                 ->get(),
             'can_manage_records' => $user instanceof User
-                && $user->hasAnyRole(['super_admin', 'groomer', 'receptionist']),
+                && $user->canManageGroomingRecords(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $validated = $this->validatePayload($request);
+        $validated['clinic_id'] = $request->attributes->get('active_clinic_id');
 
         $record = GroomingRecord::create($validated);
         $this->syncAppointmentStatus($record->appointment_id, $record->status);
@@ -66,7 +73,7 @@ class GroomingRecordController extends Controller
 
     private function validatePayload(Request $request): array
     {
-        return $request->validate([
+        $validated = $request->validate([
             'pet_id' => 'required|exists:pets,id',
             'appointment_id' => [
                 'required',
@@ -74,21 +81,33 @@ class GroomingRecordController extends Controller
                     fn ($query) => $query->where('type', 'grooming')
                 ),
             ],
-            'service_type' => 'required|string|max:255',
+            'service_type' => [
+                Rule::requiredIf(fn () => $request->input('status') !== 'cancelled'),
+                'nullable',
+                'string',
+                'max:255',
+            ],
             'service_date' => 'required|date',
             'status' => 'required|in:completed,cancelled',
             'notes' => 'nullable|string',
         ]);
+
+        if ($validated['status'] === 'cancelled' && empty($validated['service_type'])) {
+            $validated['service_type'] = 'Cancelled appointment';
+        }
+
+        return $validated;
     }
 
     private function syncAppointmentStatus(?int $appointmentId, string $status): void
     {
-        if (! $appointmentId) {
+        if (! $appointmentId || ! in_array($status, ['completed', 'cancelled'], true)) {
             return;
         }
 
         Appointment::whereKey($appointmentId)
             ->where('type', 'grooming')
+            ->whereIn('status', ['scheduled', 'completed', 'cancelled'])
             ->update(['status' => $status]);
     }
 }

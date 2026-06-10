@@ -6,6 +6,8 @@ use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\ServiceCatalog;
+use App\Models\User;
+use App\Support\ClinicContext;
 use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,9 +39,20 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated);
+        $clinicId = ClinicContext::activeClinicId($request);
 
-        $pet->healthRecords()->create($validated);
+        if (! $clinicId) {
+            return redirect()
+                ->route('pets.show', $pet)
+                ->withErrors(['clinic_id' => 'Select an active clinic before adding health records.']);
+        }
+
+        $this->applyPricing($validated, $clinicId);
+
+        $validated['clinic_id'] = $clinicId;
+
+        $record = $pet->healthRecords()->create($validated);
+        $record->load('pet');
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record added successfully.');
     }
@@ -47,6 +60,7 @@ class HealthRecordController extends Controller
     public function update(Request $request, Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord($request, $healthRecord);
 
         $validated = $this->validatePayload($request);
         $previousMedicationLines = $this->medicationLinesFromRecord($healthRecord);
@@ -66,11 +80,25 @@ class HealthRecordController extends Controller
 
         unset($validated['sticker_photo'], $validated['remove_sticker_photo'], $validated['medication_lines']);
 
-        $this->applyPricing($validated);
+        $clinicId = ClinicContext::activeClinicId($request) ?? $healthRecord->clinic_id;
+
+        if (! $clinicId) {
+            return redirect()
+                ->route('pets.show', $pet)
+                ->withErrors(['clinic_id' => 'Select an active clinic before updating health records.']);
+        }
+
+        $this->applyPricing($validated, $clinicId);
+
+        if (! $healthRecord->clinic_id) {
+            $validated['clinic_id'] = $clinicId;
+        }
 
         $healthRecord->update($validated);
 
-        $this->refreshLinkedBilling($healthRecord->fresh());
+        $healthRecord = $healthRecord->fresh();
+
+        $this->refreshLinkedBilling($healthRecord);
 
         return redirect()->route('pets.show', $pet)->with('success', 'Health record updated successfully.');
     }
@@ -78,6 +106,7 @@ class HealthRecordController extends Controller
     public function destroy(Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord(request(), $healthRecord);
 
         if ($healthRecord->sticker_photo_path) {
             Storage::disk('s3')->delete($healthRecord->sticker_photo_path);
@@ -91,6 +120,7 @@ class HealthRecordController extends Controller
     public function destroySticker(Pet $pet, HealthRecord $healthRecord): RedirectResponse
     {
         abort_unless($healthRecord->pet_id === $pet->id, 404);
+        $this->ensureCanModifyHealthRecord(request(), $healthRecord);
 
         if ($healthRecord->sticker_photo_path) {
             Storage::disk('s3')->delete($healthRecord->sticker_photo_path);
@@ -335,8 +365,34 @@ class HealthRecordController extends Controller
      * Service Catalog (other types), but a provided unit price is respected
      * so staff can override per record.
      */
-    private function applyPricing(array &$validated): void
+    private function applyPricing(array &$validated, ?int $clinicId = null): void
     {
+        $providedPrice = array_key_exists('unit_price', $validated)
+            && $validated['unit_price'] !== null
+            && $validated['unit_price'] !== ''
+            ? (float) $validated['unit_price']
+            : null;
+        $quantity = max((int) ($validated['quantity'] ?? 1), 1);
+
+        // Bundled billing total from Pets/Show (manual lines, meds, tax, discount).
+        if ($providedPrice !== null && $providedPrice > 0 && $quantity === 1) {
+            $validated['unit_price'] = $providedPrice;
+            $validated['quantity'] = 1;
+            $validated['line_total'] = round($providedPrice, 2);
+
+            if (($validated['type'] ?? '') !== 'medication') {
+                $catalogQuery = ServiceCatalog::query()
+                    ->where('code', ClinicServices::catalogCodeForType($validated['type']));
+                if ($clinicId) {
+                    $catalogQuery->where('clinic_id', $clinicId);
+                }
+                $validated['service_catalog_id'] = $validated['service_catalog_id']
+                    ?? $catalogQuery->value('id');
+            }
+
+            return;
+        }
+
         $type = $validated['type'];
         $providedPrice = $validated['unit_price'] ?? null;
 
@@ -354,9 +410,13 @@ class HealthRecordController extends Controller
             }
 
             $quantity = max((int) ($validated['medication_quantity'] ?? 1), 1);
+            $medicineQuery = Medicine::query()->whereKey($validated['medicine_id']);
+            if ($clinicId) {
+                $medicineQuery->where('clinic_id', $clinicId);
+            }
             $unitPrice = $providedPrice !== null
                 ? (float) $providedPrice
-                : (float) (Medicine::find($validated['medicine_id'])?->unit_price ?? 0);
+                : (float) ($medicineQuery->value('unit_price') ?? 0);
 
             $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
             $validated['unit_price'] = $unitPrice;
@@ -366,11 +426,18 @@ class HealthRecordController extends Controller
             return;
         }
 
-        $catalog = ServiceCatalog::where('code', ClinicServices::catalogCodeForType($type))->first();
+        $catalogQuery = ServiceCatalog::query()
+            ->where('code', ClinicServices::catalogCodeForType($type));
+        if ($clinicId) {
+            $catalogQuery->where('clinic_id', $clinicId);
+        }
+        $catalog = $catalogQuery->first();
         $quantity = max((int) ($validated['quantity'] ?? 1), 1);
-        $unitPrice = $providedPrice !== null
-            ? (float) $providedPrice
-            : (float) ($catalog?->default_price ?? 0);
+
+        // Without an explicit price (staff did not add a billing line), the record
+        // stays non-billable so it is not auto-listed under "Generate Invoice from
+        // Services". Staff can bill it later via "Create Invoice (Manual)".
+        $unitPrice = $providedPrice !== null ? (float) $providedPrice : 0.0;
 
         $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? $catalog?->id;
         $validated['unit_price'] = $unitPrice;
@@ -390,10 +457,10 @@ class HealthRecordController extends Controller
             return;
         }
 
-        $subtotal = (float) $billing->healthRecords()->sum('line_total');
-        $tax = (float) $billing->tax;
-        $discount = (float) $billing->discount;
-        $total = max($subtotal + $tax - $discount, 0);
+        $charges = \App\Support\ClinicBilling::aggregateServiceCharges(
+            $billing->healthRecords()->get()
+        );
+        $total = $charges['total'];
 
         $status = $billing->status;
         if ($status !== 'cancelled') {
@@ -402,9 +469,35 @@ class HealthRecordController extends Controller
         }
 
         $billing->update([
-            'subtotal' => $subtotal,
+            'subtotal' => $charges['subtotal'],
+            'tax' => $charges['tax'],
+            'tax_applied' => $charges['tax_applied'],
+            'tax_rate' => $charges['tax_rate'],
+            'discount' => $charges['discount'],
             'total_amount' => $total,
             'status' => $status,
         ]);
+    }
+
+    private function ensureCanModifyHealthRecord(Request $request, HealthRecord $healthRecord): void
+    {
+        $user = $request->user();
+        $activeClinicId = $request->attributes->get('active_clinic_id');
+
+        if ($user instanceof User && $user->isPlatformAdmin() && ! $activeClinicId) {
+            return;
+        }
+
+        if (! $activeClinicId) {
+            abort(403, 'Select a clinic to modify health records.');
+        }
+
+        if ($healthRecord->clinic_id === null) {
+            return;
+        }
+
+        if ((int) $healthRecord->clinic_id !== (int) $activeClinicId) {
+            abort(403, 'You can only edit or delete health records created by your active clinic.');
+        }
     }
 }

@@ -5,8 +5,10 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import ListDisplayControls from "@/Components/ListDisplayControls";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
-import { Head, Link, router, useForm } from "@inertiajs/react";
+import { Head, Link, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
+import { clinicScopeSubtitle, clinicScopeTitle } from "@/utils/clinicScope";
+import { formatClinicDate } from "@/utils/formatDateTime";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
 const billingStatuses = ["unpaid", "partial", "paid", "cancelled"];
@@ -24,26 +26,6 @@ const SERVICE_LABELS = {
     other: "Other",
 };
 
-const formatAppointmentDate = (scheduledAt) => {
-    if (!scheduledAt) {
-        return "No date";
-    }
-
-    const iso = String(scheduledAt);
-    const match = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) {
-        const [, year, month, day] = match;
-        return `${Number(month)}/${Number(day)}/${year}`;
-    }
-
-    const date = new Date(scheduledAt);
-    if (Number.isNaN(date.getTime())) {
-        return "No date";
-    }
-
-    return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
-};
-
 const formatAppointmentOption = (appt) => {
     const petName = (appt.pet?.pet_name ?? "Unknown pet").toUpperCase();
     const service =
@@ -51,7 +33,7 @@ const formatAppointmentOption = (appt) => {
         SERVICE_LABELS[appt.service_type] ??
         SERVICE_LABELS[appt["type"]] ??
         "Other";
-    const date = formatAppointmentDate(appt.scheduled_at);
+    const date = formatClinicDate(appt.scheduled_at) ?? "No date";
 
     return `${petName} - ${date}(${service})`;
 };
@@ -81,12 +63,15 @@ export default function BillingIndex({
     serviceCatalogs = [],
     billablePets = [],
     can_manage_billing = true,
+    requires_clinic_context = false,
 }) {
+    const activeClinic = usePage().props.activeClinic;
+    const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const [editing, setEditing] = useState(null);
     const [payingBillingId, setPayingBillingId] = useState(null);
     const [generatePetId, setGeneratePetId] = useState("");
     const [generating, setGenerating] = useState(false);
-    const [saleTypeFilter, setSaleTypeFilter] = useState("all");
+    const [saleTypeFilter, setSaleTypeFilter] = useState("clinic_service");
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
 
@@ -244,17 +229,19 @@ export default function BillingIndex({
         setPayingBillingId(null);
     };
 
-    const paidAppointmentIds = useMemo(
+    const linkedAppointmentIds = useMemo(
         () =>
             new Set(
                 billings
                     .filter(
                         (billing) =>
-                            billing.status === "paid" && billing.appointment_id,
+                            billing.appointment_id &&
+                            billing.status !== "cancelled" &&
+                            (!editing || billing.id !== editing.id),
                     )
                     .map((billing) => Number(billing.appointment_id)),
             ),
-        [billings],
+        [billings, editing],
     );
 
     const filteredAppointments = useMemo(() => {
@@ -269,7 +256,7 @@ export default function BillingIndex({
             }
 
             if (
-                paidAppointmentIds.has(appointmentId) &&
+                linkedAppointmentIds.has(appointmentId) &&
                 !isSelectedDuringEdit
             ) {
                 return false;
@@ -298,7 +285,7 @@ export default function BillingIndex({
         return list;
     }, [
         appointments,
-        paidAppointmentIds,
+        linkedAppointmentIds,
         form.data.client_id,
         form.data.pet_id,
         form.data.appointment_id,
@@ -354,11 +341,27 @@ export default function BillingIndex({
             return;
         }
 
-        form.setData({
+        const matchedService = serviceCatalogs.find(
+            (service) => String(service.code) === String(selected.service_type),
+        );
+
+        const nextData = {
+            ...form.data,
             appointment_id: appointmentId,
             client_id: String(selected.client_id),
             pet_id: String(selected.pet_id),
-        });
+        };
+
+        if (matchedService) {
+            const unitPrice = String(matchedService.default_price ?? "0");
+            const quantity = form.data.service_quantity || "1";
+            nextData.service_catalog_id = String(matchedService.id);
+            nextData.service_unit_price = unitPrice;
+            nextData.service_quantity = quantity;
+            nextData.subtotal = recalculateSubtotal(unitPrice, quantity);
+        }
+
+        form.setData(nextData);
     };
 
     const deleteAppointment = (appt) => {
@@ -439,15 +442,34 @@ export default function BillingIndex({
     return (
         <AuthenticatedLayout
             header={
-                <h2 className="text-xl font-semibold text-gray-800">
-                    Billing & Payments
-                </h2>
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {clinicScopeTitle(
+                            "Billing & Payments",
+                            activeClinic,
+                            isPlatformAdmin,
+                        )}
+                    </h2>
+                    {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
+                        <p className="mt-1 text-sm text-gray-500">
+                            {clinicScopeSubtitle(activeClinic, isPlatformAdmin)}
+                        </p>
+                    )}
+                </div>
             }
         >
             <Head title="Billing" />
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
+
+                    {requires_clinic_context && (
+                        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                            Select an active clinic from the header to view
+                            appointments, services, and invoices for your
+                            clinic.
+                        </div>
+                    )}
 
                     <div className="mb-6 flex flex-wrap gap-2">
                         {[
@@ -482,8 +504,8 @@ export default function BillingIndex({
                                 Generate Invoice from Services
                             </h3>
                             <p className="mb-4 text-sm text-emerald-800">
-                                Pick a pet to auto-total the services the vet
-                                already recorded. No manual computing needed.
+                                Pick a pet to combine its unbilled priced
+                                services for this clinic into a single invoice.
                             </p>
                             <div className="grid gap-4 sm:grid-cols-3">
                                 <div className="sm:col-span-2">
@@ -548,71 +570,49 @@ export default function BillingIndex({
                             </h3>
                             <div className="sm:col-span-3">
                                 <InputLabel value="Appointment" />
-                                <div className="mt-1 max-h-52 overflow-y-auto rounded-md border border-gray-300 bg-white">
-                                    <button
-                                        type="button"
-                                        onClick={() => onAppointmentChange("")}
-                                        className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-gray-50 ${
-                                            !form.data.appointment_id
-                                                ? "bg-indigo-50 font-medium text-indigo-800"
-                                                : "text-gray-700"
-                                        }`}
+                                <div className="mt-1 flex items-center gap-2">
+                                    <select
+                                        className="w-full rounded-md border-gray-300"
+                                        value={form.data.appointment_id}
+                                        onChange={(e) =>
+                                            onAppointmentChange(e.target.value)
+                                        }
                                     >
-                                        No linked appointment
-                                    </button>
-                                    {filteredAppointments.length === 0 ? (
-                                        <p className="border-t px-3 py-2 text-sm text-gray-500">
-                                            No completed appointments available.
-                                        </p>
-                                    ) : (
-                                        filteredAppointments.map((appt) => {
-                                            const isSelected =
-                                                String(
-                                                    form.data.appointment_id,
-                                                ) === String(appt.id);
-
-                                            return (
-                                                <div
+                                        <option value="">
+                                            No linked appointment
+                                        </option>
+                                        {filteredAppointments.length === 0 ? (
+                                            <option value="" disabled>
+                                                No completed appointments for
+                                                this clinic
+                                            </option>
+                                        ) : (
+                                            filteredAppointments.map((appt) => (
+                                                <option
                                                     key={appt.id}
-                                                    className={`flex items-center gap-2 border-t px-2 py-1 ${
-                                                        isSelected
-                                                            ? "bg-indigo-50"
-                                                            : "hover:bg-gray-50"
-                                                    }`}
+                                                    value={String(appt.id)}
                                                 >
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            onAppointmentChange(
-                                                                String(appt.id),
-                                                            )
-                                                        }
-                                                        className={`min-w-0 flex-1 px-1 py-1.5 text-left text-sm ${
-                                                            isSelected
-                                                                ? "font-medium text-indigo-800"
-                                                                : "text-gray-700"
-                                                        }`}
-                                                    >
-                                                        {formatAppointmentOption(
-                                                            appt,
-                                                        )}
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        title="Delete appointment"
-                                                        aria-label={`Delete appointment for ${appt.pet?.pet_name ?? "pet"}`}
-                                                        onClick={() =>
-                                                            deleteAppointment(
-                                                                appt,
-                                                            )
-                                                        }
-                                                        className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-base leading-none text-gray-500 hover:bg-red-50 hover:text-red-600"
-                                                    >
-                                                        ×
-                                                    </button>
-                                                </div>
-                                            );
-                                        })
+                                                    {formatAppointmentOption(
+                                                        appt,
+                                                    )}
+                                                </option>
+                                            ))
+                                        )}
+                                    </select>
+                                    {selectedAppointment && (
+                                        <button
+                                            type="button"
+                                            title="Delete appointment"
+                                            aria-label={`Delete appointment for ${selectedAppointment.pet?.pet_name ?? "pet"}`}
+                                            onClick={() =>
+                                                deleteAppointment(
+                                                    selectedAppointment,
+                                                )
+                                            }
+                                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-lg leading-none text-gray-500 ring-1 ring-gray-300 hover:bg-red-50 hover:text-red-600"
+                                        >
+                                            ×
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -1009,7 +1009,7 @@ export default function BillingIndex({
                                         Invoice
                                     </th>
                                     <th className="px-4 py-3 text-left">
-                                        Client
+                                        Customer
                                     </th>
                                     <th className="px-4 py-3 text-left">
                                         Type

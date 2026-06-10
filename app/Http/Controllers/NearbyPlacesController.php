@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Support\GeoapifyAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
@@ -22,6 +23,36 @@ class NearbyPlacesController extends Controller
             'place' => ['required', 'string', 'min:2', 'max:255'],
         ]);
 
+        if (! config('services.geoapify.key')) {
+            return response()->json([
+                'message' => 'Place search is not configured. Please contact the administrator.',
+            ], 503);
+        }
+
+        $feature = $this->fetchGeocodeFeature($validated['place']);
+
+        if ($feature === null) {
+            return response()->json([
+                'message' => 'Unable to find that place. Please try again.',
+            ], 502);
+        }
+
+        if ($feature === false) {
+            return response()->json([
+                'message' => 'No location found for that place name. Try a street, barangay, or city.',
+            ], 404);
+        }
+
+        return response()->json($this->formatGeocodeResponse($feature, $validated['place']));
+    }
+
+    public function reverseGeocode(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'lat' => ['required', 'numeric', 'between:-90,90'],
+            'lng' => ['required', 'numeric', 'between:-180,180'],
+        ]);
+
         $apiKey = config('services.geoapify.key');
 
         if (! $apiKey) {
@@ -30,22 +61,23 @@ class NearbyPlacesController extends Controller
             ], 503);
         }
 
-        $response = Http::timeout(15)->get('https://api.geoapify.com/v1/geocode/search', [
-            'text' => $validated['place'],
+        $response = Http::timeout(15)->get('https://api.geoapify.com/v1/geocode/reverse', [
+            'lat' => $validated['lat'],
+            'lon' => $validated['lng'],
             'limit' => 1,
             'apiKey' => $apiKey,
             'lang' => 'en',
         ]);
 
         if (! $response->successful()) {
-            Log::warning('Geoapify geocode search failed', [
+            Log::warning('Geoapify reverse geocode failed', [
                 'status' => $response->status(),
-                'body' => $response->body(),
-                'place' => $validated['place'],
+                'lat' => $validated['lat'],
+                'lng' => $validated['lng'],
             ]);
 
             return response()->json([
-                'message' => 'Unable to find that place. Please try again.',
+                'message' => 'Unable to resolve that map pin to an address. Please enter address details manually.',
             ], 502);
         }
 
@@ -53,18 +85,11 @@ class NearbyPlacesController extends Controller
 
         if (! $feature) {
             return response()->json([
-                'message' => 'No location found for that place name. Try a city or area name.',
+                'message' => 'No address found for that map location.',
             ], 404);
         }
 
-        $properties = $feature['properties'] ?? [];
-        $coordinates = $feature['geometry']['coordinates'] ?? [null, null];
-
-        return response()->json([
-            'lat' => $coordinates[1],
-            'lng' => $coordinates[0],
-            'label' => $properties['formatted'] ?? $validated['place'],
-        ]);
+        return response()->json($this->formatGeocodeResponse($feature));
     }
 
     public function search(Request $request): JsonResponse
@@ -149,6 +174,62 @@ class NearbyPlacesController extends Controller
             ->values();
 
         return response()->json($places);
+    }
+
+    /**
+     * @return array<string, mixed>|false|null false = not found, null = API failure
+     */
+    private function fetchGeocodeFeature(string $place): array|false|null
+    {
+        $apiKey = config('services.geoapify.key');
+
+        if (! $apiKey) {
+            return null;
+        }
+
+        $response = Http::timeout(15)->get('https://api.geoapify.com/v1/geocode/search', [
+            'text' => $place,
+            'limit' => 1,
+            'apiKey' => $apiKey,
+            'lang' => 'en',
+        ]);
+
+        if (! $response->successful()) {
+            Log::warning('Geoapify geocode search failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+                'place' => $place,
+            ]);
+
+            return null;
+        }
+
+        $feature = $response->json('features.0');
+
+        return $feature ?: false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $feature
+     * @return array<string, mixed>
+     */
+    private function formatGeocodeResponse(array $feature, ?string $fallbackLabel = null): array
+    {
+        $properties = $feature['properties'] ?? [];
+        $coordinates = $feature['geometry']['coordinates'] ?? [null, null];
+        $parsed = GeoapifyAddress::fromGeocodeProperties($properties);
+        $normalized = GeoapifyAddress::normalizeFields([
+            ...$parsed,
+            'latitude' => $coordinates[1],
+            'longitude' => $coordinates[0],
+        ]);
+
+        return [
+            'lat' => $coordinates[1],
+            'lng' => $coordinates[0],
+            'label' => $normalized['address_formatted'] ?: ($fallbackLabel ?? ''),
+            ...$normalized,
+        ];
     }
 
     /**

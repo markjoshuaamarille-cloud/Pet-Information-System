@@ -17,7 +17,6 @@ use App\Http\Controllers\Api\V1\PetShopController;
 use App\Http\Controllers\Api\V1\ProfileController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\ServiceCatalogController;
-use App\Http\Controllers\Api\V1\SurveyController;
 use App\Http\Controllers\Api\V1\VaccinationController;
 use Illuminate\Support\Facades\Route;
 
@@ -156,12 +155,6 @@ Route::prefix('v1')->group(function (): void {
             Route::put('{billing}', [PetShopBillingController::class, 'update']);
             Route::post('{billing}/payments', [PetShopBillingController::class, 'storePayment']);
             Route::delete('{billing}', [PetShopBillingController::class, 'destroy']);
-        });
-
-        Route::prefix('survey')->group(function (): void {
-            Route::get('/', [SurveyController::class, 'create']);
-            Route::post('/', [SurveyController::class, 'store']);
-            Route::get('results', [SurveyController::class, 'results']);
         });
 
         Route::prefix('profile')->group(function (): void {

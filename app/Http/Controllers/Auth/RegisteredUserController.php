@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\Client;
 use App\Models\User;
+use App\Support\GeoapifyAddress;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -31,20 +32,30 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): \Symfony\Component\HttpFoundation\Response
     {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
-            'password' => ['required', 'confirmed', Rules\Password::defaults()],
+        $validated = $request->validate([
+            'name'              => 'required|string|max:255',
+            'email'             => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'password'          => ['required', 'confirmed', Rules\Password::defaults()],
+            ...GeoapifyAddress::validationRules(requireCoordinates: true),
         ]);
+
+        $location = GeoapifyAddress::normalizeClientFields($validated);
 
         $client = Client::firstOrCreate(
             ['email' => $request->email],
             [
-                'name' => $request->name,
-                'contact' => 'N/A',
-                'address' => null,
+                'name'              => $request->name,
+                'contact'           => 'N/A',
+                ...$location,
             ]
         );
+
+        if (! $client->wasRecentlyCreated) {
+            $client->update([
+                'name' => $request->name,
+                ...$location,
+            ]);
+        }
 
         $user = User::create([
             'name' => $request->name,

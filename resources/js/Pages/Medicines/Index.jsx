@@ -13,6 +13,7 @@ const statusBadge = {
     critical: "bg-orange-100 text-orange-800",
     expiring_soon: "bg-amber-100 text-amber-800",
     ok: "bg-green-100 text-green-800",
+    inactive: "bg-gray-100 text-gray-600",
 };
 
 const categories = [
@@ -46,11 +47,18 @@ const stockStatuses = [
     { value: "expired", label: "Expired" },
 ];
 
-export default function MedicinesIndex({ medicines }) {
+const availabilityFilters = [
+    { value: "", label: "All availability" },
+    { value: "active", label: "Active (pet shop)" },
+    { value: "inactive", label: "Deactivated" },
+];
+
+export default function MedicinesIndex({ medicines, can_manage_activation = false }) {
     const [editing, setEditing] = useState(null);
     const [search, setSearch] = useState("");
     const [categoryFilter, setCategoryFilter] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
+    const [availabilityFilter, setAvailabilityFilter] = useState("");
     const form = useForm({
         name: "",
         category: "medicine",
@@ -92,6 +100,19 @@ export default function MedicinesIndex({ medicines }) {
         });
     };
 
+    const toggleActive = (medicine) => {
+        const deactivating = medicine.is_active !== false;
+        const message = deactivating
+            ? `Deactivate "${medicine.name}"?\n\nIt will be hidden from the pet shop and cannot be ordered until reactivated.`
+            : `Reactivate "${medicine.name}"?\n\nIt will appear in the pet shop again when stock and expiry allow.`;
+
+        if (!confirm(message)) {
+            return;
+        }
+
+        router.patch(route("medicines.toggle-active", medicine.id));
+    };
+
     const filteredMedicines = useMemo(() => {
         const query = search.trim().toLowerCase();
 
@@ -100,6 +121,12 @@ export default function MedicinesIndex({ medicines }) {
                 return false;
             }
             if (statusFilter && m.stock_status !== statusFilter) {
+                return false;
+            }
+            if (availabilityFilter === "active" && m.is_active === false) {
+                return false;
+            }
+            if (availabilityFilter === "inactive" && m.is_active !== false) {
                 return false;
             }
             if (!query) {
@@ -112,7 +139,7 @@ export default function MedicinesIndex({ medicines }) {
                 .filter(Boolean)
                 .some((value) => String(value).toLowerCase().includes(query));
         });
-    }, [medicines, search, categoryFilter, statusFilter]);
+    }, [medicines, search, categoryFilter, statusFilter, availabilityFilter]);
 
     const {
         visibleItems: visibleMedicines,
@@ -126,9 +153,12 @@ export default function MedicinesIndex({ medicines }) {
         setSearch("");
         setCategoryFilter("");
         setStatusFilter("");
+        setAvailabilityFilter("");
     };
 
-    const hasActiveFilters = Boolean(search || categoryFilter || statusFilter);
+    const hasActiveFilters = Boolean(
+        search || categoryFilter || statusFilter || availabilityFilter,
+    );
 
     return (
         <AuthenticatedLayout
@@ -270,7 +300,7 @@ export default function MedicinesIndex({ medicines }) {
                         </PrimaryButton>
                     </form>
                     <div className="mb-4 rounded-lg bg-white p-4 shadow">
-                        <div className="grid gap-4 sm:grid-cols-4">
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
                             <div className="sm:col-span-2">
                                 <InputLabel value="Search" />
                                 <TextInput
@@ -301,7 +331,7 @@ export default function MedicinesIndex({ medicines }) {
                                 </select>
                             </div>
                             <div>
-                                <InputLabel value="Status" />
+                                <InputLabel value="Stock Status" />
                                 <select
                                     className="mt-1 w-full rounded-md border-gray-300"
                                     value={statusFilter}
@@ -315,6 +345,25 @@ export default function MedicinesIndex({ medicines }) {
                                             value={status.value}
                                         >
                                             {status.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <InputLabel value="Availability" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={availabilityFilter}
+                                    onChange={(e) =>
+                                        setAvailabilityFilter(e.target.value)
+                                    }
+                                >
+                                    {availabilityFilters.map((option) => (
+                                        <option
+                                            key={option.value || "all"}
+                                            value={option.value}
+                                        >
+                                            {option.label}
                                         </option>
                                     ))}
                                 </select>
@@ -358,7 +407,10 @@ export default function MedicinesIndex({ medicines }) {
                                         Expiry
                                     </th>
                                     <th className="px-4 py-3 text-left">
-                                        Status
+                                        Stock
+                                    </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Availability
                                     </th>
                                     <th className="px-4 py-3 text-right">
                                         Actions
@@ -369,7 +421,7 @@ export default function MedicinesIndex({ medicines }) {
                                 {filteredMedicines.length === 0 ? (
                                     <tr>
                                         <td
-                                            colSpan={8}
+                                            colSpan={9}
                                             className="px-4 py-8 text-center text-gray-500"
                                         >
                                             No medicines match your filters.
@@ -377,9 +429,23 @@ export default function MedicinesIndex({ medicines }) {
                                     </tr>
                                 ) : (
                                     visibleMedicines.map((m) => (
-                                        <tr key={m.id}>
+                                        <tr
+                                            key={m.id}
+                                            className={
+                                                m.is_active === false
+                                                    ? "bg-gray-50"
+                                                    : undefined
+                                            }
+                                        >
                                             <td className="px-4 py-3">
-                                                {m.name}
+                                                <div className="font-medium text-gray-900">
+                                                    {m.name}
+                                                </div>
+                                                {m.is_active === false && (
+                                                    <p className="mt-0.5 text-xs text-gray-500">
+                                                        Hidden from pet shop
+                                                    </p>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {categories.find(
@@ -412,6 +478,19 @@ export default function MedicinesIndex({ medicines }) {
                                                     )}
                                                 </span>
                                             </td>
+                                            <td className="px-4 py-3">
+                                                <span
+                                                    className={`rounded px-2 py-0.5 text-xs ${
+                                                        m.is_active === false
+                                                            ? statusBadge.inactive
+                                                            : "bg-emerald-100 text-emerald-800"
+                                                    }`}
+                                                >
+                                                    {m.is_active === false
+                                                        ? "Deactivated"
+                                                        : "Active"}
+                                                </span>
+                                            </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
                                                     onClick={() => startEdit(m)}
@@ -419,6 +498,22 @@ export default function MedicinesIndex({ medicines }) {
                                                 >
                                                     Edit
                                                 </button>
+                                                {can_manage_activation && (
+                                                    <button
+                                                        onClick={() =>
+                                                            toggleActive(m)
+                                                        }
+                                                        className={`ms-3 hover:underline ${
+                                                            m.is_active === false
+                                                                ? "text-green-600"
+                                                                : "text-amber-700"
+                                                        }`}
+                                                    >
+                                                        {m.is_active === false
+                                                            ? "Reactivate"
+                                                            : "Deactivate"}
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() =>
                                                         confirm("Delete?") &&

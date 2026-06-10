@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\User;
+use App\Support\ClinicPatientScope;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,9 +16,12 @@ use Inertia\Response;
 
 class PetController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = $this->currentUser();
+        $clinicId = $request->attributes->get('active_clinic_id');
+
+        Pet::purgeDeactivatedBeyondOneYear();
 
         $petsQuery = Pet::with('client')->latest();
         $clientsQuery = Client::query()->orderBy('name');
@@ -26,15 +30,47 @@ class PetController extends Controller
             $clientId = $this->customerClientId($user);
             $petsQuery->where('client_id', $clientId);
             $clientsQuery->whereKey($clientId);
+        } elseif ($user?->isPlatformAdmin() && $clinicId) {
+            $petsQuery = ClinicPatientScope::petsQuery($clinicId)->with('client')->latest();
+            $clientsQuery = ClinicPatientScope::clientsQuery($clinicId)->orderBy('name');
         }
 
         return Inertia::render('Pets/Index', [
             'pets' => $petsQuery->get(),
             'clients' => $clientsQuery->get(['id', 'name']),
-            'can_manage_records' => $user && ! $user->hasRole('cashier') && (
-                $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']) || $user->isCustomer()
-            ),
+            'can_manage_records' => (bool) ($user?->canManagePetRecords()),
+            'can_toggle_pet_status' => (bool) $user?->isCustomer(),
         ]);
+    }
+
+    public function toggleActivation(Pet $pet): RedirectResponse
+    {
+        $user = $this->currentUser();
+
+        if (! $user?->isCustomer()) {
+            abort(403, 'Only customers can activate or deactivate their pets.');
+        }
+
+        $this->ensureCustomerOwnsPet($user, $pet);
+
+        if ($pet->is_active) {
+            $pet->update([
+                'is_active' => false,
+                'deactivated_at' => now(),
+            ]);
+
+            return redirect()->back()->with(
+                'success',
+                'Pet deactivated. Appointments cannot be scheduled until the pet is reactivated.'
+            );
+        }
+
+        $pet->update([
+            'is_active' => true,
+            'deactivated_at' => null,
+        ]);
+
+        return redirect()->back()->with('success', 'Pet reactivated successfully.');
     }
 
     public function store(Request $request): RedirectResponse
@@ -76,30 +112,35 @@ class PetController extends Controller
         return redirect()->back()->with('success', 'Pet record created successfully.');
     }
 
-    public function show(Pet $pet): Response
+    public function show(Request $request, Pet $pet): Response
     {
         $user = $this->currentUser();
         $this->ensureCustomerOwnsPet($user, $pet);
 
-        $pet->load(['client', 'healthRecords.medicine', 'appointments']);
+        // Load clinical records with clinic label (hybrid: global pet, all-clinic records)
+        $pet->load([
+            'client',
+            'healthRecords.medicine',
+            'healthRecords.clinic',
+            'appointments.clinic',
+            'vaccinations.clinic',
+            'groomingRecords.clinic',
+        ]);
+
+        $clinicId = $request->attributes->get('active_clinic_id');
 
         return Inertia::render('Pets/Show', [
             'pet' => $pet,
             'medicines' => Medicine::whereIn('category', ['medicine', 'supplement_vitamin'])
+                ->forClinic($clinicId)
                 ->where('quantity', '>', 0)
                 ->orderBy('name')
                 ->get(['id', 'name', 'category', 'quantity', 'unit_price']),
-            'servicePrices' => \App\Models\ServiceCatalog::query()
+            'servicePrices' => \App\Models\ServiceCatalog::forClinic($clinicId)
                 ->pluck('default_price', 'code'),
-            'veterinarians' => User::query()
-                ->where('role', 'veterinarian')
-                ->orderBy('name')
-                ->get(['id', 'name', 'role']),
-            'groomers' => User::query()
-                ->where('role', 'groomer')
-                ->orderBy('name')
-                ->get(['id', 'name', 'role']),
-            'can_manage_health_records' => $user && $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']),
+            'veterinarians' => $this->staffForClinic($clinicId, 'veterinarian'),
+            'groomers' => $this->staffForClinic($clinicId, 'groomer'),
+            'can_manage_health_records' => (bool) ($user?->canManageHealthRecords()),
         ]);
     }
 
@@ -202,6 +243,15 @@ class PetController extends Controller
         $user = auth()->user();
 
         return $user instanceof User ? $user : null;
+    }
+
+    private function staffForClinic(?int $clinicId, string $role): \Illuminate\Support\Collection
+    {
+        return User::query()
+            ->where('role', $role)
+            ->assignedToClinic($clinicId)
+            ->orderBy('name')
+            ->get(['id', 'name', 'role']);
     }
 
     private function normalizeMicrochipNo(mixed $value): ?string

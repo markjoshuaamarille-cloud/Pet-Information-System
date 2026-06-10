@@ -7,7 +7,7 @@ import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import InputError from "@/Components/InputError";
-import { Head, Link, useForm, router } from "@inertiajs/react";
+import { Head, Link, useForm, router, usePage } from "@inertiajs/react";
 import { useMemo, useRef, useState } from "react";
 
 const types = [
@@ -280,16 +280,14 @@ const getMedicationLinesForRecord = (record, medicinesList = []) => {
 const formatMedicationLine = (line, medicinesList = []) => {
     const name =
         line.medicine_name ??
-        medicinesList.find(
-            (m) => String(m.id) === String(line.medicine_id),
-        )?.name ??
+        medicinesList.find((m) => String(m.id) === String(line.medicine_id))
+            ?.name ??
         "Unknown";
     const qty = line.medication_quantity ?? 1;
     const unit =
         line.unit ??
-        medicinesList.find(
-            (m) => String(m.id) === String(line.medicine_id),
-        )?.unit ??
+        medicinesList.find((m) => String(m.id) === String(line.medicine_id))
+            ?.unit ??
         "";
 
     return `${name} · Qty: ${qty}${unit ? ` ${unit}` : ""}`;
@@ -379,7 +377,11 @@ const toDateTimeLocalInput = (value) => {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 };
 
-const createBillingLine = (unitPrice = "", quantity = "1", source = "manual") => ({
+const createBillingLine = (
+    unitPrice = "",
+    quantity = "1",
+    source = "manual",
+) => ({
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
     unit_price: unitPrice,
     quantity,
@@ -564,6 +566,28 @@ export default function PetShow({
     servicePrices = {},
     can_manage_health_records,
 }) {
+    const { activeClinic, isPlatformAdmin } = usePage().props;
+
+    const canModifyHealthRecord = (record) => {
+        if (!can_manage_health_records) {
+            return false;
+        }
+
+        if (isPlatformAdmin && !activeClinic?.id) {
+            return true;
+        }
+
+        if (!activeClinic?.id) {
+            return false;
+        }
+
+        if (!record?.clinic_id) {
+            return true;
+        }
+
+        return Number(record.clinic_id) === Number(activeClinic.id);
+    };
+
     const catalogCodeForType = (type) => type;
 
     const priceForType = (type) => {
@@ -586,8 +610,7 @@ export default function PetShow({
     const resolveReferenceUnitPrice = () => {
         if (healthForm.data.type === "medication") {
             const selected = medicines.find(
-                (m) =>
-                    String(m.id) === String(healthForm.data.medicine_id),
+                (m) => String(m.id) === String(healthForm.data.medicine_id),
             );
             return selected?.unit_price !== undefined &&
                 selected?.unit_price !== null
@@ -687,8 +710,7 @@ export default function PetShow({
         [medicationLines],
     );
 
-    const showBillingSummary =
-        billingLines.length > 0 || hasMedicationCharges;
+    const showBillingSummary = billingLines.length > 0 || hasMedicationCharges;
 
     const resetTypeSpecificFields = (nextType) => {
         healthForm.setData({
@@ -801,7 +823,8 @@ export default function PetShow({
         const billingSubtotalValue =
             healthForm.data.type === "medication"
                 ? activeMedicationLines.reduce(
-                      (sum, line) => sum + medicationLineSubtotal(line, medicines),
+                      (sum, line) =>
+                          sum + medicationLineSubtotal(line, medicines),
                       0,
                   ) +
                   billingLines.reduce(
@@ -881,12 +904,10 @@ export default function PetShow({
             details = {
                 medication_lines: activeMedicationLines.map((line) => ({
                     medicine_id: Number(line.medicine_id),
-                    medication_quantity:
-                        Number(line.medication_quantity) || 1,
+                    medication_quantity: Number(line.medication_quantity) || 1,
                     medicine_name:
                         medicines.find(
-                            (m) =>
-                                String(m.id) === String(line.medicine_id),
+                            (m) => String(m.id) === String(line.medicine_id),
                         )?.name ?? "",
                 })),
                 instructions: data.instructions,
@@ -1005,8 +1026,7 @@ export default function PetShow({
             );
             const manualBillingEntries = billingLines.map(
                 ({ unit_price, quantity }) => ({
-                    unit_price:
-                        unit_price === "" ? 0 : Number(unit_price),
+                    unit_price: unit_price === "" ? 0 : Number(unit_price),
                     quantity: quantity === "" ? 1 : Number(quantity),
                     source: "manual",
                 }),
@@ -1181,6 +1201,10 @@ export default function PetShow({
     };
 
     const startEditHealthRecord = (record) => {
+        if (!canModifyHealthRecord(record)) {
+            return;
+        }
+
         setEditingHealthRecordId(record.id);
         setEditingStickerPhotoUrl(record.sticker_photo_url || null);
         setViewingRecord(null);
@@ -1364,6 +1388,7 @@ export default function PetShow({
                                         src={pet.photo_url}
                                         alt={pet.pet_name}
                                         title={`${pet.pet_name} — Pet Photo`}
+                                        className="!h-45 !w-40"
                                     />
                                 ) : (
                                     <div className="flex h-32 w-32 shrink-0 items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400">
@@ -1429,9 +1454,7 @@ export default function PetShow({
                                     </dd>
                                 </div>
                                 <div>
-                                    <dt className="text-gray-500">
-                                        Medical History
-                                    </dt>
+                                    <dt className="text-gray-500">Remarks</dt>
                                     <dd>
                                         {pet.medical_history || "None recorded"}
                                     </dd>
@@ -1439,7 +1462,23 @@ export default function PetShow({
                             </dl>
                         </div>
 
-                        {can_manage_health_records && (
+                        {can_manage_health_records &&
+                            isPlatformAdmin &&
+                            !activeClinic?.id && (
+                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                                    Select a registered clinic in the{' '}
+                                    <span className="font-medium">
+                                        Clinic Monitor
+                                    </span>{' '}
+                                    bar above to add new health records for that
+                                    clinic. You can still view all records below;
+                                    edit/delete any record when monitoring all
+                                    clinics, or only your selected clinic&apos;s
+                                    records when filtered.
+                                </div>
+                            )}
+
+                        {can_manage_health_records && activeClinic?.id && (
                             <form
                                 ref={healthFormRef}
                                 onSubmit={addHealth}
@@ -1642,6 +1681,7 @@ export default function PetShow({
                                                                                             .category
                                                                                     ] ??
                                                                                         "Medicine"}
+
                                                                                     )
                                                                                 </option>
                                                                             ),
@@ -1725,7 +1765,7 @@ export default function PetShow({
                                                 }
                                                 staff={veterinarians}
                                                 placeholder="Select vet"
-                                                emptyMessage="No veterinarians found. Add a user with the veterinarian role in Admin → Users."
+                                                emptyMessage="No veterinarians assigned to this clinic. Assign staff in Admin → Users."
                                             />
                                             <div>
                                                 <InputLabel value="Follow-up Date" />
@@ -1981,7 +2021,7 @@ export default function PetShow({
                                                 }
                                                 staff={veterinarians}
                                                 placeholder="Select vet"
-                                                emptyMessage="No veterinarians found. Add a user with the veterinarian role in Admin → Users."
+                                                emptyMessage="No veterinarians assigned to this clinic. Assign staff in Admin → Users."
                                             />
                                             <div>
                                                 <InputLabel value="Booster Required?" />
@@ -2103,7 +2143,7 @@ export default function PetShow({
                                                 }
                                                 staff={groomers}
                                                 placeholder="Select groomer"
-                                                emptyMessage="No groomers found. Add a user with the groomer role in Admin → Users."
+                                                emptyMessage="No groomers assigned to this clinic. Assign staff in Admin → Users."
                                             />
                                             <div>
                                                 <InputLabel value="Next Grooming Date" />
@@ -2158,7 +2198,7 @@ export default function PetShow({
                                                 }
                                                 staff={veterinarians}
                                                 placeholder="Select vet"
-                                                emptyMessage="No veterinarians found. Add a user with the veterinarian role in Admin → Users."
+                                                emptyMessage="No veterinarians assigned to this clinic. Assign staff in Admin → Users."
                                             />
                                             <div>
                                                 <InputLabel value="Stitches Removal Date" />
@@ -2663,6 +2703,23 @@ export default function PetShow({
                                         )}
                                     </div>
 
+                                    {!showBillingSummary &&
+                                        healthForm.data.type !==
+                                            "medication" && (
+                                            <p className="mb-3 text-xs text-indigo-700">
+                                                Press{" "}
+                                                <span className="font-semibold">
+                                                    +
+                                                </span>{" "}
+                                                to bill this service
+                                                automatically — it will appear
+                                                under "Generate Invoice from
+                                                Services" in Billing. Leave it
+                                                empty to bill manually later via
+                                                "Create Invoice (Manual)".
+                                            </p>
+                                        )}
+
                                     {showBillingSummary ? (
                                         <div className="space-y-3">
                                             {healthForm.data.type ===
@@ -2670,12 +2727,11 @@ export default function PetShow({
                                                 hasMedicationCharges && (
                                                     <p className="text-xs text-gray-600">
                                                         Medicine charges are
-                                                        included in the
-                                                        subtotal automatically.
+                                                        included in the subtotal
+                                                        automatically.
                                                     </p>
                                                 )}
-                                            {billingLines.map(
-                                                (line, index) => (
+                                            {billingLines.map((line, index) => (
                                                 <div
                                                     key={line.id}
                                                     className="rounded-md border border-indigo-100 bg-white p-3"
@@ -2843,7 +2899,9 @@ export default function PetShow({
                                                                         ) ||
                                                                             0) /
                                                                             100)
-                                                                    ).toFixed(2)}`}
+                                                                    ).toFixed(
+                                                                        2,
+                                                                    )}`}
                                                                 {Number(
                                                                     discountAmount,
                                                                 ) > 0 &&
@@ -2953,6 +3011,18 @@ export default function PetShow({
                                                 {r.created_at &&
                                                     ` · Logged ${formatDateTime(r.created_at)}`}
                                             </p>
+                                            {(r.clinic?.name || r.clinic_id) && (
+                                                <p className="mt-0.5 text-xs text-gray-500">
+                                                    Recorded at:{" "}
+                                                    {r.clinic?.name ??
+                                                        `Clinic #${r.clinic_id}`}
+                                                    {!canModifyHealthRecord(r) && (
+                                                        <span className="ms-2 rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
+                                                            View only
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            )}
                                             {Object.entries(
                                                 getDisplayableRecordDetails(r),
                                             )
@@ -3038,7 +3108,7 @@ export default function PetShow({
                                                     <span className="text-gray-600">
                                                         Vaccine sticker attached
                                                     </span>
-                                                    {can_manage_health_records && (
+                                                    {canModifyHealthRecord(r) && (
                                                         <button
                                                             type="button"
                                                             onClick={() =>
@@ -3064,7 +3134,7 @@ export default function PetShow({
                                             >
                                                 View
                                             </button>
-                                            {can_manage_health_records && (
+                                            {canModifyHealthRecord(r) && (
                                                 <>
                                                     <button
                                                         type="button"
@@ -3122,6 +3192,21 @@ export default function PetShow({
                                         <h3 className="mt-2 text-lg font-semibold text-gray-900">
                                             {viewingRecord.title}
                                         </h3>
+                                        {(viewingRecord.clinic?.name ||
+                                            viewingRecord.clinic_id) && (
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Recorded at:{" "}
+                                                {viewingRecord.clinic?.name ??
+                                                    `Clinic #${viewingRecord.clinic_id}`}
+                                                {!canModifyHealthRecord(
+                                                    viewingRecord,
+                                                ) && (
+                                                    <span className="ms-2 rounded bg-gray-100 px-1.5 py-0.5 text-gray-600">
+                                                        View only
+                                                    </span>
+                                                )}
+                                            </p>
+                                        )}
                                     </div>
                                     <SecondaryButton
                                         type="button"
@@ -3260,7 +3345,9 @@ export default function PetShow({
                                                     const discount =
                                                         billingDetails.billing_discount;
 
-                                                    if (subtotal !== undefined) {
+                                                    if (
+                                                        subtotal !== undefined
+                                                    ) {
                                                         return (
                                                             <>
                                                                 <p>
@@ -3331,7 +3418,7 @@ export default function PetShow({
                                                         className="max-h-64 max-w-full rounded-lg border border-gray-200 object-contain"
                                                         hint="Click to zoom"
                                                     />
-                                                    {can_manage_health_records && (
+                                                    {canModifyHealthRecord(viewingRecord) && (
                                                         <button
                                                             type="button"
                                                             onClick={() =>

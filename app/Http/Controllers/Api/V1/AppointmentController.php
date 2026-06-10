@@ -8,6 +8,7 @@ use App\Http\Resources\PetResource;
 use App\Models\Appointment;
 use App\Models\Client;
 use App\Models\Pet;
+use App\Support\ClinicDateTime;
 use App\Support\ClinicServices;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -21,14 +22,16 @@ class AppointmentController extends Controller
     {
         $user = $this->currentUser();
 
-        $appointmentsQuery = Appointment::with(['pet', 'client'])->orderByDesc('scheduled_at');
+        $appointmentsQuery = Appointment::with(['pet', 'client'])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
         $petsQuery = Pet::with('client')->orderBy('pet_name');
         $clientsQuery = Client::orderBy('name');
 
         if ($user?->isCustomer()) {
             $clientId = $this->customerClientId($user);
             $appointmentsQuery->where('client_id', $clientId);
-            $petsQuery->where('client_id', $clientId);
+            $petsQuery->where('client_id', $clientId)->active();
             $clientsQuery->whereKey($clientId);
         }
 
@@ -65,6 +68,12 @@ class AppointmentController extends Controller
             abort(422, 'Selected pet does not belong to selected client.');
         }
 
+        if ($user?->isCustomer() && ! $pet->is_active) {
+            abort(422, 'This pet is deactivated. Reactivate it before scheduling an appointment.');
+        }
+
+        $validated['scheduled_at'] = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);
+
         $appointment = Appointment::create($validated);
 
         return $this->created([
@@ -96,6 +105,8 @@ class AppointmentController extends Controller
         if ((int) $pet->client_id !== (int) $validated['client_id']) {
             abort(422, 'Selected pet does not belong to selected client.');
         }
+
+        $validated['scheduled_at'] = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);
 
         $appointment->update($validated);
 

@@ -15,14 +15,16 @@ use Inertia\Response;
 
 class PetShopBillingController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
         $user = $this->currentUser();
-        $canManage = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist']);
+        $canManage = (bool) $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'clinic_owner']);
+        $clinicId  = $request->attributes->get('active_clinic_id');
 
         $orders = Billing::query()
             ->with(['client', 'lineItems.medicine', 'payments'])
             ->where('sale_type', 'pet_shop_retail')
+            ->forClinic($clinicId)
             ->latest()
             ->get();
 
@@ -48,6 +50,7 @@ class PetShopBillingController extends Controller
     {
         $this->ensureRetailOrder($billing);
         $this->ensureCanManage($this->currentUser());
+        $this->ensureBillingForActiveClinic($request, $billing);
 
         if ($billing->inventory_deducted) {
             return redirect()
@@ -85,6 +88,7 @@ class PetShopBillingController extends Controller
         $this->ensureRetailOrder($billing);
         $user = $this->currentUser();
         $this->ensureCanManage($user);
+        $this->ensureBillingForActiveClinic($request, $billing);
 
         if ($billing->status === 'cancelled') {
             return redirect()->back()->withErrors(['payment' => 'Cancelled orders cannot receive payments.']);
@@ -129,10 +133,11 @@ class PetShopBillingController extends Controller
         return redirect()->back()->with('success', 'Payment recorded successfully.');
     }
 
-    public function destroy(Billing $billing): RedirectResponse
+    public function destroy(Request $request, Billing $billing): RedirectResponse
     {
         $this->ensureRetailOrder($billing);
         $this->ensureCanManage($this->currentUser());
+        $this->ensureBillingForActiveClinic($request, $billing);
 
         if ($billing->status === 'paid') {
             return redirect()->back()->withErrors(['order' => 'Paid orders cannot be deleted.']);
@@ -156,7 +161,16 @@ class PetShopBillingController extends Controller
 
     private function ensureCanManage(?User $user): void
     {
-        if (! $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist'])) {
+        if (! $user?->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'clinic_owner'])) {
+            abort(403);
+        }
+    }
+
+    private function ensureBillingForActiveClinic(Request $request, Billing $billing): void
+    {
+        $clinicId = $request->attributes->get('active_clinic_id');
+
+        if ($clinicId !== null && (int) $billing->clinic_id !== (int) $clinicId) {
             abort(403);
         }
     }

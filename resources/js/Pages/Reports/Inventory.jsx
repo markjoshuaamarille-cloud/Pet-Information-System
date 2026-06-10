@@ -1,9 +1,12 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ListDisplayControls from '@/Components/ListDisplayControls';
 import useListDisplayLimit from '@/hooks/useListDisplayLimit';
-import { Head, Link } from '@inertiajs/react';
+import { clinicScopeSubtitle, clinicScopeTitle } from '@/utils/clinicScope';
+import { Head, Link, usePage } from '@inertiajs/react';
 
 export default function ReportsInventory({ medicines }) {
+    const activeClinic = usePage().props.activeClinic;
+    const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const {
         visibleItems: visibleMedicines,
         displayLimit,
@@ -13,7 +16,18 @@ export default function ReportsInventory({ medicines }) {
     } = useListDisplayLimit(medicines);
 
     return (
-        <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Inventory Report</h2>}>
+        <AuthenticatedLayout
+            header={
+                <div>
+                    <h2 className="text-xl font-semibold text-gray-800">
+                        {clinicScopeTitle('Inventory Report', activeClinic, isPlatformAdmin)}
+                    </h2>
+                    {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
+                        <p className="mt-1 text-sm text-gray-500">{clinicScopeSubtitle(activeClinic, isPlatformAdmin)}</p>
+                    )}
+                </div>
+            }
+        >
             <Head title="Inventory Report" />
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">

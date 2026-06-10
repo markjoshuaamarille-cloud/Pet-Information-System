@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\Client;
 use App\Models\User;
+use App\Support\GeoapifyAddress;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -52,16 +53,26 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|lowercase|email|max:255|unique:'.User::class,
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
+            ...GeoapifyAddress::validationRules(requireCoordinates: true),
         ]);
+
+        $location = GeoapifyAddress::normalizeClientFields($validated);
 
         $client = Client::firstOrCreate(
             ['email' => $validated['email']],
             [
                 'name' => $validated['name'],
                 'contact' => 'N/A',
-                'address' => null,
+                ...$location,
             ]
         );
+
+        if (! $client->wasRecentlyCreated) {
+            $client->update([
+                'name' => $validated['name'],
+                ...$location,
+            ]);
+        }
 
         $user = User::create([
             'name' => $validated['name'],

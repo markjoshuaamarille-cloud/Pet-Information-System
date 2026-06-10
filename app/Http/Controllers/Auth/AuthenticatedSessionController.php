@@ -37,14 +37,14 @@ class AuthenticatedSessionController extends Controller
         // Avoid redirecting to a stale intended URL the user's role cannot access.
         $request->session()->forget('url.intended');
 
-        $dashboardUrl = route('dashboard', absolute: false);
+        $redirectUrl = $request->user()->postLoginRedirectUrl();
 
         // Force a full page load so the browser applies the regenerated session cookie.
         if ($request->header('X-Inertia')) {
-            return Inertia::location($dashboardUrl);
+            return Inertia::location($redirectUrl);
         }
 
-        return redirect($dashboardUrl);
+        return redirect($redirectUrl);
     }
 
     /**
