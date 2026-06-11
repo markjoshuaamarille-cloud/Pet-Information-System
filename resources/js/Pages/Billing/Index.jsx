@@ -478,10 +478,10 @@ export default function BillingIndex({
                                 value: "clinic_service",
                                 label: "Clinic services",
                             },
-                            {
-                                value: "pet_shop_retail",
-                                label: "Pet shop sales",
-                            },
+                            // {
+                            //     value: "pet_shop_retail",
+                            //     label: "Pet shop sales",
+                            // },
                         ].map((option) => (
                             <button
                                 key={option.value}

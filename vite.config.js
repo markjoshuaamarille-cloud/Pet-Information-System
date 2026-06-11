@@ -25,8 +25,8 @@ export default defineConfig({
         host: "localhost",
         port: 5173,
         strictPort: true,
-        // ✅ FIX: Full URL → opens directly to port 8000/login
-        open: "http://127.0.0.1:8000/login",
+
+        open: "http://127.0.0.1:8000",
         proxy: {
             "/": {
                 target: laravelUrl,
