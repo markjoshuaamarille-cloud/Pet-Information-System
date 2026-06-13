@@ -22,14 +22,7 @@ class HealthRecordController extends Controller
 
     public function store(Request $request, Pet $pet): RedirectResponse
     {
-        $validated = $this->validatePayload($request);
-        $medicationLines = $this->normalizedMedicationLines($validated);
-
-        if ($error = $this->syncMedicationInventory([], $medicationLines)) {
-            return redirect()
-                ->route('pets.show', $pet)
-                ->withErrors(['medication_quantity' => $error]);
-        }
+        $validated = $this->validatePayload($request, $pet);
 
         if ($error = $this->applyStickerChanges($request, $validated)) {
             return redirect()
@@ -62,15 +55,7 @@ class HealthRecordController extends Controller
         abort_unless($healthRecord->pet_id === $pet->id, 404);
         $this->ensureCanModifyHealthRecord($request, $healthRecord);
 
-        $validated = $this->validatePayload($request);
-        $previousMedicationLines = $this->medicationLinesFromRecord($healthRecord);
-        $medicationLines = $this->normalizedMedicationLines($validated);
-
-        if ($error = $this->syncMedicationInventory($previousMedicationLines, $medicationLines)) {
-            return redirect()
-                ->route('pets.show', $pet)
-                ->withErrors(['medication_quantity' => $error]);
-        }
+        $validated = $this->validatePayload($request, $pet);
 
         if ($error = $this->applyStickerChanges($request, $validated, $healthRecord)) {
             return redirect()
@@ -130,7 +115,7 @@ class HealthRecordController extends Controller
         return redirect()->route('pets.show', $pet)->with('success', 'Vaccine sticker removed.');
     }
 
-    private function validatePayload(Request $request): array
+    private function validatePayload(Request $request, Pet $pet): array
     {
         $validated = $request->validate([
             'type' => ClinicServices::healthRecordTypeValidationRule(),
@@ -149,6 +134,21 @@ class HealthRecordController extends Controller
             'medication_lines.*.medicine_id' => 'required|exists:medicines,id',
             'medication_lines.*.medication_quantity' => 'required|integer|min:1',
             'service_catalog_id' => 'nullable|exists:service_catalogs,id',
+            'appointment_id' => [
+                'nullable',
+                Rule::exists('appointments', 'id')->where(
+                    function ($query) use ($pet, $request) {
+                        $query
+                            ->where('pet_id', $pet->id)
+                            ->whereIn('status', ['scheduled', 'completed']);
+
+                        $clinicId = ClinicContext::activeClinicId($request);
+                        if ($clinicId) {
+                            $query->where('clinic_id', $clinicId);
+                        }
+                    }
+                ),
+            ],
             'unit_price' => 'nullable|numeric|min:0',
             'quantity' => 'nullable|integer|min:1',
             'record_date' => 'required|date',
@@ -400,7 +400,7 @@ class HealthRecordController extends Controller
             $formQuantity = isset($validated['quantity']) ? (int) $validated['quantity'] : null;
 
             // Frontend sends the summed total as unit_price with quantity=1 for multi-line billing.
-            if ($providedPrice !== null && $formQuantity === 1) {
+            if ($providedPrice !== null && $providedPrice > 0 && $formQuantity === 1) {
                 $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
                 $validated['unit_price'] = (float) $providedPrice;
                 $validated['quantity'] = 1;
@@ -409,19 +409,12 @@ class HealthRecordController extends Controller
                 return;
             }
 
+            // Pet profile medication records are clinical-only; billing uses appointment services.
             $quantity = max((int) ($validated['medication_quantity'] ?? 1), 1);
-            $medicineQuery = Medicine::query()->whereKey($validated['medicine_id']);
-            if ($clinicId) {
-                $medicineQuery->where('clinic_id', $clinicId);
-            }
-            $unitPrice = $providedPrice !== null
-                ? (float) $providedPrice
-                : (float) ($medicineQuery->value('unit_price') ?? 0);
-
-            $validated['service_catalog_id'] = $validated['service_catalog_id'] ?? null;
-            $validated['unit_price'] = $unitPrice;
+            $validated['service_catalog_id'] = null;
+            $validated['unit_price'] = 0;
             $validated['quantity'] = $quantity;
-            $validated['line_total'] = round($unitPrice * $quantity, 2);
+            $validated['line_total'] = 0;
 
             return;
         }

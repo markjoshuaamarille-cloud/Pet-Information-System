@@ -1,4 +1,5 @@
 import { Head, Link } from '@inertiajs/react';
+import FlashMessage from '@/Components/FlashMessage';
 
 const formatDate = (value) => {
     if (!value) {
@@ -56,6 +57,7 @@ export default function BillingReceipt({ billing }) {
         <div className="min-h-screen bg-white p-8 print:p-4">
             <Head title={`Receipt - ${billing.invoice_number}`} />
             <div className="mx-auto max-w-3xl">
+                <FlashMessage />
                 <div className="mb-6 border-b pb-4 text-center">
                     <h1 className="text-2xl font-bold">Pet Care Management System</h1>
                     <p className="text-gray-600">Official Receipt / Invoice</p>
@@ -92,9 +94,13 @@ export default function BillingReceipt({ billing }) {
                     </div>
                 </section>
 
-                {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail' && billing.line_items?.length > 0 && (
+                {(billing.line_items?.length > 0) && (
                     <section className="mb-6">
-                        <h2 className="mb-3 text-lg font-semibold">Products</h2>
+                        <h2 className="mb-3 text-lg font-semibold">
+                            {(billing.sale_type ?? 'clinic_service') === 'pet_shop_retail'
+                                ? 'Products'
+                                : 'Services & Charges'}
+                        </h2>
                         <table className="w-full border text-sm">
                             <thead>
                                 <tr className="bg-gray-100">

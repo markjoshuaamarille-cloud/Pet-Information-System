@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\Billing;
+use App\Models\BillingLineItem;
 use App\Models\Client;
 use App\Models\HealthRecord;
 use App\Models\Payment;
@@ -13,6 +14,8 @@ use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Validation\ValidationException;
 use App\Support\ClinicBilling;
 use App\Support\ClinicContext;
 use App\Support\ClinicPatientScope;
@@ -36,10 +39,10 @@ class BillingController extends Controller
             $billingsQuery->whereRaw('0 = 1');
         }
 
+        // For the edit-invoice form: clients, pets, service catalogs, appointments
         $clients = collect();
         $pets = collect();
         $serviceCatalogs = collect();
-        $billablePets = collect();
         $appointments = collect();
 
         if ($canManageBilling) {
@@ -54,7 +57,6 @@ class BillingController extends Controller
                 $serviceCatalogs = ServiceCatalog::forClinic($clinicId)
                     ->orderBy('name')
                     ->get(['id', 'code', 'name', 'category', 'default_price']);
-                $billablePets = ClinicBilling::billablePets($clinicId);
                 $appointments = Appointment::with(['pet:id,pet_name,client_id', 'client:id,name'])
                     ->where('clinic_id', $clinicId)
                     ->whereIn('status', ['scheduled', 'completed'])
@@ -76,7 +78,6 @@ class BillingController extends Controller
                 $clients = Client::orderBy('name')->get(['id', 'name']);
                 $pets = Pet::with('client')->orderBy('pet_name')->get();
                 $serviceCatalogs = ServiceCatalog::query()->orderBy('name')->get(['id', 'code', 'name', 'category', 'default_price']);
-                $billablePets = ClinicBilling::billablePets(null);
                 $appointments = Appointment::with(['pet:id,pet_name,client_id', 'client:id,name'])
                     ->whereIn('status', ['scheduled', 'completed'])
                     ->orderByDesc('scheduled_at')
@@ -104,8 +105,8 @@ class BillingController extends Controller
             'clients' => $clients,
             'pets' => $pets,
             'serviceCatalogs' => $serviceCatalogs,
-            'billablePets' => $billablePets,
             'can_manage_billing' => $canManageBilling,
+            'can_delete_billing' => (bool) ($user?->hasAnyRole(['super_admin', 'clinic_owner'])),
             'appointments' => $appointments,
             'requires_clinic_context' => $restrictToClinic && ! $clinicId,
         ]);
@@ -117,6 +118,18 @@ class BillingController extends Controller
      */
     public function generateFromPet(Request $request, Pet $pet): RedirectResponse
     {
+        $recordIds = $request->input('health_record_ids');
+
+        if (is_array($recordIds) && count($recordIds) > 0) {
+            $request->merge([
+                'pet_id' => $pet->id,
+                'client_id' => $pet->client_id,
+                'health_record_ids' => $recordIds,
+            ]);
+
+            return $this->checkout($request);
+        }
+
         $clinicId = ClinicContext::activeClinicId($request);
 
         if (! $clinicId) {
@@ -133,15 +146,127 @@ class BillingController extends Controller
                 ->withErrors(['pet_id' => 'This pet has no unbilled services to invoice for this clinic.']);
         }
 
-        $charges = ClinicBilling::aggregateServiceCharges($records);
+        $request->merge([
+            'client_id' => $pet->client_id,
+            'pet_id' => $pet->id,
+            'health_record_ids' => $records->pluck('id')->all(),
+            'tax' => ClinicBilling::suggestedChargesFromRecords($records)['tax'],
+            'discount' => ClinicBilling::suggestedChargesFromRecords($records)['discount'],
+        ]);
 
-        $billing = DB::transaction(function () use ($pet, $records, $charges, $clinicId) {
+        return $this->checkout($request);
+    }
+
+    /**
+     * Unified checkout: selected health records + optional walk-in lines → one invoice.
+     */
+    public function checkout(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'client_id' => 'required|exists:clients,id',
+            'pet_id' => 'nullable|exists:pets,id',
+            'appointment_id' => [
+                'nullable',
+                Rule::exists('appointments', 'id')->where(
+                    fn ($query) => $query->where('status', 'completed')
+                ),
+            ],
+            'health_record_ids' => 'array',
+            'health_record_ids.*' => 'integer|exists:health_records,id',
+            'extra_lines' => 'array',
+            'extra_lines.*.description' => 'required|string|max:255',
+            'extra_lines.*.quantity' => 'required|integer|min:1',
+            'extra_lines.*.unit_price' => 'required|numeric|min:0',
+            'tax' => 'nullable|numeric|min:0',
+            'discount' => 'nullable|numeric|min:0',
+            'due_date' => 'nullable|date',
+            'notes' => 'nullable|string',
+            'collect_payment' => 'boolean',
+            'payment.amount' => 'required_if:collect_payment,true|nullable|numeric|min:0.01',
+            'payment.method' => 'required_if:collect_payment,true|nullable|in:cash,card,gcash,maya,bank_transfer',
+            'payment.paid_at' => 'required_if:collect_payment,true|nullable|date',
+            'payment.reference_number' => 'nullable|string|max:255',
+            'payment.notes' => 'nullable|string',
+        ]);
+
+        $clinicId = ClinicContext::activeClinicId($request);
+
+        if (! $clinicId) {
+            return redirect()
+                ->back()
+                ->withErrors(['clinic_id' => 'Select your clinic before checking out.']);
+        }
+
+        $recordIds = $validated['health_record_ids'] ?? [];
+        $extraLines = $validated['extra_lines'] ?? [];
+
+        if (count($recordIds) === 0 && count($extraLines) === 0) {
+            return redirect()
+                ->back()
+                ->withErrors(['health_record_ids' => 'Select at least one service or add a walk-in charge.']);
+        }
+
+        $recordsQuery = HealthRecord::query()
+            ->whereIn('id', $recordIds)
+            ->billableForCheckout()
+            ->where('clinic_id', $clinicId);
+
+        $records = $recordsQuery->get();
+
+        if ($records->count() !== count($recordIds)) {
+            return redirect()
+                ->back()
+                ->withErrors(['health_record_ids' => 'One or more selected services are no longer available to bill.']);
+        }
+
+        $recordPetIds = $records->pluck('pet_id')->unique()->values();
+        $recordClientIds = $records->loadMissing('pet')->pluck('pet.client_id')->unique()->filter();
+
+        if ($recordClientIds->count() > 1 || ($recordClientIds->isNotEmpty() && (int) $recordClientIds->first() !== (int) $validated['client_id'])) {
+            return redirect()
+                ->back()
+                ->withErrors(['client_id' => 'Selected services must belong to the chosen client.']);
+        }
+
+        if ($recordPetIds->count() > 1) {
+            if (empty($validated['pet_id'])) {
+                return redirect()
+                    ->back()
+                    ->withErrors(['pet_id' => 'Selected services belong to different pets. Choose one pet at a time.']);
+            }
+
+            $invalidPet = $records->first(fn (HealthRecord $record) => (int) $record->pet_id !== (int) $validated['pet_id']);
+            if ($invalidPet) {
+                return redirect()
+                    ->back()
+                    ->withErrors(['pet_id' => 'All selected services must belong to the chosen pet.']);
+            }
+        }
+
+        if (! empty($validated['pet_id'])) {
+            $invalidPet = $records->first(fn (HealthRecord $record) => (int) $record->pet_id !== (int) $validated['pet_id']);
+            if ($invalidPet) {
+                return redirect()
+                    ->back()
+                    ->withErrors(['pet_id' => 'All selected services must belong to the chosen pet.']);
+            }
+        }
+
+        $suggested = ClinicBilling::suggestedChargesFromRecords($records);
+        $invoiceTax = (float) ($validated['tax'] ?? $suggested['tax']);
+        $invoiceDiscount = (float) ($validated['discount'] ?? $suggested['discount']);
+        $charges = ClinicBilling::checkoutTotals($records, $extraLines, $invoiceTax, $invoiceDiscount);
+
+        $petId = $validated['pet_id'] ?? ($recordPetIds->count() === 1 ? $recordPetIds->first() : null);
+
+        $billing = DB::transaction(function () use ($validated, $records, $extraLines, $charges, $clinicId, $petId, $request) {
             $billing = Billing::create([
                 'clinic_id'      => $clinicId,
                 'invoice_number' => ClinicBilling::generateInvoiceNumber(),
                 'sale_type'      => 'clinic_service',
-                'client_id'      => $pet->client_id,
-                'pet_id'         => $pet->id,
+                'client_id'      => $validated['client_id'],
+                'pet_id'         => $petId,
+                'appointment_id' => $validated['appointment_id'] ?? null,
                 'subtotal'       => $charges['subtotal'],
                 'tax'            => $charges['tax'],
                 'tax_applied'    => $charges['tax_applied'],
@@ -150,19 +275,86 @@ class BillingController extends Controller
                 'total_amount'   => $charges['total'],
                 'amount_paid'    => 0,
                 'status'         => 'unpaid',
-                'notes'          => 'Auto-generated from health records: '
-                    .$records->pluck('title')->implode(', '),
+                'due_date'       => $validated['due_date'] ?? null,
+                'notes'          => $validated['notes']
+                    ?? $this->checkoutNotesFromRecords($records, $extraLines),
             ]);
 
-            HealthRecord::whereIn('id', $records->pluck('id'))
-                ->update(['billing_id' => $billing->id]);
+            foreach ($records as $record) {
+                BillingLineItem::create([
+                    'billing_id'  => $billing->id,
+                    'description' => $record->title,
+                    'quantity'    => max((int) $record->quantity, 1),
+                    'unit_price'  => (float) $record->unit_price,
+                    'line_total'  => (float) $record->line_total,
+                ]);
 
-            return $billing;
+                $record->update([
+                    'billing_id' => $billing->id,
+                    'invoiced_at' => now(),
+                ]);
+            }
+
+            foreach ($extraLines as $line) {
+                $quantity = max((int) $line['quantity'], 1);
+                $unitPrice = (float) $line['unit_price'];
+                BillingLineItem::create([
+                    'billing_id'  => $billing->id,
+                    'description' => $line['description'],
+                    'quantity'    => $quantity,
+                    'unit_price'  => $unitPrice,
+                    'line_total'  => round($unitPrice * $quantity, 2),
+                ]);
+            }
+
+            if ($request->boolean('collect_payment') && ! empty($validated['payment']['amount'])) {
+                $paymentData = $validated['payment'];
+                Payment::create([
+                    'billing_id' => $billing->id,
+                    'amount' => (float) $paymentData['amount'],
+                    'method' => $paymentData['method'],
+                    'paid_at' => $paymentData['paid_at'],
+                    'reference_number' => $paymentData['reference_number'] ?? null,
+                    'notes' => $paymentData['notes'] ?? null,
+                ]);
+
+                $amountPaid = min((float) $paymentData['amount'], $charges['total']);
+                $status = $this->statusFromAmounts($amountPaid, $charges['total'], 'unpaid');
+
+                $billing->update([
+                    'amount_paid' => $amountPaid,
+                    'status' => $status,
+                ]);
+            }
+
+            $this->syncAppointmentBillingStatus($billing);
+
+            return $billing->fresh();
         });
 
+        $message = "Invoice {$billing->invoice_number} created.";
+        if ($request->boolean('collect_payment')) {
+            $message .= $billing->status === 'paid' ? ' Payment recorded.' : ' Partial payment recorded.';
+        }
+
         return redirect()
-            ->route('billing.index')
-            ->with('success', "Invoice {$billing->invoice_number} generated from {$records->count()} service(s).");
+            ->route('billing.receipt', $billing)
+            ->with('success', $message);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, HealthRecord>  $records
+     * @param  array<int, array{description: string}>  $extraLines
+     */
+    private function checkoutNotesFromRecords($records, array $extraLines): string
+    {
+        $parts = $records->pluck('title')->all();
+
+        foreach ($extraLines as $line) {
+            $parts[] = $line['description'];
+        }
+
+        return 'Checkout: '.implode(', ', $parts);
     }
 
     public function store(Request $request): RedirectResponse
@@ -251,12 +443,62 @@ class BillingController extends Controller
             'status' => $status,
         ]);
 
+        $this->syncAppointmentBillingStatus($billing->fresh());
+
         return redirect()->back()->with('success', 'Invoice updated successfully.');
     }
 
-    public function destroy(Billing $billing): RedirectResponse
+    public function destroy(Request $request, Billing $billing): RedirectResponse
     {
-        $billing->delete();
+        $user = $this->currentUser();
+
+        if (! $user?->hasAnyRole(['super_admin', 'clinic_owner'])) {
+            abort(403, 'Only a super admin or clinic owner can delete invoices.');
+        }
+
+        if ($user->isClinicOwner() && ! $user->isPlatformAdmin()) {
+            $clinicId = ClinicContext::activeClinicId($request) ?? $billing->clinic_id;
+
+            if (! $clinicId || (int) $billing->clinic_id !== (int) $clinicId) {
+                abort(403, 'You can only delete invoices for your active clinic.');
+            }
+
+            if (! $user->clinics()->where('clinics.id', $clinicId)->exists()) {
+                abort(403, 'You are not assigned to this clinic.');
+            }
+        }
+
+        $request->validate([
+            'password' => ['required', 'string'],
+        ], [
+            'password.required' => 'Your password is required to delete an invoice.',
+        ]);
+
+        if (! Hash::check($request->input('password'), $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => 'The password you entered is incorrect.',
+            ]);
+        }
+
+        DB::transaction(function () use ($billing): void {
+            $appointmentId = $billing->appointment_id;
+            $wasPaid = $billing->status === 'paid';
+
+            HealthRecord::query()
+                ->where('billing_id', $billing->id)
+                ->whereNull('invoiced_at')
+                ->update(['invoiced_at' => now()]);
+
+            $billing->delete();
+
+            if ($appointmentId) {
+                Appointment::query()
+                    ->whereKey($appointmentId)
+                    ->update([
+                        'billing_status' => $wasPaid ? 'paid' : null,
+                    ]);
+            }
+        });
 
         return redirect()->back()->with('success', 'Invoice deleted.');
     }
@@ -284,6 +526,8 @@ class BillingController extends Controller
                 'amount_paid' => min($newAmountPaid, (float) $billing->total_amount),
                 'status' => $status,
             ]);
+
+            $this->syncAppointmentBillingStatus($billing->fresh());
         });
 
         return redirect()->back()->with('success', 'Payment posted successfully.');
@@ -365,5 +609,20 @@ class BillingController extends Controller
         }
 
         return max((float) ($validated['subtotal'] ?? 0), 0);
+    }
+
+    private function syncAppointmentBillingStatus(Billing $billing): void
+    {
+        if (! $billing->appointment_id) {
+            return;
+        }
+
+        Appointment::query()
+            ->whereKey($billing->appointment_id)
+            ->update([
+                'billing_status' => $billing->status === 'cancelled'
+                    ? null
+                    : $billing->status,
+            ]);
     }
 }

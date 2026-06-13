@@ -117,17 +117,25 @@ class PetController extends Controller
         $user = $this->currentUser();
         $this->ensureCustomerOwnsPet($user, $pet);
 
+        $clinicId = $request->attributes->get('active_clinic_id');
+
         // Load clinical records with clinic label (hybrid: global pet, all-clinic records)
         $pet->load([
             'client',
             'healthRecords.medicine',
             'healthRecords.clinic',
+            'healthRecords.billing:id,status,invoice_number',
+            'appointments' => fn ($query) => $query
+                ->where('pet_id', $pet->id)
+                ->when($clinicId, fn ($q) => $q->where('clinic_id', $clinicId))
+                ->whereIn('status', ['scheduled', 'completed'])
+                ->orderByDesc('scheduled_at'),
+            'appointments.pet:id,pet_name,client_id',
+            'appointments.client:id,name',
             'appointments.clinic',
             'vaccinations.clinic',
             'groomingRecords.clinic',
         ]);
-
-        $clinicId = $request->attributes->get('active_clinic_id');
 
         return Inertia::render('Pets/Show', [
             'pet' => $pet,

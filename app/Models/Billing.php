@@ -12,6 +12,17 @@ class Billing extends Model
 {
     use HasFactory, BelongsToClinic;
 
+    protected static function booted(): void
+    {
+        static::deleting(function (Billing $billing): void {
+            // Preserve invoiced status after billing_id is nulled by FK on delete.
+            HealthRecord::query()
+                ->where('billing_id', $billing->id)
+                ->whereNull('invoiced_at')
+                ->update(['invoiced_at' => now()]);
+        });
+    }
+
     protected $fillable = [
         'clinic_id',
         'invoice_number',

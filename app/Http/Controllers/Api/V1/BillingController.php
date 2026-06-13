@@ -59,8 +59,7 @@ class BillingController extends Controller
     public function generateFromPet(Pet $pet): JsonResponse
     {
         $records = $pet->healthRecords()
-            ->whereNull('billing_id')
-            ->where('line_total', '>', 0)
+            ->billableForCheckout()
             ->get();
 
         if ($records->isEmpty()) {
@@ -83,7 +82,10 @@ class BillingController extends Controller
                 'notes' => 'Auto-generated from health records: '.$records->pluck('title')->implode(', '),
             ]);
 
-            HealthRecord::whereIn('id', $records->pluck('id'))->update(['billing_id' => $billing->id]);
+            HealthRecord::whereIn('id', $records->pluck('id'))->update([
+                'billing_id' => $billing->id,
+                'invoiced_at' => now(),
+            ]);
 
             return $billing;
         });
@@ -235,9 +237,9 @@ class BillingController extends Controller
     private function billablePets()
     {
         return Pet::with('client:id,name')
-            ->whereHas('healthRecords', fn ($query) => $query->whereNull('billing_id')->where('line_total', '>', 0))
-            ->withSum(['healthRecords as unbilled_total' => fn ($query) => $query->whereNull('billing_id')->where('line_total', '>', 0)], 'line_total')
-            ->withCount(['healthRecords as unbilled_count' => fn ($query) => $query->whereNull('billing_id')->where('line_total', '>', 0)])
+            ->whereHas('healthRecords', fn ($query) => $query->billableForCheckout())
+            ->withSum(['healthRecords as unbilled_total' => fn ($query) => $query->billableForCheckout()], 'line_total')
+            ->withCount(['healthRecords as unbilled_count' => fn ($query) => $query->billableForCheckout()])
             ->orderBy('pet_name')
             ->get()
             ->map(fn (Pet $pet) => [

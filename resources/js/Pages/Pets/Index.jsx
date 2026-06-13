@@ -49,30 +49,16 @@ const breedOptionsBySpecies = {
         "Scottish Fold",
         "Bengal",
     ],
-    Rabbit: [
-        "Holland Lop",
-        "Netherland Dwarf",
-        "Mini Rex",
-        "Lionhead",
-    ],
+    Rabbit: ["Holland Lop", "Netherland Dwarf", "Mini Rex", "Lionhead"],
     Hamster: ["Syrian", "Dwarf", "Roborovski"],
     "Guinea Pig": ["American", "Abyssinian", "Peruvian", "Skinny Pig"],
-    Bird: [
-        "Parrot",
-        "Cockatiel",
-        "Budgie",
-        "Lovebird",
-        "Canary",
-        "Finch",
-    ],
+    Bird: ["Parrot", "Cockatiel", "Budgie", "Lovebird", "Canary", "Finch"],
     Reptile: ["Bearded Dragon", "Leopard Gecko", "Iguana", "Snake"],
     Turtle: ["Red-Eared Slider", "Box Turtle", "Painted Turtle"],
     Fish: ["Goldfish", "Betta", "Koi", "Guppy"],
 };
 
-const presetBreeds = [
-    ...new Set(Object.values(breedOptionsBySpecies).flat()),
-];
+const presetBreeds = [...new Set(Object.values(breedOptionsBySpecies).flat())];
 
 const defaultBreedOptions = ["Mixed", "Unknown", ...presetBreeds];
 
@@ -424,14 +410,20 @@ export default function PetsIndex({
                 return;
             }
         } else if (
-            !confirm(`Reactivate ${pet.pet_name}? Appointments can be scheduled again.`)
+            !confirm(
+                `Reactivate ${pet.pet_name}? Appointments can be scheduled again.`,
+            )
         ) {
             return;
         }
 
-        router.patch(route("pets.toggle-active", pet.id), {}, {
-            preserveScroll: true,
-        });
+        router.patch(
+            route("pets.toggle-active", pet.id),
+            {},
+            {
+                preserveScroll: true,
+            },
+        );
     };
 
     return (
@@ -439,7 +431,11 @@ export default function PetsIndex({
             header={
                 <div>
                     <h2 className="text-xl font-semibold text-gray-800">
-                        {clinicScopeTitle("Pet Records", activeClinic, isPlatformAdmin)}
+                        {clinicScopeTitle(
+                            "Pet Records",
+                            activeClinic,
+                            isPlatformAdmin,
+                        )}
                     </h2>
                     {clinicScopeSubtitle(activeClinic, isPlatformAdmin) && (
                         <p className="mt-1 text-sm text-gray-500">
@@ -800,7 +796,7 @@ export default function PetsIndex({
                                         Vaccination
                                     </th>
                                     <th className="px-4 py-3 text-left">
-                                        Owner
+                                        Pet Owner
                                     </th>
                                     <th className="px-4 py-3 text-left">
                                         Status
@@ -912,7 +908,8 @@ export default function PetsIndex({
                                                             togglePetStatus(p)
                                                         }
                                                         className={`ms-3 hover:underline ${
-                                                            p.is_active === false
+                                                            p.is_active ===
+                                                            false
                                                                 ? "text-emerald-600"
                                                                 : "text-red-600"
                                                         }`}

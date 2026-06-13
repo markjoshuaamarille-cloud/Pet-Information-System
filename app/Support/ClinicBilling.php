@@ -12,62 +12,13 @@ class ClinicBilling
 {
     public static function generateInvoiceNumber(): string
     {
-        $prefix = 'INV-'.now()->format('Ymd');
-        $count = Billing::whereDate('created_at', today())->count() + 1;
-
-        return sprintf('%s-%04d', $prefix, $count);
-    }
-
-    /**
-     * Create a clinic-service invoice for a priced health record when none exists yet.
-     */
-    public static function createFromHealthRecord(HealthRecord $record): ?Billing
-    {
-        if ($record->billing_id || (float) $record->line_total <= 0 || ! $record->clinic_id) {
-            return null;
-        }
-
-        $pet = $record->pet ?? Pet::find($record->pet_id);
-
-        if (! $pet) {
-            return null;
-        }
-
-        $details = self::serviceDetailsFromDescription($record->description);
-        $subtotal = (float) ($details['billing_subtotal'] ?? $record->line_total);
-        $tax = (float) ($details['billing_tax_amount'] ?? 0);
-        $discount = (float) ($details['billing_discount'] ?? 0);
-        $total = (float) $record->line_total;
-
-        $billing = Billing::create([
-            'clinic_id'          => $record->clinic_id,
-            'invoice_number'     => self::generateInvoiceNumber(),
-            'sale_type'          => 'clinic_service',
-            'client_id'          => $pet->client_id,
-            'pet_id'             => $record->pet_id,
-            'service_catalog_id' => $record->service_catalog_id,
-            'service_unit_price' => $record->unit_price ?? 0,
-            'service_quantity'   => $record->quantity ?? 1,
-            'subtotal'           => $subtotal > 0 ? $subtotal : $total,
-            'tax'                => $tax,
-            'tax_applied'        => ! empty($details['billing_tax_enabled']),
-            'tax_rate'           => (float) ($details['billing_tax_rate'] ?? 0),
-            'discount'           => $discount,
-            'total_amount'       => $total,
-            'amount_paid'        => 0,
-            'status'             => 'unpaid',
-            'notes'              => "Auto-generated from service: {$record->title}",
-        ]);
-
-        $record->update(['billing_id' => $billing->id]);
-
-        return $billing;
+        return InvoiceNumberGenerator::generate();
     }
 
     /**
      * @return array<string, mixed>
      */
-    private static function serviceDetailsFromDescription(?string $description): array
+    public static function serviceDetailsFromDescription(?string $description): array
     {
         if (! $description || ! str_contains($description, '__SERVICE_FIELDS__:')) {
             return [];
@@ -84,8 +35,7 @@ class ClinicBilling
     {
         return HealthRecord::query()
             ->where('pet_id', $petId)
-            ->whereNull('billing_id')
-            ->where('line_total', '>', 0)
+            ->billableForCheckout()
             ->when($clinicId, fn (Builder $query) => $query->where('clinic_id', $clinicId));
     }
 
@@ -134,6 +84,110 @@ class ClinicBilling
     /**
      * @return Collection<int, array<string, mixed>>
      */
+    /**
+     * All unbilled priced health records for checkout selection.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    public static function unbilledRecordsList(?int $clinicId): Collection
+    {
+        return HealthRecord::query()
+            ->with(['pet.client:id,name', 'serviceCatalog:id,name'])
+            ->when($clinicId, fn (Builder $query) => $query->where('clinic_id', $clinicId))
+            ->billableForCheckout()
+            ->orderByDesc('record_date')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function (HealthRecord $record) {
+                $details = self::serviceDetailsFromDescription($record->description);
+                $lineTotal = (float) $record->line_total;
+
+                return [
+                    'id'             => $record->id,
+                    'appointment_id' => $record->appointment_id,
+                    'pet_id'       => $record->pet_id,
+                    'pet_name'     => $record->pet?->pet_name,
+                    'client_id'    => $record->pet?->client_id,
+                    'client_name'  => $record->pet?->client?->name,
+                    'title'        => $record->title,
+                    'type'         => $record->type,
+                    'record_date'  => $record->record_date?->toDateString(),
+                    'line_total'   => $lineTotal,
+                    'unit_price'   => (float) $record->unit_price,
+                    'quantity'     => (int) $record->quantity,
+                    'subtotal'     => (float) ($details['billing_subtotal'] ?? $lineTotal),
+                    'tax_amount'   => (float) ($details['billing_tax_amount'] ?? 0),
+                    'discount'     => (float) ($details['billing_discount'] ?? 0),
+                    'service_name' => $record->serviceCatalog?->name,
+                ];
+            })
+            ->values();
+    }
+
+    /**
+     * Suggested invoice-level tax and discount from a set of health records.
+     *
+     * @param  Collection<int, HealthRecord>  $records
+     * @return array{subtotal: float, tax: float, discount: float}
+     */
+    public static function suggestedChargesFromRecords(Collection $records): array
+    {
+        $subtotal = 0.0;
+        $tax = 0.0;
+        $discount = 0.0;
+
+        foreach ($records as $record) {
+            $details = self::serviceDetailsFromDescription($record->description);
+            $lineTotal = (float) $record->line_total;
+
+            $subtotal += (float) ($details['billing_subtotal'] ?? $lineTotal);
+            $tax += (float) ($details['billing_tax_amount'] ?? 0);
+            $discount += (float) ($details['billing_discount'] ?? 0);
+        }
+
+        return [
+            'subtotal' => round($subtotal, 2),
+            'tax'      => round($tax, 2),
+            'discount' => round($discount, 2),
+        ];
+    }
+
+    /**
+     * @param  array<int, array{description: string, quantity: int, unit_price: float|int|string}>  $extraLines
+     * @return array{subtotal: float, tax: float, discount: float, total: float, tax_applied: bool, tax_rate: float}
+     */
+    public static function checkoutTotals(Collection $records, array $extraLines, float $invoiceTax, float $invoiceDiscount): array
+    {
+        $suggested = self::suggestedChargesFromRecords($records);
+
+        $extraSubtotal = 0.0;
+        foreach ($extraLines as $line) {
+            $qty = max((int) ($line['quantity'] ?? 1), 1);
+            $unitPrice = (float) ($line['unit_price'] ?? 0);
+            $extraSubtotal += round($unitPrice * $qty, 2);
+        }
+
+        $subtotal = round($suggested['subtotal'] + $extraSubtotal, 2);
+        $tax = round($invoiceTax, 2);
+        $discount = round($invoiceDiscount, 2);
+        $total = max(round($subtotal + $tax - $discount, 2), 0);
+
+        $taxApplied = $tax > 0;
+        $taxRate = 0.0;
+        if ($taxApplied && $subtotal > 0) {
+            $taxRate = round(($tax / $subtotal) * 100, 2);
+        }
+
+        return [
+            'subtotal'    => $subtotal,
+            'tax'         => $tax,
+            'discount'    => $discount,
+            'total'       => $total,
+            'tax_applied' => $taxApplied,
+            'tax_rate'    => $taxRate,
+        ];
+    }
+
     public static function billablePets(?int $clinicId): Collection
     {
         return Pet::with('client:id,name')
@@ -169,8 +223,7 @@ class ClinicBilling
     private static function unbilledRecordsQueryForRelation(Builder $query, ?int $clinicId): Builder
     {
         return $query
-            ->whereNull('billing_id')
-            ->where('line_total', '>', 0)
+            ->billableForCheckout()
             ->when($clinicId, fn (Builder $scoped) => $scoped->where('clinic_id', $clinicId));
     }
 }

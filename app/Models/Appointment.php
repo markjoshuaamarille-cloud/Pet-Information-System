@@ -19,6 +19,7 @@ class Appointment extends Model
         'scheduled_at',
         'type',
         'status',
+        'billing_status',
         'notes',
     ];
 
@@ -47,5 +48,10 @@ class Appointment extends Model
     public function vaccinations(): HasMany
     {
         return $this->hasMany(Vaccination::class);
+    }
+
+    public function healthRecords(): HasMany
+    {
+        return $this->hasMany(HealthRecord::class);
     }
 }

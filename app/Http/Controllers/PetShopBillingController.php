@@ -6,9 +6,11 @@ use App\Models\Billing;
 use App\Models\Payment;
 use App\Models\User;
 use App\Support\PetShopBilling;
+use App\Support\ClinicContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -43,6 +45,23 @@ class PetShopBillingController extends Controller
             'orders' => $orders,
             'stats' => $stats,
             'can_manage' => $canManage,
+            'can_delete_billing' => (bool) $user?->hasAnyRole(['super_admin', 'clinic_owner']),
+        ]);
+    }
+
+    public function receipt(Billing $billing): Response
+    {
+        $this->ensureRetailOrder($billing);
+
+        $billing->load([
+            'clinic:id,name,contact,email,address,address_formatted,city,province',
+            'client:id,name,contact,email,address,address_formatted',
+            'lineItems.medicine:id,name,category',
+            'payments' => fn ($query) => $query->orderBy('paid_at'),
+        ]);
+
+        return Inertia::render('PetShopBilling/Receipt', [
+            'order' => $billing,
         ]);
     }
 
@@ -136,11 +155,36 @@ class PetShopBillingController extends Controller
     public function destroy(Request $request, Billing $billing): RedirectResponse
     {
         $this->ensureRetailOrder($billing);
-        $this->ensureCanManage($this->currentUser());
+        $user = $this->currentUser();
+
+        if (! $user?->hasAnyRole(['super_admin', 'clinic_owner'])) {
+            abort(403, 'Only a super admin or clinic owner can delete invoices.');
+        }
+
+        if ($user->isClinicOwner() && ! $user->isPlatformAdmin()) {
+            $clinicId = ClinicContext::activeClinicId($request) ?? $billing->clinic_id;
+
+            if (! $clinicId || (int) $billing->clinic_id !== (int) $clinicId) {
+                abort(403, 'You can only delete invoices for your active clinic.');
+            }
+
+            if (! $user->clinics()->where('clinics.id', $clinicId)->exists()) {
+                abort(403, 'You are not assigned to this clinic.');
+            }
+        }
+
         $this->ensureBillingForActiveClinic($request, $billing);
 
-        if ($billing->status === 'paid') {
-            return redirect()->back()->withErrors(['order' => 'Paid orders cannot be deleted.']);
+        $request->validate([
+            'password' => ['required', 'string'],
+        ], [
+            'password.required' => 'Your password is required to delete an invoice.',
+        ]);
+
+        if (! Hash::check($request->input('password'), $user->password)) {
+            throw ValidationException::withMessages([
+                'password' => 'The password you entered is incorrect.',
+            ]);
         }
 
         if ($billing->inventory_deducted) {
@@ -149,7 +193,7 @@ class PetShopBillingController extends Controller
 
         $billing->delete();
 
-        return redirect()->back()->with('success', 'Order cancelled and removed.');
+        return redirect()->back()->with('success', 'Order deleted.');
     }
 
     private function ensureRetailOrder(Billing $billing): void
