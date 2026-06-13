@@ -9,6 +9,7 @@ use App\Models\Client;
 use App\Models\Medicine;
 use App\Models\User;
 use App\Support\GeoLocation;
+use App\Support\InvoiceNumberGenerator;
 use App\Support\PetShopCategories;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -276,7 +277,7 @@ class PetShopController extends Controller
         $billing = DB::transaction(function () use ($validated, $lineItems, $subtotal, $totalAmount, $clinicId) {
             $billing = Billing::create([
                 'clinic_id'      => $clinicId,
-                'invoice_number' => $this->generateInvoiceNumber(),
+                'invoice_number' => InvoiceNumberGenerator::generate(),
                 'sale_type' => 'pet_shop_retail',
                 'client_id' => $validated['client_id'],
                 'pet_id' => null,
@@ -311,14 +312,6 @@ class PetShopController extends Controller
             ->with('success', $user?->isCustomer()
                 ? "Order placed successfully. Invoice {$billing->invoice_number} is pending payment at the clinic."
                 : "Order {$billing->invoice_number} created. Process payment in Pet Shop Billing.");
-    }
-
-    private function generateInvoiceNumber(): string
-    {
-        $prefix = 'INV-'.now()->format('Ymd');
-        $count = Billing::whereDate('created_at', today())->count() + 1;
-
-        return sprintf('%s-%04d', $prefix, $count);
     }
 
     private function currentUser(): ?User

@@ -8,7 +8,7 @@ import PrimaryButton from "@/Components/PrimaryButton";
 import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
-import { Head, router, useForm } from "@inertiajs/react";
+import { Head, Link, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
@@ -52,11 +52,93 @@ const orderMatchesSearch = (order, query) => {
     return haystack.includes(query);
 };
 
+function DeleteOrderModal({ order, isPlatformAdmin, onClose }) {
+    const form = useForm({ password: "" });
+
+    const submit = (e) => {
+        e.preventDefault();
+        form.delete(route("pet-shop-billing.destroy", order.id), {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+        });
+    };
+
+    const passwordLabel = isPlatformAdmin
+        ? "Confirm your super admin password *"
+        : "Confirm your clinic owner password *";
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-800">
+                    Delete invoice
+                </h3>
+                <p className="mt-2 text-sm text-gray-600">
+                    You are about to permanently delete order{" "}
+                    <span className="font-semibold text-gray-800">
+                        {order.invoice_number}
+                    </span>
+                    . This action cannot be undone.
+                </p>
+                <form onSubmit={submit} className="mt-4 space-y-4">
+                    <div>
+                        <label
+                            htmlFor="delete_order_password"
+                            className="block text-xs font-medium text-gray-600"
+                        >
+                            {passwordLabel}
+                        </label>
+                        <input
+                            id="delete_order_password"
+                            type="password"
+                            autoFocus
+                            autoComplete="current-password"
+                            className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                            value={form.data.password}
+                            onChange={(e) =>
+                                form.setData("password", e.target.value)
+                            }
+                        />
+                        {form.errors.password && (
+                            <p className="mt-1 text-xs text-red-500">
+                                {form.errors.password}
+                            </p>
+                        )}
+                        <InputError
+                            message={form.errors.order}
+                            className="mt-1"
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={form.processing || !form.data.password}
+                            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                            {form.processing ? "Deleting…" : "Delete invoice"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 export default function PetShopBillingIndex({
     orders,
     stats = null,
     can_manage = false,
+    can_delete_billing = false,
 }) {
+    const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [statusFilter, setStatusFilter] = useState("all");
     const [search, setSearch] = useState("");
     const [editingOrder, setEditingOrder] = useState(null);
@@ -195,16 +277,6 @@ export default function PetShopBillingIndex({
                 onSuccess: () => closePayment(),
             },
         );
-    };
-
-    const deleteOrder = (order) => {
-        if (!confirm(`Cancel order ${order.invoice_number}?`)) {
-            return;
-        }
-
-        router.delete(route("pet-shop-billing.destroy", order.id), {
-            preserveScroll: true,
-        });
     };
 
     return (
@@ -441,6 +513,16 @@ export default function PetShopBillingIndex({
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3 text-right">
+                                                    <Link
+                                                        href={route(
+                                                            "pet-shop-billing.receipt",
+                                                            order.id,
+                                                        )}
+                                                        className="text-gray-700 hover:underline"
+                                                        target="_blank"
+                                                    >
+                                                        Receipt
+                                                    </Link>
                                                     {can_manage &&
                                                         order.status !==
                                                             "paid" &&
@@ -449,7 +531,7 @@ export default function PetShopBillingIndex({
                                                             <>
                                                                 <button
                                                                     type="button"
-                                                                    className="text-indigo-600 hover:underline"
+                                                                    className="ms-3 text-indigo-600 hover:underline"
                                                                     onClick={() =>
                                                                         openEdit(
                                                                             order,
@@ -469,22 +551,24 @@ export default function PetShopBillingIndex({
                                                                 >
                                                                     Pay
                                                                 </button>
-                                                                <button
-                                                                    type="button"
-                                                                    className="ms-3 text-red-600 hover:underline"
-                                                                    onClick={() =>
-                                                                        deleteOrder(
-                                                                            order,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Cancel
-                                                                </button>
                                                             </>
                                                         )}
+                                                    {can_delete_billing && (
+                                                        <button
+                                                            type="button"
+                                                            className="ms-3 text-red-600 hover:underline"
+                                                            onClick={() =>
+                                                                setDeleteTarget(
+                                                                    order,
+                                                                )
+                                                            }
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    )}
                                                     {balance > 0 &&
                                                         !can_manage && (
-                                                            <span className="text-xs text-amber-700">
+                                                            <span className="ms-3 text-xs text-amber-700">
                                                                 Balance{" "}
                                                                 {formatPeso(
                                                                     balance,
@@ -741,6 +825,13 @@ export default function PetShopBillingIndex({
                         </form>
                     </div>
                 </div>
+            )}
+            {deleteTarget && (
+                <DeleteOrderModal
+                    order={deleteTarget}
+                    isPlatformAdmin={isPlatformAdmin}
+                    onClose={() => setDeleteTarget(null)}
+                />
             )}
         </AuthenticatedLayout>
     );

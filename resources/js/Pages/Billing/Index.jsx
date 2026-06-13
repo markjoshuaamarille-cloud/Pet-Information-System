@@ -55,22 +55,96 @@ const billingMatchesSearch = (billing, query) => {
     return haystack.includes(query);
 };
 
+function DeleteInvoiceModal({ billing, isPlatformAdmin, onClose }) {
+    const form = useForm({ password: "" });
+
+    const submit = (e) => {
+        e.preventDefault();
+        form.delete(route("billing.destroy", billing.id), {
+            preserveScroll: true,
+            onSuccess: () => onClose(),
+        });
+    };
+
+    const passwordLabel = isPlatformAdmin
+        ? "Confirm your super admin password *"
+        : "Confirm your clinic owner password *";
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
+                <h3 className="text-lg font-semibold text-gray-800">
+                    Delete invoice
+                </h3>
+                <p className="mt-2 text-sm text-gray-600">
+                    You are about to permanently delete invoice{" "}
+                    <span className="font-semibold text-gray-800">
+                        {billing.invoice_number}
+                    </span>
+                    . This action cannot be undone.
+                </p>
+                <form onSubmit={submit} className="mt-4 space-y-4">
+                    <div>
+                        <label
+                            htmlFor="delete_invoice_password"
+                            className="block text-xs font-medium text-gray-600"
+                        >
+                            {passwordLabel}
+                        </label>
+                        <input
+                            id="delete_invoice_password"
+                            type="password"
+                            autoFocus
+                            autoComplete="current-password"
+                            className="mt-1 block w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:border-red-500 focus:outline-none focus:ring-1 focus:ring-red-500"
+                            value={form.data.password}
+                            onChange={(e) =>
+                                form.setData("password", e.target.value)
+                            }
+                        />
+                        {form.errors.password && (
+                            <p className="mt-1 text-xs text-red-500">
+                                {form.errors.password}
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={onClose}
+                            className="rounded border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={form.processing || !form.data.password}
+                            className="rounded bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+                        >
+                            {form.processing ? "Deleting…" : "Delete invoice"}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 export default function BillingIndex({
     billings,
     clients = [],
     pets = [],
     appointments = [],
     serviceCatalogs = [],
-    billablePets = [],
     can_manage_billing = true,
+    can_delete_billing = false,
     requires_clinic_context = false,
 }) {
     const activeClinic = usePage().props.activeClinic;
     const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
     const [editing, setEditing] = useState(null);
     const [payingBillingId, setPayingBillingId] = useState(null);
-    const [generatePetId, setGeneratePetId] = useState("");
-    const [generating, setGenerating] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null);
     const [saleTypeFilter, setSaleTypeFilter] = useState("clinic_service");
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
@@ -107,10 +181,6 @@ export default function BillingIndex({
         setSaleTypeFilter("all");
     };
 
-    const selectedBillablePet = billablePets.find(
-        (p) => String(p.id) === String(generatePetId),
-    );
-
     const {
         visibleItems: visibleBillings,
         displayLimit,
@@ -118,22 +188,6 @@ export default function BillingIndex({
         totalCount: billingListCount,
         showingCount: billingShowingCount,
     } = useListDisplayLimit(filteredBillings);
-
-    const generateInvoice = () => {
-        if (!generatePetId) {
-            return;
-        }
-        setGenerating(true);
-        router.post(
-            route("billing.generate", generatePetId),
-            {},
-            {
-                preserveScroll: true,
-                onSuccess: () => setGeneratePetId(""),
-                onFinish: () => setGenerating(false),
-            },
-        );
-    };
 
     const form = useForm({
         client_id: "",
@@ -160,13 +214,10 @@ export default function BillingIndex({
 
     const submit = (e) => {
         e.preventDefault();
-        if (editing) {
-            form.put(route("billing.update", editing), {
-                onSuccess: resetForm,
-            });
-            return;
-        }
-        form.post(route("billing.store"), { onSuccess: resetForm });
+        if (!editing) return;
+        form.put(route("billing.update", editing), {
+            onSuccess: resetForm,
+        });
     };
 
     const startEdit = (billing) => {
@@ -465,9 +516,12 @@ export default function BillingIndex({
 
                     {requires_clinic_context && (
                         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                            Select an active clinic from the header to view
-                            appointments, services, and invoices for your
-                            clinic.
+                            Select an active clinic from the header to view invoices and payments for your clinic.
+                            To generate a new invoice, go to{' '}
+                            <a href={route('appointments.index')} className="font-medium underline">
+                                Scheduling
+                            </a>{' '}
+                            and click <strong>Bill visit</strong> on a completed appointment.
                         </div>
                     )}
 
@@ -498,76 +552,12 @@ export default function BillingIndex({
                         ))}
                     </div>
 
-                    {can_manage_billing && (
-                        <div className="mb-6 rounded-lg border border-emerald-200 bg-emerald-50 p-6">
-                            <h3 className="mb-1 font-semibold text-emerald-900">
-                                Generate Invoice from Services
-                            </h3>
-                            <p className="mb-4 text-sm text-emerald-800">
-                                Pick a pet to combine its unbilled priced
-                                services for this clinic into a single invoice.
-                            </p>
-                            <div className="grid gap-4 sm:grid-cols-3">
-                                <div className="sm:col-span-2">
-                                    <InputLabel value="Pet with unbilled services" />
-                                    <select
-                                        className="mt-1 w-full rounded-md border-gray-300"
-                                        value={generatePetId}
-                                        onChange={(e) =>
-                                            setGeneratePetId(e.target.value)
-                                        }
-                                    >
-                                        <option value="">
-                                            {billablePets.length === 0
-                                                ? "No pets with unbilled services"
-                                                : "Select pet"}
-                                        </option>
-                                        {billablePets.map((p) => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.pet_name}
-                                                {p.client_name
-                                                    ? ` (${p.client_name})`
-                                                    : ""}{" "}
-                                                — {p.unbilled_count}{" "}
-                                                {p.unbilled_count === 1
-                                                    ? "service"
-                                                    : "services"}{" "}
-                                                · {formatPeso(p.unbilled_total)}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div className="flex items-end">
-                                    <PrimaryButton
-                                        type="button"
-                                        disabled={!generatePetId || generating}
-                                        onClick={generateInvoice}
-                                    >
-                                        Generate Invoice
-                                    </PrimaryButton>
-                                </div>
-                            </div>
-                            {selectedBillablePet && (
-                                <p className="mt-3 text-sm font-medium text-emerald-900">
-                                    Total to invoice:{" "}
-                                    {formatPeso(
-                                        selectedBillablePet.unbilled_total,
-                                    )}
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    {can_manage_billing && (
+                    {can_manage_billing && editing && (
                         <form
                             onSubmit={submit}
                             className="mb-6 rounded-lg bg-white p-6 shadow"
                         >
-                            <h3 className="mb-4 font-semibold">
-                                {editing
-                                    ? "Edit Invoice"
-                                    : "Create Invoice (Manual)"}
-                            </h3>
+                            <h3 className="mb-4 font-semibold">Edit Invoice</h3>
                             <div className="sm:col-span-3">
                                 <InputLabel value="Appointment" />
                                 <div className="mt-1 flex items-center gap-2">
@@ -832,17 +822,15 @@ export default function BillingIndex({
                             </div>
                             <div className="mt-4 flex items-center gap-3">
                                 <PrimaryButton disabled={form.processing}>
-                                    Save Invoice
+                                    Save Changes
                                 </PrimaryButton>
-                                {editing && (
-                                    <button
-                                        type="button"
-                                        className="text-sm text-gray-600 hover:underline"
-                                        onClick={resetForm}
-                                    >
-                                        Cancel edit
-                                    </button>
-                                )}
+                                <button
+                                    type="button"
+                                    className="text-sm text-gray-600 hover:underline"
+                                    onClick={resetForm}
+                                >
+                                    Cancel edit
+                                </button>
                             </div>
                         </form>
                     )}
@@ -1122,23 +1110,53 @@ export default function BillingIndex({
                                                             )}
                                                         </div>
                                                     ) : (
-                                                        <>
-                                                            {billing
-                                                                .service_catalog
-                                                                ?.name ?? "—"}
-                                                            {billing.service_catalog && (
-                                                                <p className="text-xs text-gray-500">
-                                                                    Qty{" "}
-                                                                    {
-                                                                        billing.service_quantity
-                                                                    }{" "}
-                                                                    x{" "}
-                                                                    {formatPeso(
-                                                                        billing.service_unit_price,
+                                                        <div className="space-y-1">
+                                                            {(billing.line_items ??
+                                                                []).length >
+                                                            0 ? (
+                                                                billing.line_items.map(
+                                                                    (item) => (
+                                                                        <p
+                                                                            key={
+                                                                                item.id
+                                                                            }
+                                                                            className="text-xs text-gray-600"
+                                                                        >
+                                                                            {
+                                                                                item.description
+                                                                            }{" "}
+                                                                            — Qty{" "}
+                                                                            {
+                                                                                item.quantity
+                                                                            }{" "}
+                                                                            x{" "}
+                                                                            {formatPeso(
+                                                                                item.unit_price,
+                                                                            )}
+                                                                        </p>
+                                                                    ),
+                                                                )
+                                                            ) : (
+                                                                <>
+                                                                    {billing
+                                                                        .service_catalog
+                                                                        ?.name ??
+                                                                        "—"}
+                                                                    {billing.service_catalog && (
+                                                                        <p className="text-xs text-gray-500">
+                                                                            Qty{" "}
+                                                                            {
+                                                                                billing.service_quantity
+                                                                            }{" "}
+                                                                            x{" "}
+                                                                            {formatPeso(
+                                                                                billing.service_unit_price,
+                                                                            )}
+                                                                        </p>
                                                                     )}
-                                                                </p>
+                                                                </>
                                                             )}
-                                                        </>
+                                                        </div>
                                                     )}
                                                 </td>
                                                 <td className="px-4 py-3">
@@ -1199,22 +1217,18 @@ export default function BillingIndex({
                                                                         Pay
                                                                     </button>
                                                                 )}
-                                                            <button
-                                                                className="ms-3 text-red-600 hover:underline"
-                                                                onClick={() =>
-                                                                    confirm(
-                                                                        "Delete invoice?",
-                                                                    ) &&
-                                                                    router.delete(
-                                                                        route(
-                                                                            "billing.destroy",
-                                                                            billing.id,
-                                                                        ),
-                                                                    )
-                                                                }
-                                                            >
-                                                                Delete
-                                                            </button>
+                                                            {can_delete_billing && (
+                                                                <button
+                                                                    className="ms-3 text-red-600 hover:underline"
+                                                                    onClick={() =>
+                                                                        setDeleteTarget(
+                                                                            billing,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Delete
+                                                                </button>
+                                                            )}
                                                         </>
                                                     )}
                                                 </td>
@@ -1233,6 +1247,14 @@ export default function BillingIndex({
                     </div>
                 </div>
             </div>
+
+            {deleteTarget && (
+                <DeleteInvoiceModal
+                    billing={deleteTarget}
+                    isPlatformAdmin={isPlatformAdmin}
+                    onClose={() => setDeleteTarget(null)}
+                />
+            )}
         </AuthenticatedLayout>
     );
 }

@@ -82,28 +82,60 @@ class ClinicServices
      */
     public static function catalogDefaults(): array
     {
-        $services = [];
+        return [
+            // General / checkup
+            ['code' => 'checkup',      'name' => 'Checkup',       'category' => 'consultation'],
+            ['code' => 'other',        'name' => 'Other Service', 'category' => 'general'],
+            ['code' => 'laboratory',   'name' => 'Laboratory / Diagnostics', 'category' => 'general'],
 
-        foreach (self::appointmentTypeLabels() as $code => $name) {
-            $services[$code] = [
-                'code' => $code,
-                'name' => $name,
-                'category' => 'appointment',
-            ];
-        }
+            // Consultation
+            ['code' => 'consultation', 'name' => 'Consultation', 'category' => 'consultation'],
 
-        foreach (self::HEALTH_RECORD_TYPES as $type) {
-            if (isset($services[$type])) {
-                continue;
-            }
+            // Vaccination — general + variants
+            ['code' => 'vaccination',            'name' => 'Vaccination (General)',  'category' => 'vaccination'],
+            ['code' => 'vaccination_rabies',     'name' => 'Rabies Vaccine',         'category' => 'vaccination'],
+            ['code' => 'vaccination_dhpp',       'name' => 'DHPP Combo Vaccine',     'category' => 'vaccination'],
+            ['code' => 'vaccination_bordetella', 'name' => 'Bordetella Vaccine',     'category' => 'vaccination'],
+            ['code' => 'vaccination_leptospira', 'name' => 'Leptospirosis Vaccine',  'category' => 'vaccination'],
+            ['code' => 'vaccination_corona',     'name' => 'Coronavirus Vaccine',    'category' => 'vaccination'],
+            ['code' => 'vaccination_5in1',       'name' => '5-in-1 Combo Vaccine',   'category' => 'vaccination'],
 
-            $services[$type] = [
-                'code' => $type,
-                'name' => self::label($type),
-                'category' => 'health_record',
-            ];
-        }
+            // Grooming — general + size tiers + add-ons
+            ['code' => 'grooming',               'name' => 'Grooming (General)',         'category' => 'grooming'],
+            ['code' => 'grooming_bath_small',    'name' => 'Bath & Blow Dry (Small)',    'category' => 'grooming'],
+            ['code' => 'grooming_bath_medium',   'name' => 'Bath & Blow Dry (Medium)',   'category' => 'grooming'],
+            ['code' => 'grooming_bath_large',    'name' => 'Bath & Blow Dry (Large)',    'category' => 'grooming'],
+            ['code' => 'grooming_nail_trim',     'name' => 'Nail Trim',                  'category' => 'grooming'],
+            ['code' => 'grooming_ear_cleaning',  'name' => 'Ear Cleaning',               'category' => 'grooming'],
+            ['code' => 'grooming_full_package',  'name' => 'Full Grooming Package',      'category' => 'grooming'],
 
-        return array_values($services);
+            // Medication — general + common sub-types (no inventory deduction; use Pet records for dispensing)
+            ['code' => 'medication',             'name' => 'Medication (General)',       'category' => 'medication'],
+            ['code' => 'medication_antibiotic',  'name' => 'Antibiotic',                 'category' => 'medication'],
+            ['code' => 'medication_dewormer',    'name' => 'Dewormer',                   'category' => 'medication'],
+            ['code' => 'medication_supplement',  'name' => 'Supplement / Vitamin',       'category' => 'medication'],
+            ['code' => 'medication_flea_tick',   'name' => 'Flea & Tick Treatment',      'category' => 'medication'],
+
+            // Surgery — general + common procedures + consumables
+            ['code' => 'surgery',                'name' => 'Surgery (General)',           'category' => 'surgery'],
+            ['code' => 'surgery_spay',           'name' => 'Spay / OVH (Female)',         'category' => 'surgery'],
+            ['code' => 'surgery_neuter',         'name' => 'Castration (Male)',            'category' => 'surgery'],
+            ['code' => 'surgery_dental',         'name' => 'Dental Cleaning',              'category' => 'surgery'],
+            ['code' => 'surgery_wound',          'name' => 'Wound Repair / Suture',        'category' => 'surgery'],
+            ['code' => 'surgery_anesthesia',     'name' => 'Anesthesia',                   'category' => 'surgery'],
+            ['code' => 'surgery_iv_fluids',      'name' => 'IV Fluids (Surgery)',           'category' => 'surgery'],
+
+            // Boarding / Hotel — size tiers
+            ['code' => 'boarding',               'name' => 'Boarding / Hotel (General)', 'category' => 'boarding'],
+            ['code' => 'boarding_small',         'name' => 'Boarding — Small Pet',        'category' => 'boarding'],
+            ['code' => 'boarding_medium',        'name' => 'Boarding — Medium Pet',       'category' => 'boarding'],
+            ['code' => 'boarding_large',         'name' => 'Boarding — Large Pet',        'category' => 'boarding'],
+
+            // Emergency Care
+            ['code' => 'emergency_care',         'name' => 'Emergency Care (General)',    'category' => 'emergency_care'],
+            ['code' => 'emergency_consultation', 'name' => 'Emergency Consultation',      'category' => 'emergency_care'],
+            ['code' => 'emergency_oxygen',       'name' => 'Oxygen Therapy',              'category' => 'emergency_care'],
+            ['code' => 'emergency_iv',           'name' => 'IV Fluid Therapy',            'category' => 'emergency_care'],
+        ];
     }
 }

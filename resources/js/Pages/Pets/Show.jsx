@@ -9,6 +9,7 @@ import InputLabel from "@/Components/InputLabel";
 import InputError from "@/Components/InputError";
 import { Head, Link, useForm, router, usePage } from "@inertiajs/react";
 import { useMemo, useRef, useState } from "react";
+import { formatClinicDateTime } from "@/utils/formatDateTime";
 
 const types = [
     "consultation",
@@ -20,6 +21,7 @@ const types = [
     "emergency_care",
 ];
 const SERVICE_DETAILS_PREFIX = "__SERVICE_FIELDS__:";
+
 const categoryLabels = {
     medicine: "Medicine",
     supplement_vitamin: "Supplement / Vitamin",
@@ -78,7 +80,50 @@ const typeLabels = {
     surgery: "Surgery",
     boarding: "Boarding / Hotel",
     emergency_care: "Emergency Care",
+    checkup: "Checkup",
+    other: "Other",
 };
+
+const appointmentMatchesRecordType = (appointmentType, recordType) => {
+    if (!appointmentType || !recordType) {
+        return false;
+    }
+
+    if (appointmentType === recordType) {
+        return true;
+    }
+
+    // Checkups are often documented as consultation records.
+    if (appointmentType === "checkup" && recordType === "consultation") {
+        return true;
+    }
+
+    return false;
+};
+
+const formatLinkableAppointmentOption = (appointment, timeZone, petFallback = null) => {
+    const when =
+        formatClinicDateTime(appointment.scheduled_at, timeZone) ?? "No date";
+    const service =
+        typeLabels[appointment.type] ??
+        appointment.type ??
+        "Service";
+    const ownerName =
+        appointment.client?.name ??
+        petFallback?.client?.name ??
+        "Unknown owner";
+    const petName =
+        appointment.pet?.pet_name ??
+        petFallback?.pet_name ??
+        "Unknown pet";
+    const status =
+        appointment.status === "completed" ? "Completed" : "Scheduled";
+
+    return `${when} · ${service} · ${ownerName} — ${petName} · ${status}`;
+};
+
+const formatAppointmentStatusLabel = (status) =>
+    status === "completed" ? "Completed" : "Scheduled";
 
 const typeSpecificSummaryFields = {
     consultation: [
@@ -488,6 +533,7 @@ const defaultHealthFormData = () => ({
     type: "consultation",
     title: "",
     description: "",
+    appointment_id: "",
     medicine_id: "",
     dosage: "",
     medication_quantity: "",
@@ -566,7 +612,8 @@ export default function PetShow({
     servicePrices = {},
     can_manage_health_records,
 }) {
-    const { activeClinic, isPlatformAdmin } = usePage().props;
+    const { activeClinic, isPlatformAdmin, appTimezone } = usePage().props;
+    const clinicTimeZone = appTimezone ?? "Asia/Manila";
 
     const canModifyHealthRecord = (record) => {
         if (!can_manage_health_records) {
@@ -606,6 +653,51 @@ export default function PetShow({
     const healthFormRef = useRef(null);
     const stickerPhotoInputRef = useRef(null);
     const healthForm = useForm(defaultHealthFormData());
+
+    const linkableAppointments = useMemo(
+        () =>
+            (pet.appointments ?? [])
+                .filter(
+                    (appt) =>
+                        Number(appt.pet_id ?? pet.id) === Number(pet.id) &&
+                        ["scheduled", "completed"].includes(appt.status) &&
+                        (!activeClinic?.id ||
+                            Number(appt.clinic_id) ===
+                                Number(activeClinic.id)),
+                )
+                .sort(
+                    (a, b) =>
+                        new Date(b.scheduled_at ?? 0).getTime() -
+                        new Date(a.scheduled_at ?? 0).getTime(),
+                ),
+        [pet.appointments, pet.id, activeClinic?.id],
+    );
+
+    const { recommendedAppointments, otherAppointments } = useMemo(() => {
+        const recordType = healthForm.data.type;
+        const recommended = [];
+        const other = [];
+
+        for (const appt of linkableAppointments) {
+            if (appointmentMatchesRecordType(appt.type, recordType)) {
+                recommended.push(appt);
+            } else {
+                other.push(appt);
+            }
+        }
+
+        return { recommendedAppointments: recommended, otherAppointments: other };
+    }, [linkableAppointments, healthForm.data.type]);
+
+    const selectedLinkableAppointment = useMemo(
+        () =>
+            linkableAppointments.find(
+                (appt) =>
+                    String(appt.id) ===
+                    String(healthForm.data.appointment_id),
+            ) ?? null,
+        [linkableAppointments, healthForm.data.appointment_id],
+    );
 
     const resolveReferenceUnitPrice = () => {
         if (healthForm.data.type === "medication") {
@@ -803,6 +895,7 @@ export default function PetShow({
             title: data.title,
             record_date: data.record_date,
             next_due_date: data.next_due_date || null,
+            appointment_id: data.appointment_id || null,
             medicine_id:
                 data.type === "medication" ? data.medicine_id || null : null,
             dosage: data.type === "medication" ? data.dosage || null : null,
@@ -1100,6 +1193,9 @@ export default function PetShow({
                     ? String(record.unit_price)
                     : "",
             quantity: record.quantity ? String(record.quantity) : "1",
+            appointment_id: record.appointment_id
+                ? String(record.appointment_id)
+                : "",
             sticker_photo: null,
             remove_sticker_photo: false,
         };
@@ -1581,6 +1677,159 @@ export default function PetShow({
                                             }
                                         />
                                     </div>
+                                    {linkableAppointments.length > 0 && (
+                                        <div className="sm:col-span-3">
+                                            <InputLabel value="Linked Appointment (optional)" />
+                                            <select
+                                                className="mt-1 w-full rounded-md border-gray-300 text-sm"
+                                                value={
+                                                    healthForm.data
+                                                        .appointment_id
+                                                }
+                                                onChange={(e) =>
+                                                    healthForm.setData(
+                                                        "appointment_id",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                            >
+                                                <option value="">
+                                                    No linked visit
+                                                </option>
+                                                {recommendedAppointments.length >
+                                                    0 && (
+                                                    <optgroup label={`Recommended for ${typeLabels[healthForm.data.type] ?? healthForm.data.type} records`}>
+                                                        {recommendedAppointments.map(
+                                                            (appt) => (
+                                                                <option
+                                                                    key={
+                                                                        appt.id
+                                                                    }
+                                                                    value={String(
+                                                                        appt.id,
+                                                                    )}
+                                                                >
+                                                                    {formatLinkableAppointmentOption(
+                                                                        appt,
+                                                                        clinicTimeZone,
+                                                                        pet,
+                                                                    )}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </optgroup>
+                                                )}
+                                                {otherAppointments.length >
+                                                    0 && (
+                                                    <optgroup
+                                                        label={
+                                                            recommendedAppointments.length >
+                                                            0
+                                                                ? "Other visits"
+                                                                : "All visits"
+                                                        }
+                                                    >
+                                                        {otherAppointments.map(
+                                                            (appt) => (
+                                                                <option
+                                                                    key={
+                                                                        appt.id
+                                                                    }
+                                                                    value={String(
+                                                                        appt.id,
+                                                                    )}
+                                                                >
+                                                                    {formatLinkableAppointmentOption(
+                                                                        appt,
+                                                                        clinicTimeZone,
+                                                                        pet,
+                                                                    )}
+                                                                </option>
+                                                            ),
+                                                        )}
+                                                    </optgroup>
+                                                )}
+                                            </select>
+                                            <p className="mt-1 text-xs text-gray-500">
+                                                Only scheduled or completed
+                                                visits for {pet.pet_name} at{" "}
+                                                {activeClinic?.name ??
+                                                    "this clinic"}{" "}
+                                                are listed. Each option shows
+                                                date &amp; time, service, pet
+                                                owner, pet name, and visit
+                                                status. Matching visits appear
+                                                appear under Recommended so
+                                                Billing checkout can bill only
+                                                this visit&apos;s services.
+                                            </p>
+                                            {selectedLinkableAppointment && (
+                                                <div className="mt-3 rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm">
+                                                    <p className="font-semibold text-indigo-900">
+                                                        Selected visit
+                                                    </p>
+                                                    <dl className="mt-2 grid gap-2 sm:grid-cols-2">
+                                                        <div>
+                                                            <dt className="text-xs text-indigo-700">
+                                                                Date &amp; time
+                                                            </dt>
+                                                            <dd className="font-medium text-gray-800">
+                                                                {formatClinicDateTime(
+                                                                    selectedLinkableAppointment.scheduled_at,
+                                                                    clinicTimeZone,
+                                                                ) ?? "—"}
+                                                            </dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt className="text-xs text-indigo-700">
+                                                                Service
+                                                            </dt>
+                                                            <dd className="font-medium text-gray-800">
+                                                                {typeLabels[
+                                                                    selectedLinkableAppointment
+                                                                        .type
+                                                                ] ??
+                                                                    selectedLinkableAppointment.type}
+                                                            </dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt className="text-xs text-indigo-700">
+                                                                Clinic
+                                                            </dt>
+                                                            <dd className="font-medium text-gray-800">
+                                                                {selectedLinkableAppointment
+                                                                    .clinic
+                                                                    ?.name ??
+                                                                    "—"}
+                                                            </dd>
+                                                        </div>
+                                                        <div>
+                                                            <dt className="text-xs text-indigo-700">
+                                                                Status
+                                                            </dt>
+                                                            <dd className="font-medium capitalize text-gray-800">
+                                                                {formatAppointmentStatusLabel(
+                                                                    selectedLinkableAppointment.status,
+                                                                )}
+                                                            </dd>
+                                                        </div>
+                                                        {selectedLinkableAppointment.notes && (
+                                                            <div className="sm:col-span-2">
+                                                                <dt className="text-xs text-indigo-700">
+                                                                    Appointment notes
+                                                                </dt>
+                                                                <dd className="whitespace-pre-wrap text-gray-700">
+                                                                    {
+                                                                        selectedLinkableAppointment.notes
+                                                                    }
+                                                                </dd>
+                                                            </div>
+                                                        )}
+                                                    </dl>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     {healthForm.data.type === "medication" && (
                                         <>
                                             <div className="sm:col-span-3 flex items-center justify-between gap-2">
@@ -2070,103 +2319,114 @@ export default function PetShow({
                                     )}
 
                                     {healthForm.data.type === "grooming" && (
-                                        <>
-                                            <div className="sm:col-span-2">
+                                        <div className="col-span-full space-y-4">
+                                            <div>
                                                 <InputLabel value="Services Included" />
-                                                <div className="mt-1 grid grid-cols-1 gap-2 rounded-md border border-gray-300 p-3 text-sm sm:grid-cols-2">
-                                                    {groomingServiceOptions.map(
-                                                        (option) => {
-                                                            const selected =
-                                                                healthForm.data.grooming_services.includes(
-                                                                    option,
-                                                                );
-                                                            return (
-                                                                <label
-                                                                    key={option}
-                                                                    className="flex items-center gap-2"
-                                                                >
-                                                                    <input
-                                                                        type="checkbox"
-                                                                        checked={
-                                                                            selected
+                                                <div className="mt-2 rounded-md border border-gray-300 bg-white p-4">
+                                                    <div className="grid grid-cols-1 gap-x-8 gap-y-3 text-sm sm:grid-cols-2">
+                                                        {groomingServiceOptions.map(
+                                                            (option) => {
+                                                                const selected =
+                                                                    healthForm.data.grooming_services.includes(
+                                                                        option,
+                                                                    );
+                                                                return (
+                                                                    <label
+                                                                        key={
+                                                                            option
                                                                         }
-                                                                        onChange={(
-                                                                            e,
-                                                                        ) => {
-                                                                            const current =
-                                                                                new Set(
-                                                                                    healthForm
-                                                                                        .data
-                                                                                        .grooming_services,
-                                                                                );
-                                                                            if (
-                                                                                e
-                                                                                    .target
-                                                                                    .checked
-                                                                            ) {
-                                                                                current.add(
-                                                                                    option,
-                                                                                );
-                                                                            } else {
-                                                                                current.delete(
-                                                                                    option,
-                                                                                );
+                                                                        className="flex min-w-0 items-start gap-2.5"
+                                                                    >
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            className="mt-0.5 shrink-0 rounded border-gray-300"
+                                                                            checked={
+                                                                                selected
                                                                             }
-                                                                            healthForm.setData(
-                                                                                "grooming_services",
-                                                                                Array.from(
-                                                                                    current,
-                                                                                ),
-                                                                            );
-                                                                        }}
-                                                                    />
-                                                                    <span>
-                                                                        {option}
-                                                                    </span>
-                                                                </label>
-                                                            );
-                                                        },
-                                                    )}
+                                                                            onChange={(
+                                                                                e,
+                                                                            ) => {
+                                                                                const current =
+                                                                                    new Set(
+                                                                                        healthForm
+                                                                                            .data
+                                                                                            .grooming_services,
+                                                                                    );
+                                                                                if (
+                                                                                    e
+                                                                                        .target
+                                                                                        .checked
+                                                                                ) {
+                                                                                    current.add(
+                                                                                        option,
+                                                                                    );
+                                                                                } else {
+                                                                                    current.delete(
+                                                                                        option,
+                                                                                    );
+                                                                                }
+                                                                                healthForm.setData(
+                                                                                    "grooming_services",
+                                                                                    Array.from(
+                                                                                        current,
+                                                                                    ),
+                                                                                );
+                                                                            }}
+                                                                        />
+                                                                        <span className="min-w-0 leading-snug">
+                                                                            {
+                                                                                option
+                                                                            }
+                                                                        </span>
+                                                                    </label>
+                                                                );
+                                                            },
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <StaffSelect
-                                                label="Groomer Name"
-                                                value={
-                                                    healthForm.data
-                                                        .groomer_user_id
-                                                }
-                                                onChange={(value) =>
-                                                    healthForm.setData(
-                                                        "groomer_user_id",
-                                                        value,
-                                                    )
-                                                }
-                                                staff={groomers}
-                                                placeholder="Select groomer"
-                                                emptyMessage="No groomers assigned to this clinic. Assign staff in Admin → Users."
-                                            />
-                                            <div>
-                                                <InputLabel value="Next Grooming Date" />
-                                                <TextInput
-                                                    type="date"
-                                                    className="mt-1 block w-full"
+
+                                            <div className="grid gap-4 sm:grid-cols-2">
+                                                <StaffSelect
+                                                    label="Groomer Name"
                                                     value={
                                                         healthForm.data
-                                                            .next_grooming_date
+                                                            .groomer_user_id
                                                     }
-                                                    onChange={(e) =>
+                                                    onChange={(value) =>
                                                         healthForm.setData(
-                                                            "next_grooming_date",
-                                                            e.target.value,
+                                                            "groomer_user_id",
+                                                            value,
                                                         )
                                                     }
+                                                    staff={groomers}
+                                                    placeholder="Select groomer"
+                                                    emptyMessage="No groomers assigned to this clinic. Assign staff in Admin → Users."
                                                 />
+                                                <div>
+                                                    <InputLabel value="Next Grooming Date" />
+                                                    <TextInput
+                                                        type="date"
+                                                        className="mt-1 block w-full"
+                                                        value={
+                                                            healthForm.data
+                                                                .next_grooming_date
+                                                        }
+                                                        onChange={(e) =>
+                                                            healthForm.setData(
+                                                                "next_grooming_date",
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                    />
+                                                </div>
                                             </div>
-                                            <div className="sm:col-span-2">
+
+                                            <div>
                                                 <InputLabel value="Special Requests / Notes" />
                                                 <textarea
-                                                    className="mt-1 w-full rounded-md border-gray-300 text-sm"
-                                                    rows={2}
+                                                    className="mt-1 w-full rounded-md border-gray-300 text-sm shadow-sm"
+                                                    rows={3}
                                                     value={
                                                         healthForm.data
                                                             .special_requests
@@ -2179,7 +2439,7 @@ export default function PetShow({
                                                     }
                                                 />
                                             </div>
-                                        </>
+                                        </div>
                                     )}
 
                                     {healthForm.data.type === "surgery" && (
@@ -2677,33 +2937,20 @@ export default function PetShow({
                                         }
                                     />
                                 </div>
-                                <div className="mt-4 rounded-md border border-indigo-100 bg-indigo-50 p-3">
-                                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                                        <div className="flex items-center gap-2">
-                                            <p className="text-xs font-semibold uppercase tracking-wide text-indigo-700">
-                                                Billing
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={addBillingLine}
-                                                title="Add service price line"
-                                                aria-label="Add service price line"
-                                                className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-lg leading-none text-white shadow-sm transition hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
-                                            >
-                                                +
-                                            </button>
-                                        </div>
-                                        {billingLines.length > 0 && (
-                                            <p className="text-xs text-gray-500">
-                                                {billingLines.length} price line
-                                                {billingLines.length === 1
-                                                    ? ""
-                                                    : "s"}
-                                            </p>
-                                        )}
-                                    </div>
-
-                                    {!showBillingSummary &&
+                                <div className="mt-4 rounded-md border border-gray-200 bg-gray-50 px-3 py-2">
+                                    <p className="text-xs text-gray-500">
+                                        Service pricing is now managed through the{' '}
+                                        <strong>Services</strong> panel on the{' '}
+                                        <a
+                                            href={route('appointments.index')}
+                                            className="font-medium text-indigo-600 hover:underline"
+                                        >
+                                            Scheduling
+                                        </a>{' '}
+                                        page. Add a service item to the linked appointment to price it for invoicing.
+                                    </p>
+                                    {/* pricing section removed — use Scheduling > Services panel */}
+                                    {/* DEAD_CODE_START
                                         healthForm.data.type !==
                                             "medication" && (
                                             <p className="mb-3 text-xs text-indigo-700">
@@ -2711,12 +2958,11 @@ export default function PetShow({
                                                 <span className="font-semibold">
                                                     +
                                                 </span>{" "}
-                                                to bill this service
-                                                automatically — it will appear
-                                                under "Generate Invoice from
-                                                Services" in Billing. Leave it
-                                                empty to bill manually later via
-                                                "Create Invoice (Manual)".
+                                                to price this service for
+                                                checkout — it will appear in
+                                                Billing → Checkout. Leave it
+                                                empty if the service is
+                                                clinical-only (not billed).
                                             </p>
                                         )}
 
@@ -2927,6 +3173,7 @@ export default function PetShow({
                                                 : "Optional. Press + to add a service price line. Add more lines for extra charges — the total updates automatically."}
                                         </p>
                                     )}
+                                DEAD_CODE_END */}
                                 </div>
                                 <InputError
                                     message={healthForm.errors.type}
@@ -3076,23 +3323,6 @@ export default function PetShow({
                                             })()}
                                             {r.veterinarian_notes && (
                                                 <p>{r.veterinarian_notes}</p>
-                                            )}
-                                            {Number(r.line_total) > 0 && (
-                                                <p className="font-medium text-gray-700">
-                                                    Charge:{" "}
-                                                    {Number(
-                                                        r.line_total,
-                                                    ).toFixed(2)}
-                                                    {r.billing_id ? (
-                                                        <span className="ms-2 rounded bg-emerald-100 px-2 py-0.5 text-xs text-emerald-800">
-                                                            Invoiced
-                                                        </span>
-                                                    ) : (
-                                                        <span className="ms-2 rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
-                                                            Unbilled
-                                                        </span>
-                                                    )}
-                                                </p>
                                             )}
                                             {r.sticker_photo_url && (
                                                 <div className="mt-2 flex flex-wrap items-center gap-2">

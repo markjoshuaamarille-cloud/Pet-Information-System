@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToClinic;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -18,6 +19,8 @@ class HealthRecord extends Model
         'medicine_id',
         'service_catalog_id',
         'billing_id',
+        'invoiced_at',
+        'appointment_id',
         'type',
         'title',
         'description',
@@ -44,7 +47,24 @@ class HealthRecord extends Model
             'unit_price' => 'decimal:2',
             'quantity' => 'integer',
             'line_total' => 'decimal:2',
+            'invoiced_at' => 'datetime',
         ];
+    }
+
+    public function scopeBillableForCheckout(Builder $query): Builder
+    {
+        return $query
+            ->whereNull('invoiced_at')
+            ->where('line_total', '>', 0);
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (HealthRecord $record): void {
+            if ($record->billing_id && ! $record->invoiced_at) {
+                $record->invoiced_at = now();
+            }
+        });
     }
 
     public function getStickerPhotoUrlAttribute(): ?string
@@ -81,5 +101,10 @@ class HealthRecord extends Model
     public function billing(): BelongsTo
     {
         return $this->belongsTo(Billing::class);
+    }
+
+    public function appointment(): BelongsTo
+    {
+        return $this->belongsTo(Appointment::class);
     }
 }
