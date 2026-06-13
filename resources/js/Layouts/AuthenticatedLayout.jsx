@@ -1,4 +1,5 @@
 import ApplicationLogo from "@/Components/ApplicationLogo";
+import ModuleBackground from "@/Components/ModuleBackground";
 import AdminClinicMonitor from "@/Components/AdminClinicMonitor";
 import Dropdown from "@/Components/Dropdown";
 import NavLink from "@/Components/NavLink";
@@ -417,8 +418,8 @@ export default function AuthenticatedLayout({ header, children }) {
     };
 
     return (
-        <div className="min-h-screen bg-gray-100">
-            <nav className="border-b border-gray-100 bg-white">
+        <ModuleBackground>
+            <nav className="relative z-50 border-b border-gray-100/80 bg-white/95 backdrop-blur-sm">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="flex h-16 justify-between">
                         <div className="flex">
@@ -452,7 +453,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                 assignedClinics={assignedClinics}
                                 isPlatformAdmin={isPlatformAdmin}
                             />
-                            <div className="relative ms-3">
+                            <div className="relative z-50 ms-3">
                                 <Dropdown>
                                     <Dropdown.Trigger>
                                         <span className="inline-flex rounded-md">
@@ -676,14 +677,14 @@ export default function AuthenticatedLayout({ header, children }) {
             )}
 
             {header && (
-                <header className="bg-white shadow">
+                <header className="relative z-40 border-b border-white/60 bg-white/80 shadow-sm backdrop-blur-sm">
                     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
                         {header}
                     </div>
                 </header>
             )}
 
-            <main>{children}</main>
+            <main className="relative z-0">{children}</main>
 
             {isCustomer && customerAlerts && customerAlertModal && (
                 <CustomerAlertsModal
@@ -693,6 +694,6 @@ export default function AuthenticatedLayout({ header, children }) {
                     onClose={() => setCustomerAlertModal(null)}
                 />
             )}
-        </div>
+        </ModuleBackground>
     );
 }
