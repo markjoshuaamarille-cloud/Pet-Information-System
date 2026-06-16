@@ -24,9 +24,6 @@ export default function ClinicRegister({ allModules }) {
     });
 
     const handleGeoapifyImport = (imported) => {
-        if (imported.name) {
-            form.setData('name', imported.name);
-        }
         if (imported.has_veterinary) {
             form.setData('has_veterinary', true);
         }

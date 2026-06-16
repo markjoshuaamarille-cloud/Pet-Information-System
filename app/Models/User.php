@@ -25,7 +25,9 @@ class User extends Authenticatable
     protected $fillable = [
         'name',
         'email',
+        'contact',
         'role',
+        'is_active',
         'client_id',
         'password',
     ];
@@ -50,6 +52,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -66,6 +69,11 @@ class User extends Authenticatable
     public function isCustomer(): bool
     {
         return $this->hasRole('customer');
+    }
+
+    public function canSignIn(): bool
+    {
+        return $this->isCustomer() || $this->is_active;
     }
 
     public function client(): BelongsTo

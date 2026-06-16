@@ -64,6 +64,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('role:customer')->group(function () {
         Route::patch('/pets/{pet}/toggle-active', [PetController::class, 'toggleActivation'])->name('pets.toggle-active');
+        Route::post('/appointments/{appointment}/rating', [AppointmentController::class, 'storeRating'])->name('appointments.rating.store');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,clinic_owner')->group(function () {
@@ -89,6 +90,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/appointments', [AppointmentController::class, 'store'])->name('appointments.store');
         Route::put('/appointments/{appointment}', [AppointmentController::class, 'update'])->name('appointments.update');
         Route::delete('/appointments/{appointment}', [AppointmentController::class, 'destroy'])->name('appointments.destroy');
+        Route::post('/appointments/grooming-slot-availability', [AppointmentController::class, 'groomingSlotAvailability'])->name('appointments.grooming-slot-availability');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,clinic_owner')->group(function () {
@@ -150,6 +152,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
         Route::post('/users', [UserManagementController::class, 'store'])->name('users.store');
         Route::put('/users/{user}/role', [UserManagementController::class, 'updateRole'])->name('users.role.update');
+        Route::post('/users/{user}/toggle-active', [UserManagementController::class, 'toggleActive'])->name('users.toggle-active');
         Route::put('/users/{user}/clinics', [UserManagementController::class, 'updateClinics'])->name('users.clinics.update');
         Route::delete('/users/{user}', [UserManagementController::class, 'destroy'])->name('users.destroy');
 

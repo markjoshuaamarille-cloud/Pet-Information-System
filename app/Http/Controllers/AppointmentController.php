@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\AppointmentRating;
 use App\Models\Clinic;
 use App\Models\Client;
 use App\Models\HealthRecord;
@@ -15,6 +16,8 @@ use App\Support\ClinicContext;
 use App\Support\ClinicDateTime;
 use App\Support\ClinicPatientScope;
 use App\Support\ClinicServices;
+use App\Support\GroomingSlotAvailability;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -49,6 +52,7 @@ class AppointmentController extends Controller
                     'invoiced_at', 'billing_id', 'medicine_id', 'service_catalog_id',
                 ])
                 ->orderBy('created_at'),
+            'rating:id,appointment_id,rating',
         ])
             ->orderByDesc('created_at')
             ->orderByDesc('id');
@@ -432,6 +436,16 @@ class AppointmentController extends Controller
 
         $validated['scheduled_at'] = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);
 
+        $slotError = $this->groomingSlotValidationError(
+            $validated['type'],
+            (int) ($validated['clinic_id'] ?? 0),
+            $validated['scheduled_at'],
+        );
+
+        if ($slotError) {
+            return redirect()->back()->withErrors(['scheduled_at' => $slotError]);
+        }
+
         Appointment::create($validated);
 
         return redirect()->back()->with('success', 'Appointment scheduled successfully.');
@@ -465,6 +479,22 @@ class AppointmentController extends Controller
 
         $validated['scheduled_at'] = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);
 
+        $clinicId = (int) ($validated['clinic_id'] ?? $appointment->clinic_id ?? 0);
+        $appointmentType = $validated['type'] ?? $appointment->type;
+
+        if ($validated['status'] !== 'cancelled') {
+            $slotError = $this->groomingSlotValidationError(
+                $appointmentType,
+                $clinicId,
+                $validated['scheduled_at'],
+                $appointment->id,
+            );
+
+            if ($slotError) {
+                return redirect()->back()->withErrors(['scheduled_at' => $slotError]);
+            }
+        }
+
         $appointment->update($validated);
 
         return redirect()->back()->with('success', 'Appointment updated successfully.');
@@ -478,6 +508,73 @@ class AppointmentController extends Controller
         $appointment->delete();
 
         return redirect()->back()->with('success', 'Appointment cancelled.');
+    }
+
+    public function storeRating(Request $request, Appointment $appointment): RedirectResponse
+    {
+        $user = $this->currentUser();
+
+        if (! $user?->isCustomer()) {
+            abort(403, 'Only customers can rate appointments.');
+        }
+
+        $this->ensureCustomerOwnsAppointment($user, $appointment);
+
+        if ($appointment->status !== 'completed') {
+            throw ValidationException::withMessages([
+                'rating' => 'You can only rate completed appointments.',
+            ]);
+        }
+
+        if ($appointment->rating) {
+            throw ValidationException::withMessages([
+                'rating' => 'You have already rated this appointment.',
+            ]);
+        }
+
+        $validated = $request->validate([
+            'rating' => ['required', 'integer', 'min:1', 'max:5'],
+        ]);
+
+        AppointmentRating::create([
+            'appointment_id' => $appointment->id,
+            'user_id' => $user->id,
+            'rating' => $validated['rating'],
+        ]);
+
+        return redirect()->back()->with('success', 'Thank you for your rating!');
+    }
+
+    public function groomingSlotAvailability(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'clinic_id' => ['required', 'integer', 'exists:clinics,id'],
+            'scheduled_at' => ['required', 'string'],
+            'appointment_id' => ['nullable', 'integer', 'exists:appointments,id'],
+        ]);
+
+        $scheduledAt = ClinicDateTime::parseScheduledAt($validated['scheduled_at']);
+
+        return response()->json(
+            GroomingSlotAvailability::inspect(
+                (int) $validated['clinic_id'],
+                $scheduledAt,
+                isset($validated['appointment_id']) ? (int) $validated['appointment_id'] : null,
+            ),
+        );
+    }
+
+    private function groomingSlotValidationError(
+        string $type,
+        int $clinicId,
+        \Carbon\Carbon $scheduledAt,
+        ?int $excludeAppointmentId = null,
+    ): ?string {
+        if ($type !== 'grooming' || $clinicId <= 0) {
+            return null;
+        }
+
+        return GroomingSlotAvailability::validationMessage($clinicId, $scheduledAt, $excludeAppointmentId);
     }
 
     private function ensureCustomerOwnsAppointment(?User $user, Appointment $appointment): void

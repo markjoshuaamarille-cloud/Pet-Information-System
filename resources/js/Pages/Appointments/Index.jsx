@@ -58,6 +58,94 @@ const formatPeso = (v) => `₱${Number(v ?? 0).toFixed(2)}`;
 const formatAppointmentStatus = (status) =>
     status ? status.charAt(0).toUpperCase() + status.slice(1) : '—';
 
+function StarIcon({ filled = false, className = 'h-5 w-5' }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className={`${className} ${filled ? 'text-amber-400' : 'text-gray-300'}`}
+            aria-hidden="true"
+        >
+            <path
+                fillRule="evenodd"
+                d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.753-.382-1.831-4.401Z"
+                clipRule="evenodd"
+            />
+        </svg>
+    );
+}
+
+function StarRatingDisplay({ value, max = 5, size = 'md' }) {
+    const numeric = Number(value ?? 0);
+    const sizeClass = size === 'sm' ? 'h-4 w-4' : 'h-5 w-5';
+    const rounded = Math.min(max, Math.max(0, Math.round(numeric)));
+
+    return (
+        <div className="inline-flex items-center gap-0.5" aria-label={`${numeric.toFixed(1)} out of ${max} stars`}>
+            {Array.from({ length: max }, (_, index) => (
+                <StarIcon key={index} filled={index < rounded} className={sizeClass} />
+            ))}
+        </div>
+    );
+}
+
+function StarRatingInput({ appointmentId }) {
+    const [hoverValue, setHoverValue] = useState(0);
+    const [submitting, setSubmitting] = useState(false);
+
+    const submitRating = (rating) => {
+        setSubmitting(true);
+        router.post(
+            route('appointments.rating.store', appointmentId),
+            { rating },
+            {
+                preserveScroll: true,
+                onFinish: () => setSubmitting(false),
+            },
+        );
+    };
+
+    return (
+        <div className="inline-flex flex-col items-end gap-1">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                Rate visit
+            </span>
+            <div
+                className="inline-flex items-center gap-0.5"
+                onMouseLeave={() => setHoverValue(0)}
+            >
+                {Array.from({ length: 5 }, (_, index) => {
+                    const starValue = index + 1;
+                    const active = starValue <= (hoverValue || 0);
+
+                    return (
+                        <button
+                            key={starValue}
+                            type="button"
+                            disabled={submitting}
+                            title={`${starValue} star${starValue === 1 ? '' : 's'}`}
+                            onMouseEnter={() => setHoverValue(starValue)}
+                            onClick={() => submitRating(starValue)}
+                            className="rounded p-0.5 transition hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                            <StarIcon filled={active} className="h-5 w-5" />
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
+const formatClinicRating = (averageRating, ratingCount) => {
+    if (!ratingCount) {
+        return 'No ratings yet';
+    }
+
+    return `${Number(averageRating).toFixed(1)} (${ratingCount} review${ratingCount === 1 ? '' : 's'})`;
+};
+
 const appointmentBillingSnapshot = (appointment) => {
     const billing = (appointment.billings ?? [])[0];
 
@@ -1172,6 +1260,96 @@ function AppointmentServicesPanel({
     );
 }
 
+/* ─────────────────────────────── Grooming slot hint ─── */
+
+function GroomingSlotHint({ serviceType, clinicId, scheduledAt, onStatusChange, onUseNextSlot }) {
+    const [status, setStatus] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (serviceType !== 'grooming' || !clinicId || !scheduledAt) {
+            setStatus(null);
+            onStatusChange?.(null);
+            return undefined;
+        }
+
+        let cancelled = false;
+        const timer = setTimeout(async () => {
+            setLoading(true);
+
+            try {
+                const res = await axios.post(route('appointments.grooming-slot-availability'), {
+                    clinic_id: clinicId,
+                    scheduled_at: scheduledAt,
+                });
+
+                if (!cancelled) {
+                    setStatus(res.data);
+                    onStatusChange?.(res.data);
+                }
+            } catch {
+                if (!cancelled) {
+                    setStatus(null);
+                    onStatusChange?.(null);
+                }
+            } finally {
+                if (!cancelled) {
+                    setLoading(false);
+                }
+            }
+        }, 350);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timer);
+        };
+    }, [serviceType, clinicId, scheduledAt, onStatusChange]);
+
+    if (serviceType !== 'grooming' || !clinicId || !scheduledAt) {
+        return null;
+    }
+
+    if (loading && !status) {
+        return (
+            <div className="mt-4 rounded-lg border border-purple-100 bg-purple-50 px-4 py-3 text-sm text-purple-800">
+                Checking groomer availability…
+            </div>
+        );
+    }
+
+    if (!status) {
+        return null;
+    }
+
+    if (status.available) {
+        return (
+            <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <p className="font-medium">Grooming slot available</p>
+                <p className="mt-1 text-xs text-emerald-800">
+                    {status.remaining_slots} of {status.groomer_count} groomer
+                    {status.groomer_count === 1 ? '' : 's'} available at this time (1-hour appointment).
+                </p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-medium">This grooming time is fully booked</p>
+            <p className="mt-1 text-xs text-amber-800">{status.message}</p>
+            {status.next_available_at && (
+                <button
+                    type="button"
+                    onClick={() => onUseNextSlot?.(status.next_available_at)}
+                    className="mt-3 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                >
+                    Use next available: {status.next_available_formatted}
+                </button>
+            )}
+        </div>
+    );
+}
+
 /* ─────────────────────────────── ClinicPicker ─── */
 
 function ClinicPicker({ serviceType, clientLat, clientLng, hasLocation, selectedClinicId, onSelect }) {
@@ -1312,6 +1490,18 @@ function ClinicPicker({ serviceType, clientLat, clientLng, hasLocation, selected
                                                 {clinic.address}
                                             </p>
                                         )}
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <StarRatingDisplay
+                                                value={clinic.average_rating ?? 0}
+                                                size="sm"
+                                            />
+                                            <span className="text-xs text-gray-500">
+                                                {formatClinicRating(
+                                                    clinic.average_rating,
+                                                    clinic.rating_count ?? 0,
+                                                )}
+                                            </span>
+                                        </div>
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             {clinic.has_veterinary && (
                                                 <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-700">
@@ -1380,11 +1570,13 @@ export default function AppointmentsIndex({
 }) {
     const appTimezone = usePage().props.appTimezone ?? 'Asia/Manila';
     const auth = usePage().props.auth;
+    const activeClinic = usePage().props.activeClinic;
     const isCustomer = auth?.user?.role === 'customer';
 
     const [completingAppointment, setCompletingAppointment] = useState(null);
     const [invoicingAppointmentId, setInvoicingAppointmentId] = useState(null);
     const [openServicesId, setOpenServicesId] = useState(null);
+    const [groomingSlotStatus, setGroomingSlotStatus] = useState(null);
 
     // After Inertia re-renders (e.g. after completing appointment), find the updated record
     const invoicingAppointment = useMemo(
@@ -1413,6 +1605,17 @@ export default function AppointmentsIndex({
         showingCount: appointmentShowingCount,
     } = useListDisplayLimit(appointments);
 
+    const groomingClinicId = isCustomer
+        ? form.data.clinic_id
+        : activeClinic?.id ?? '';
+
+    const groomingSlotBlocked =
+        form.data.type === 'grooming'
+        && groomingClinicId
+        && form.data.scheduled_at
+        && groomingSlotStatus
+        && !groomingSlotStatus.available;
+
     const submit = (e) => {
         e.preventDefault();
 
@@ -1426,8 +1629,19 @@ export default function AppointmentsIndex({
             return;
         }
 
+        if (groomingSlotBlocked) {
+            form.setError(
+                'scheduled_at',
+                groomingSlotStatus.message ?? 'This grooming time slot is fully booked.',
+            );
+            return;
+        }
+
         form.post(route('appointments.store'), {
-            onSuccess: () => form.reset(),
+            onSuccess: () => {
+                form.reset();
+                setGroomingSlotStatus(null);
+            },
         });
     };
 
@@ -1544,7 +1758,18 @@ export default function AppointmentsIndex({
                             </div>
                         )}
 
-                        <PrimaryButton className="mt-4" disabled={form.processing}>
+                        <GroomingSlotHint
+                            serviceType={form.data.type}
+                            clinicId={groomingClinicId}
+                            scheduledAt={form.data.scheduled_at}
+                            onStatusChange={setGroomingSlotStatus}
+                            onUseNextSlot={(nextAt) => {
+                                form.setData('scheduled_at', nextAt);
+                                form.clearErrors('scheduled_at');
+                            }}
+                        />
+
+                        <PrimaryButton className="mt-4" disabled={form.processing || groomingSlotBlocked}>
                             Schedule
                         </PrimaryButton>
                     </form>
@@ -1560,6 +1785,9 @@ export default function AppointmentsIndex({
                                     <th className="px-4 py-3 text-left">When</th>
                                     <th className="px-4 py-3 text-left">Service</th>
                                     <th className="px-4 py-3 text-left">Status</th>
+                                    {isCustomer && (
+                                        <th className="px-4 py-3 text-left">Rating</th>
+                                    )}
                                     <th className="px-4 py-3 text-right">Actions</th>
                                 </tr>
                             </thead>
@@ -1607,6 +1835,24 @@ export default function AppointmentsIndex({
                                                     {billingBadgeForAppointment(a, can_manage_status)}
                                                 </div>
                                             </td>
+                                            {isCustomer && (
+                                                <td className="px-4 py-3">
+                                                    {a.status === 'completed' ? (
+                                                        a.rating ? (
+                                                            <div className="flex flex-col items-start gap-1">
+                                                                <StarRatingDisplay value={a.rating.rating} />
+                                                                <span className="text-[10px] text-gray-500">
+                                                                    You rated {a.rating.rating}/5
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <StarRatingInput appointmentId={a.id} />
+                                                        )
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400">—</span>
+                                                    )}
+                                                </td>
+                                            )}
                                             <td className="px-4 py-3 text-right">
                                                 {can_manage_status && a.status === 'scheduled' && (
                                                     <button
@@ -1658,7 +1904,7 @@ export default function AppointmentsIndex({
                                         {/* Services panel (expandable) */}
                                         {openServicesId === a.id && (
                                             <tr key={`services-${a.id}`}>
-                                                <td colSpan={7} className="p-0">
+                                                <td colSpan={isCustomer ? 8 : 7} className="p-0">
                                                     <AppointmentServicesPanel
                                                         appointment={a}
                                                         serviceCatalogs={serviceCatalogs}

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Support\GeoLocation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class ClinicSuggestController extends Controller
 {
@@ -45,7 +46,17 @@ class ClinicSuggestController extends Controller
         $userLat = isset($validated['lat']) ? (float) $validated['lat'] : null;
         $userLng = isset($validated['lng']) ? (float) $validated['lng'] : null;
 
-        $result = $clinics->map(function (Clinic $clinic) use ($userLat, $userLng): array {
+        $clinicIds = $clinics->pluck('id');
+
+        $ratingSummaries = DB::table('appointment_ratings')
+            ->join('appointments', 'appointments.id', '=', 'appointment_ratings.appointment_id')
+            ->whereIn('appointments.clinic_id', $clinicIds)
+            ->groupBy('appointments.clinic_id')
+            ->selectRaw('appointments.clinic_id, ROUND(AVG(appointment_ratings.rating), 1) as average_rating, COUNT(*) as rating_count')
+            ->get()
+            ->keyBy('clinic_id');
+
+        $result = $clinics->map(function (Clinic $clinic) use ($userLat, $userLng, $ratingSummaries): array {
             $distanceKm = null;
             $distanceFormatted = null;
 
@@ -66,6 +77,12 @@ class ClinicSuggestController extends Controller
                 'has_veterinary'     => $clinic->has_veterinary,
                 'has_pet_shop'       => $clinic->has_pet_shop,
                 'has_grooming'       => $clinic->has_grooming,
+                'average_rating'     => isset($ratingSummaries[$clinic->id])
+                    ? (float) $ratingSummaries[$clinic->id]->average_rating
+                    : null,
+                'rating_count'       => isset($ratingSummaries[$clinic->id])
+                    ? (int) $ratingSummaries[$clinic->id]->rating_count
+                    : 0,
             ];
         });
 

@@ -35,7 +35,7 @@ function Field({ label, name, value, error, onChange, required = false, placehol
  *  - data / setData or onChange patch helper
  *  - errors
  *  - geocodeRoute, reverseGeocodeRoute (defaults to public guest routes)
- *  - geoapifyImportRoute + onGeoapifyImport (optional clinic name search)
+ *  - geoapifyImportRoute + onGeoapifyImport (optional service-flag hints from place search)
  *  - requireCoordinates
  */
 export default function AddressLocationForm({

@@ -75,7 +75,15 @@ class Clinic extends Model
 
         static::creating(function (Clinic $clinic): void {
             if (empty($clinic->slug)) {
-                $clinic->slug = Str::slug($clinic->name);
+                $clinic->slug = static::generateUniqueSlug(
+                    $clinic->name,
+                    [
+                        'city' => $clinic->city,
+                        'barangay' => $clinic->barangay,
+                        'address_line1' => $clinic->address_line1,
+                        'address_formatted' => $clinic->address_formatted,
+                    ],
+                );
             }
         });
 
@@ -140,6 +148,54 @@ class Clinic extends Model
     public function hasModule(string $module): bool
     {
         return in_array($module, $this->enabled_modules ?? [], true);
+    }
+
+    /**
+     * Build a unique slug from the clinic name, adding location when needed.
+     */
+    public static function generateUniqueSlug(string $name, array $location = [], ?int $ignoreId = null): string
+    {
+        $base = Str::slug($name) ?: 'clinic';
+
+        $locationParts = array_values(array_filter([
+            $location['barangay'] ?? null,
+            $location['city'] ?? null,
+            $location['address_line1'] ?? null,
+        ], fn (?string $part) => filled($part)));
+
+        $candidates = [$base];
+
+        if ($locationParts !== []) {
+            $candidates[] = $base.'-'.Str::slug(implode('-', $locationParts));
+        }
+
+        foreach (array_slice($locationParts, 0, 2) as $part) {
+            $candidates[] = $base.'-'.Str::slug($part);
+        }
+
+        $candidates = array_values(array_unique(array_filter($candidates)));
+
+        foreach ($candidates as $candidate) {
+            if (! static::slugExists($candidate, $ignoreId)) {
+                return $candidate;
+            }
+        }
+
+        $suffix = 2;
+
+        while (static::slugExists("{$base}-{$suffix}", $ignoreId)) {
+            $suffix++;
+        }
+
+        return "{$base}-{$suffix}";
+    }
+
+    private static function slugExists(string $slug, ?int $ignoreId = null): bool
+    {
+        return static::query()
+            ->when($ignoreId, fn (Builder $query) => $query->where('id', '!=', $ignoreId))
+            ->where('slug', $slug)
+            ->exists();
     }
 
     /**

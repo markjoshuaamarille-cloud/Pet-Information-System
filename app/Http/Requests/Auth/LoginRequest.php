@@ -50,6 +50,16 @@ class LoginRequest extends FormRequest
             ]);
         }
 
+        $user = Auth::user();
+
+        if ($user && ! $user->canSignIn()) {
+            Auth::logout();
+
+            throw ValidationException::withMessages([
+                'email' => 'Your account is pending approval. Please wait for an administrator to activate your account.',
+            ]);
+        }
+
         RateLimiter::clear($this->throttleKey());
     }
 
