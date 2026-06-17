@@ -536,13 +536,21 @@ class BillingController extends Controller
     public function receipt(Billing $billing): Response
     {
         $billing->load([
-            'client',
+            'clinic:id,name,contact,email,address,address_formatted,city,province',
+            'client.users:id,client_id,contact',
             'pet',
             'appointment',
             'serviceCatalog',
             'lineItems',
             'payments' => fn ($query) => $query->orderBy('paid_at'),
         ]);
+
+        if ($billing->client) {
+            $billing->client->setAttribute(
+                'contact',
+                $billing->client->effectiveContact() ?? '—',
+            );
+        }
 
         $appointment = $billing->appointment;
         $serviceLabel = $appointment
@@ -552,6 +560,7 @@ class BillingController extends Controller
         return Inertia::render('Billing/Receipt', [
             'billing' => [
                 ...$billing->toArray(),
+                'clinic' => $billing->clinic,
                 'client' => $billing->client,
                 'pet' => $billing->pet,
                 'appointment' => $appointment ? [

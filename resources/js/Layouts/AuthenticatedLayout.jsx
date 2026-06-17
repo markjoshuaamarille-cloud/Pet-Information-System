@@ -351,6 +351,26 @@ function filterNavItems(
     });
 }
 
+function navBadgeCount(item, platformAdminAlerts) {
+    if (!platformAdminAlerts) {
+        return 0;
+    }
+
+    if (item.href === "admin.users.index") {
+        return platformAdminAlerts.pending_clinic_owners ?? 0;
+    }
+
+    if (item.href === "admin.clinics.index") {
+        return platformAdminAlerts.pending_clinics ?? 0;
+    }
+
+    if (item.href === "notifications.index") {
+        return platformAdminAlerts.total ?? 0;
+    }
+
+    return 0;
+}
+
 function ClinicSwitcher({ activeClinic, assignedClinics, isPlatformAdmin }) {
     const switchClinic = (clinicId) => {
         router.post(
@@ -401,6 +421,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const isPlatformAdmin = page.props.isPlatformAdmin ?? false;
     const hasDeactivatedClinicOnly =
         page.props.hasDeactivatedClinicOnly ?? false;
+    const platformAdminAlerts = page.props.platformAdminAlerts ?? null;
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
     const [customerAlertModal, setCustomerAlertModal] = useState(null);
@@ -430,20 +451,32 @@ export default function AuthenticatedLayout({ header, children }) {
                             </div>
 
                             <div className="hidden space-x-4 sm:-my-px sm:ms-6 sm:flex sm:items-center">
-                                {allowedNavItems.map((item) => (
-                                    <NavLink
-                                        key={item.href}
-                                        href={route(item.href)}
-                                        active={
-                                            route().current(item.href) ||
-                                            route().current(
-                                                `${item.href.split(".")[0]}.*`,
-                                            )
-                                        }
-                                    >
-                                        {item.label}
-                                    </NavLink>
-                                ))}
+                                {allowedNavItems.map((item) => {
+                                    const badge = navBadgeCount(
+                                        item,
+                                        platformAdminAlerts,
+                                    );
+
+                                    return (
+                                        <NavLink
+                                            key={item.href}
+                                            href={route(item.href)}
+                                            active={
+                                                route().current(item.href) ||
+                                                route().current(
+                                                    `${item.href.split(".")[0]}.*`,
+                                                )
+                                            }
+                                        >
+                                            {item.label}
+                                            {badge > 0 && (
+                                                <span className="ms-1.5 rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">
+                                                    {badge}
+                                                </span>
+                                            )}
+                                        </NavLink>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -614,14 +647,28 @@ export default function AuthenticatedLayout({ header, children }) {
                                 </select>
                             </div>
                         )}
-                        {allowedNavItems.map((item) => (
-                            <ResponsiveNavLink
-                                key={item.href}
-                                href={route(item.href)}
-                            >
-                                {item.label}
-                            </ResponsiveNavLink>
-                        ))}
+                        {allowedNavItems.map((item) => {
+                            const badge = navBadgeCount(
+                                item,
+                                platformAdminAlerts,
+                            );
+
+                            return (
+                                <ResponsiveNavLink
+                                    key={item.href}
+                                    href={route(item.href)}
+                                >
+                                    <span className="flex items-center justify-between">
+                                        <span>{item.label}</span>
+                                        {badge > 0 && (
+                                            <span className="ms-2 rounded-full bg-amber-500 px-2 py-0.5 text-xs font-semibold text-white">
+                                                {badge}
+                                            </span>
+                                        )}
+                                    </span>
+                                </ResponsiveNavLink>
+                            );
+                        })}
                     </div>
                     <div className="border-t border-gray-200 pb-1 pt-4">
                         <div className="px-4">

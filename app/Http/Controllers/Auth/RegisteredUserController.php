@@ -35,6 +35,7 @@ class RegisteredUserController extends Controller
         $validated = $request->validate([
             'name'              => 'required|string|max:255',
             'email'             => 'required|string|lowercase|email|max:255|unique:'.User::class,
+            'contact'           => 'required|string|max:100',
             'password'          => ['required', 'confirmed', Rules\Password::defaults()],
             ...GeoapifyAddress::validationRules(requireCoordinates: true),
         ]);
@@ -45,7 +46,7 @@ class RegisteredUserController extends Controller
             ['email' => $request->email],
             [
                 'name'              => $request->name,
-                'contact'           => 'N/A',
+                'contact'           => $validated['contact'],
                 ...$location,
             ]
         );
@@ -53,6 +54,7 @@ class RegisteredUserController extends Controller
         if (! $client->wasRecentlyCreated) {
             $client->update([
                 'name' => $request->name,
+                'contact' => $validated['contact'],
                 ...$location,
             ]);
         }
@@ -60,6 +62,7 @@ class RegisteredUserController extends Controller
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
+            'contact' => $validated['contact'],
             'role' => 'customer',
             'client_id' => $client->id,
             'is_active' => true,

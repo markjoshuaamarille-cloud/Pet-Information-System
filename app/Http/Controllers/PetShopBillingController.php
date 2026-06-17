@@ -55,10 +55,17 @@ class PetShopBillingController extends Controller
 
         $billing->load([
             'clinic:id,name,contact,email,address,address_formatted,city,province',
-            'client:id,name,contact,email,address,address_formatted',
+            'client.users:id,client_id,contact',
             'lineItems.medicine:id,name,category',
             'payments' => fn ($query) => $query->orderBy('paid_at'),
         ]);
+
+        if ($billing->client) {
+            $billing->client->setAttribute(
+                'contact',
+                $billing->client->effectiveContact() ?? '—',
+            );
+        }
 
         return Inertia::render('PetShopBilling/Receipt', [
             'order' => $billing,

@@ -11,6 +11,7 @@ export default function Register() {
     const { data, setData, post, processing, errors, reset } = useForm({
         name: '',
         email: '',
+        contact: '',
         password: '',
         password_confirmation: '',
         ...emptyAddressForm(),
@@ -56,6 +57,22 @@ export default function Register() {
                         required
                     />
                     <InputError message={errors.email} className="mt-2" />
+                </div>
+
+                <div>
+                    <InputLabel htmlFor="contact" value="Contact Number" />
+                    <TextInput
+                        id="contact"
+                        type="tel"
+                        name="contact"
+                        value={data.contact}
+                        className="mt-1 block w-full"
+                        autoComplete="tel"
+                        placeholder="e.g. 0917 123 4567"
+                        onChange={(e) => setData('contact', e.target.value)}
+                        required
+                    />
+                    <InputError message={errors.contact} className="mt-2" />
                 </div>
 
                 <div className="rounded-lg border border-gray-200 p-4">

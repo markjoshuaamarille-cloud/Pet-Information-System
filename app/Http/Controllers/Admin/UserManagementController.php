@@ -34,6 +34,7 @@ class UserManagementController extends Controller
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
+            'contact' => ['nullable', 'string', 'max:100'],
             'role' => ['required', Rule::in($this->roles())],
             'password' => ['required', 'confirmed', Password::defaults()],
         ]);
@@ -44,16 +45,21 @@ class UserManagementController extends Controller
                 ['email' => $validated['email']],
                 [
                     'name' => $validated['name'],
-                    'contact' => 'N/A',
+                    'contact' => $validated['contact'] ?? 'N/A',
                     'address' => null,
                 ]
             );
             $clientId = $client->id;
+
+            if (! empty($validated['contact']) && $client->contact !== $validated['contact']) {
+                $client->update(['contact' => $validated['contact']]);
+            }
         }
 
         User::create([
             'name' => $validated['name'],
             'email' => $validated['email'],
+            'contact' => $validated['contact'] ?? null,
             'role' => $validated['role'],
             'client_id' => $clientId,
             'is_active' => $validated['role'] === 'customer',

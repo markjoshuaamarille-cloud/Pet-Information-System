@@ -1327,7 +1327,14 @@ function GroomingSlotHint({ serviceType, clinicId, scheduledAt, onStatusChange, 
                 <p className="font-medium">Grooming slot available</p>
                 <p className="mt-1 text-xs text-emerald-800">
                     {status.remaining_slots} of {status.groomer_count} groomer
-                    {status.groomer_count === 1 ? '' : 's'} available at this time (1-hour appointment).
+                    {status.groomer_count === 1 ? '' : 's'} free for a 1-hour session starting at this time.
+                    {status.booked_count > 0 && (
+                        <>
+                            {' '}
+                            ({status.booked_count} overlapping appointment
+                            {status.booked_count === 1 ? '' : 's'} already scheduled.)
+                        </>
+                    )}
                 </p>
             </div>
         );
@@ -1335,8 +1342,15 @@ function GroomingSlotHint({ serviceType, clinicId, scheduledAt, onStatusChange, 
 
     return (
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p className="font-medium">This grooming time is fully booked</p>
-            <p className="mt-1 text-xs text-amber-800">{status.message}</p>
+            <p className="font-medium">All groomers are busy for this time</p>
+            <p className="mt-1 text-xs text-amber-800">
+                Each grooming appointment blocks a groomer for 1 hour. This start time overlaps with{' '}
+                {status.booked_count} other session{status.booked_count === 1 ? '' : 's'}, so no groomer is
+                available.
+            </p>
+            {status.message && (
+                <p className="mt-1 text-xs text-amber-800">{status.message}</p>
+            )}
             {status.next_available_at && (
                 <button
                     type="button"

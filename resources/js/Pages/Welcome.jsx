@@ -40,6 +40,24 @@ const ICONS = {
     star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
     check: "M20 6L9 17l-5-5",
     map: "M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z M12 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2",
+    phone: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z",
+    landline: "M3 5a2 2 0 0 1 2-2h3.28a1 1 0 0 1 .948.684l1.498 4.493a1 1 0 0 1-.502 1.21l-2.257 1.13a11.042 11.042 0 0 0 5.516 5.516l1.13-2.257a1 1 0 0 1 1.21-.502l4.493 1.498a1 1 0 0 1 .684.949V19a2 2 0 0 1-2 2h-1C9.716 21 3 14.284 3 6V5z",
+    mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6",
+    link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
+};
+
+const COMPANY = {
+    name: "JE310 Solution",
+    address: "3A PG Building, #63 West Ave., West Triangle, Quezon City",
+    mapUrl:
+        "https://www.google.com/maps/search/?api=1&query=3A+PG+Building+63+West+Ave+West+Triangle+Quezon+City+Philippines",
+    mobile: "09175139900",
+    mobileTel: "+639175139900",
+    landline: "(02) 8376 1733",
+    landlineTel: "+63283761733",
+    email: "hr@je310solution.com",
+    website: "https://www.je310solution.com",
+    websiteLabel: "www.je310solution.com",
 };
 
 /* ─── nav ────────────────────────────────────────────────────── */
@@ -68,6 +86,7 @@ function Navbar({ auth }) {
                             ["Services", "#services"],
                             ["How It Works", "#how"],
                             ["For Clinics", "#clinics"],
+                            ["Contact", "#contact"],
                         ].map(([label, href]) => (
                             <a
                                 key={href}
@@ -886,42 +905,191 @@ function CTABanner({ auth }) {
     );
 }
 
+/* ─── contact ─────────────────────────────────────────────────── */
+function ContactPill({ icon, href, external, children }) {
+    const className =
+        "group flex w-full items-center gap-4 rounded-full border border-gray-100 bg-white px-4 py-3 shadow-sm transition hover:border-[#E86716]/30 hover:shadow-md sm:max-w-xl";
+
+    const content = (
+        <>
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#0D2137] text-white transition group-hover:bg-[#E86716]">
+                <Icon path={icon} className="size-5" />
+            </span>
+            <span className="text-left text-sm font-medium leading-snug text-gray-700">
+                {children}
+            </span>
+        </>
+    );
+
+    if (href) {
+        return (
+            <a
+                href={href}
+                className={className}
+                {...(external
+                    ? { target: "_blank", rel: "noopener noreferrer" }
+                    : {})}
+            >
+                {content}
+            </a>
+        );
+    }
+
+    return <div className={className}>{content}</div>;
+}
+
+function ContactSection() {
+    return (
+        <section id="contact" className="bg-[#FBF7F2] py-20 lg:py-24">
+            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+                <div className="grid items-start gap-12 lg:grid-cols-2">
+                    <div>
+                        <span className="text-xs font-semibold uppercase tracking-widest text-[#E86716]">
+                            Get in Touch
+                        </span>
+                        <h2 className="mt-3 text-4xl font-extrabold text-[#0D2137] lg:text-5xl">
+                            Contact us
+                        </h2>
+                        <p className="mt-4 max-w-md text-gray-500 leading-relaxed">
+                            Have questions about PAWGO, clinic registration, or
+                            partnership opportunities? Reach out to{" "}
+                            <span className="font-semibold text-[#0D2137]">
+                                {COMPANY.name}
+                            </span>
+                            — we&apos;re happy to help.
+                        </p>
+                        <a
+                            href={`mailto:${COMPANY.email}?subject=PAWGO%20Inquiry`}
+                            className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#E86716] px-8 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#E86716]/25 transition hover:bg-[#cf5b12]"
+                        >
+                            Contact Us
+                            <Icon path={ICONS.arrow} className="size-4" />
+                        </a>
+                    </div>
+
+                    <div className="flex flex-col gap-3">
+                        <ContactPill icon={ICONS.map} href={COMPANY.mapUrl} external>
+                            {COMPANY.address}
+                        </ContactPill>
+                        <ContactPill icon={ICONS.phone} href={`tel:${COMPANY.mobileTel}`}>
+                            {COMPANY.mobile}
+                        </ContactPill>
+                        <ContactPill icon={ICONS.landline} href={`tel:${COMPANY.landlineTel}`}>
+                            {COMPANY.landline}
+                        </ContactPill>
+                        <ContactPill icon={ICONS.mail} href={`mailto:${COMPANY.email}`}>
+                            {COMPANY.email}
+                        </ContactPill>
+                        <ContactPill icon={ICONS.link} href={COMPANY.website} external>
+                            {COMPANY.websiteLabel}
+                        </ContactPill>
+                    </div>
+                </div>
+            </div>
+        </section>
+    );
+}
+
 /* ─── footer ─────────────────────────────────────────────────── */
 function Footer() {
     return (
         <footer className="bg-[#0D2137] py-12">
             <div className="mx-auto max-w-7xl px-6 lg:px-8">
-                <div className="flex flex-col items-center gap-6 sm:flex-row sm:justify-between">
-                    <div className="flex items-center gap-2.5">
-                        <img
-                            src="/images/pawgo-logo.png"
-                            alt="PAWGO"
-                            className="h-9 w-9 object-contain"
-                        />
-                        <span className="text-lg font-extrabold tracking-tight text-white">
-                            PAW<span className="text-[#E86716]">GO</span>
-                        </span>
+                <div className="grid gap-10 border-b border-white/10 pb-10 lg:grid-cols-3">
+                    <div>
+                        <div className="flex items-center gap-2.5">
+                            <img
+                                src="/images/pawgo-logo.png"
+                                alt="PAWGO"
+                                className="h-9 w-9 object-contain"
+                            />
+                            <span className="text-lg font-extrabold tracking-tight text-white">
+                                PAW<span className="text-[#E86716]">GO</span>
+                            </span>
+                        </div>
+                        <p className="mt-3 text-sm leading-relaxed text-gray-400">
+                            Pawsitive Always — your complete pet care platform
+                            for clinics, groomers, and pet owners.
+                        </p>
                     </div>
-                    <p className="text-xs text-gray-500 text-center">
-                        © {new Date().getFullYear()} PAWGO — Pawsitive Always.
-                        All rights reserved.
-                    </p>
-                    <div className="flex gap-5">
-                        {[
-                            ["Services", "#services"],
-                            ["How It Works", "#how"],
-                            ["For Clinics", "#clinics"],
-                        ].map(([label, href]) => (
-                            <a
-                                key={href}
-                                href={href}
-                                className="text-xs text-gray-500 transition hover:text-white"
-                            >
-                                {label}
-                            </a>
-                        ))}
+
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+                            Quick links
+                        </p>
+                        <ul className="mt-4 space-y-2">
+                            {[
+                                ["Services", "#services"],
+                                ["How It Works", "#how"],
+                                ["For Clinics", "#clinics"],
+                                ["Contact", "#contact"],
+                            ].map(([label, href]) => (
+                                <li key={href}>
+                                    <a
+                                        href={href}
+                                        className="text-sm text-gray-400 transition hover:text-white"
+                                    >
+                                        {label}
+                                    </a>
+                                </li>
+                            ))}
+                        </ul>
+                    </div>
+
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
+                            {COMPANY.name}
+                        </p>
+                        <ul className="mt-4 space-y-2 text-sm text-gray-400">
+                            <li>{COMPANY.address}</li>
+                            <li>
+                                <a
+                                    href={`tel:${COMPANY.mobileTel}`}
+                                    className="transition hover:text-white"
+                                >
+                                    {COMPANY.mobile}
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href={`tel:${COMPANY.landlineTel}`}
+                                    className="transition hover:text-white"
+                                >
+                                    {COMPANY.landline}
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href={`mailto:${COMPANY.email}`}
+                                    className="transition hover:text-white"
+                                >
+                                    {COMPANY.email}
+                                </a>
+                            </li>
+                            <li>
+                                <a
+                                    href={COMPANY.website}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="transition hover:text-white"
+                                >
+                                    {COMPANY.websiteLabel}
+                                </a>
+                            </li>
+                        </ul>
+                        <a
+                            href={`mailto:${COMPANY.email}?subject=PAWGO%20Inquiry`}
+                            className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white transition hover:border-[#E86716] hover:bg-[#E86716]"
+                        >
+                            Contact Us
+                        </a>
                     </div>
                 </div>
+
+                <p className="mt-8 text-center text-xs text-gray-500">
+                    © {new Date().getFullYear()} PAWGO — Pawsitive Always. All
+                    rights reserved. Powered by {COMPANY.name}.
+                </p>
             </div>
         </footer>
     );
@@ -942,6 +1110,7 @@ export default function Welcome({ auth }) {
                 <ForClinics auth={auth} />
                 <Reviews />
                 <CTABanner auth={auth} />
+                <ContactSection />
                 <Footer />
             </div>
         </>

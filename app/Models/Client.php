@@ -51,4 +51,21 @@ class Client extends Model
     {
         return $this->hasMany(User::class);
     }
+
+    public function effectiveContact(): ?string
+    {
+        $contact = trim((string) ($this->contact ?? ''));
+
+        if ($contact !== '' && strcasecmp($contact, 'N/A') !== 0) {
+            return $contact;
+        }
+
+        $userContact = $this->users()
+            ->whereNotNull('contact')
+            ->where('contact', '!=', '')
+            ->whereRaw('UPPER(TRIM(contact)) != ?', ['N/A'])
+            ->value('contact');
+
+        return $userContact ? trim($userContact) : null;
+    }
 }

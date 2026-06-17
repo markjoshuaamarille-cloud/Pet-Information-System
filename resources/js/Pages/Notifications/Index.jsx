@@ -39,9 +39,11 @@ const typeLabels = {
     surgery_due: 'Surgery',
     boarding_due: 'Boarding',
     emergency_care_due: 'Emergency',
+    clinic_owner_application: 'Clinic Owner Application',
+    clinic_registration: 'Clinic Registration',
 };
 
-export default function NotificationsIndex({ notifications, isCustomer = false }) {
+export default function NotificationsIndex({ notifications, isCustomer = false, platformAdminAlerts = null }) {
     const {
         visibleItems: visibleNotifications,
         displayLimit,
@@ -64,8 +66,31 @@ export default function NotificationsIndex({ notifications, isCustomer = false }
                     <p className="mb-4 text-sm text-gray-600">
                         {isCustomer
                             ? 'Reminders for your pets — upcoming appointments, vaccines, medications, and other due dates.'
-                            : 'Alerts for stock levels, due vaccinations, and other workflow reminders.'}
+                            : 'Alerts for stock levels, due vaccinations, clinic applications, and other workflow reminders.'}
                     </p>
+                    {!isCustomer && (platformAdminAlerts?.total ?? 0) > 0 && (
+                        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                            <p className="font-semibold">Pending clinic applications</p>
+                            <p className="mt-1">
+                                {platformAdminAlerts.pending_clinic_owners > 0 && (
+                                    <>
+                                        {platformAdminAlerts.pending_clinic_owners} clinic owner application
+                                        {platformAdminAlerts.pending_clinic_owners === 1 ? '' : 's'}
+                                    </>
+                                )}
+                                {platformAdminAlerts.pending_clinic_owners > 0 &&
+                                    platformAdminAlerts.pending_clinics > 0 &&
+                                    ' · '}
+                                {platformAdminAlerts.pending_clinics > 0 && (
+                                    <>
+                                        {platformAdminAlerts.pending_clinics} clinic registration
+                                        {platformAdminAlerts.pending_clinics === 1 ? '' : 's'}
+                                    </>
+                                )}
+                                {' '}awaiting your review.
+                            </p>
+                        </div>
+                    )}
                     {notifications.length === 0 ? (
                         <div className="rounded-lg bg-white p-6 text-center text-gray-500 shadow">
                             {isCustomer
@@ -98,6 +123,14 @@ export default function NotificationsIndex({ notifications, isCustomer = false }
                                             className="mt-2 inline-block text-sm font-medium underline"
                                         >
                                             View {n.pet_name ?? 'pet'} record
+                                        </Link>
+                                    )}
+                                    {!isCustomer && n.action_href && (
+                                        <Link
+                                            href={n.action_href}
+                                            className="mt-2 inline-block text-sm font-medium underline"
+                                        >
+                                            Review application
                                         </Link>
                                     )}
                                 </li>
