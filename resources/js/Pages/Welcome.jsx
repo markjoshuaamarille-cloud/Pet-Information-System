@@ -734,7 +734,7 @@ function ForClinics({ auth }) {
                             ) : (
                                 <>
                                     <Link
-                                        href={route("register")}
+                                        href={route("register-clinic-owner")}
                                         className="inline-flex items-center gap-2 rounded-full bg-[#0D2137] px-7 py-3.5 text-sm font-bold text-white transition hover:bg-[#1a3252]"
                                     >
                                         Register Your Clinic{" "}

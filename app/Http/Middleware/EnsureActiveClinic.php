@@ -24,6 +24,7 @@ class EnsureActiveClinic
         'logout',
         'login',
         'register',
+        'register-clinic-owner',
     ];
 
     public function handle(Request $request, Closure $next): Response

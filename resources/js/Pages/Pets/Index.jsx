@@ -90,6 +90,36 @@ const vaccinationStatusOptions = [
     { value: "not_vaccinated", label: "Not Vaccinated" },
 ];
 
+function ageFromBirthDate(birthDate) {
+    if (!birthDate) {
+        return "";
+    }
+
+    const match = String(birthDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) {
+        return "";
+    }
+
+    const [, year, month, day] = match;
+    const birth = new Date(Number(year), Number(month) - 1, Number(day));
+    const today = new Date();
+
+    if (Number.isNaN(birth.getTime()) || birth > today) {
+        return "";
+    }
+
+    let age = today.getFullYear() - birth.getFullYear();
+    const hadBirthdayThisYear =
+        today.getMonth() > birth.getMonth()
+        || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+
+    if (!hadBirthdayThisYear) {
+        age -= 1;
+    }
+
+    return String(Math.max(0, age));
+}
+
 function SelectOrOtherField({
     label,
     value,
@@ -577,12 +607,15 @@ export default function PetsIndex({
                                         type="date"
                                         className="mt-1 block w-full"
                                         value={form.data.birth_date}
-                                        onChange={(e) =>
-                                            form.setData(
-                                                "birth_date",
-                                                e.target.value,
-                                            )
-                                        }
+                                        max={new Date().toISOString().slice(0, 10)}
+                                        onChange={(e) => {
+                                            const birthDate = e.target.value;
+                                            form.setData({
+                                                ...form.data,
+                                                birth_date: birthDate,
+                                                age: ageFromBirthDate(birthDate),
+                                            });
+                                        }}
                                     />
                                 </div>
                                 <div>

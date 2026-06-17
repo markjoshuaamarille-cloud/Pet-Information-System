@@ -20,7 +20,7 @@ class UserManagementController extends Controller
     {
         $users = User::with(['clinics:id,name'])
             ->orderBy('name')
-            ->get(['id', 'name', 'email', 'role', 'created_at', 'client_id']);
+            ->get(['id', 'name', 'email', 'contact', 'role', 'is_active', 'created_at', 'client_id']);
 
         return Inertia::render('Admin/Users', [
             'users'   => $users,
@@ -56,10 +56,30 @@ class UserManagementController extends Controller
             'email' => $validated['email'],
             'role' => $validated['role'],
             'client_id' => $clientId,
+            'is_active' => $validated['role'] === 'customer',
             'password' => Hash::make($validated['password']),
         ]);
 
         return redirect()->back()->with('success', 'User created successfully.');
+    }
+
+    public function toggleActive(Request $request, User $user): RedirectResponse
+    {
+        if ($user->isCustomer()) {
+            return redirect()->back()->with('error', 'Customer accounts cannot be deactivated.');
+        }
+
+        if ($request->user()?->id === $user->id) {
+            return redirect()->back()->with('error', 'You cannot deactivate your own account.');
+        }
+
+        $user->update(['is_active' => ! $user->is_active]);
+
+        $message = $user->is_active
+            ? "{$user->name} has been activated."
+            : "{$user->name} has been deactivated.";
+
+        return redirect()->back()->with('success', $message);
     }
 
     public function updateRole(Request $request, User $user): RedirectResponse
@@ -80,6 +100,12 @@ class UserManagementController extends Controller
                 ]
             );
             $updates['client_id'] = $client->id;
+        }
+
+        if ($validated['role'] === 'customer') {
+            $updates['is_active'] = true;
+        } elseif ($user->isCustomer()) {
+            $updates['is_active'] = false;
         }
 
         if ($validated['role'] !== 'customer') {

@@ -43,6 +43,16 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
         router.delete(route('admin.users.destroy', user.id));
     };
 
+    const toggleActive = (user) => {
+        const activating = !user.is_active;
+
+        if (!confirm(`${activating ? 'Activate' : 'Deactivate'} ${user.name}?`)) {
+            return;
+        }
+
+        router.post(route('admin.users.toggle-active', user.id));
+    };
+
     const openClinicModal = (user) => {
         setClinicModalUser(user);
         const ids = (user.clinics ?? []).map(c => String(c.id));
@@ -233,7 +243,9 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                 <tr>
                                     <th className="px-4 py-3 text-left">Name</th>
                                     <th className="px-4 py-3 text-left">Email</th>
+                                    <th className="px-4 py-3 text-left">Contact</th>
                                     <th className="px-4 py-3 text-left">Role</th>
+                                    <th className="px-4 py-3 text-left">Status</th>
                                     <th className="px-4 py-3 text-left">Clinics</th>
                                     <th className="px-4 py-3 text-left">Created</th>
                                     <th className="px-4 py-3 text-right">Actions</th>
@@ -243,7 +255,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                 {visibleUsers.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={6}
+                                            colSpan={8}
                                             className="px-4 py-8 text-center text-gray-500"
                                         >
                                             {hasActiveFilters
@@ -256,6 +268,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                     <tr key={user.id}>
                                         <td className="px-4 py-3">{user.name}</td>
                                         <td className="px-4 py-3">{user.email}</td>
+                                        <td className="px-4 py-3">{user.contact || '—'}</td>
                                         <td className="px-4 py-3">
                                             <select
                                                 className="rounded-md border-gray-300 text-sm"
@@ -266,6 +279,21 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                                     <option key={role} value={role}>{role}</option>
                                                 ))}
                                             </select>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {user.role === 'customer' ? (
+                                                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                                                    Active
+                                                </span>
+                                            ) : user.is_active ? (
+                                                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
+                                                    Active
+                                                </span>
+                                            ) : (
+                                                <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
+                                                    Pending
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-3">
                                             {user.clinics && user.clinics.length > 0 ? (
@@ -280,10 +308,19 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                         </td>
                                         <td className="px-4 py-3">{new Date(user.created_at).toLocaleDateString()}</td>
                                         <td className="px-4 py-3 text-right space-x-2">
-                                            <button className="text-indigo-600 hover:underline text-sm" onClick={() => openClinicModal(user)}>
+                                            {user.role !== 'customer' && (
+                                                <button
+                                                    type="button"
+                                                    className={`text-sm hover:underline ${user.is_active ? 'text-amber-600' : 'text-emerald-600'}`}
+                                                    onClick={() => toggleActive(user)}
+                                                >
+                                                    {user.is_active ? 'Deactivate' : 'Activate'}
+                                                </button>
+                                            )}
+                                            <button type="button" className="text-indigo-600 hover:underline text-sm" onClick={() => openClinicModal(user)}>
                                                 Clinics
                                             </button>
-                                            <button className="text-red-600 hover:underline" onClick={() => deleteUser(user)}>
+                                            <button type="button" className="text-red-600 hover:underline" onClick={() => deleteUser(user)}>
                                                 Delete
                                             </button>
                                         </td>
