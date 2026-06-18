@@ -119,8 +119,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::delete('/grooming/{grooming}', [GroomingRecordController::class, 'destroy'])->name('grooming.destroy');
     });
 
-    Route::middleware('role:super_admin,cashier,receptionist,clinic_owner')->group(function () {
+    Route::middleware('role:super_admin,cashier,receptionist,veterinarian,clinic_owner')->group(function () {
         Route::get('/billing', [BillingController::class, 'index'])->name('billing.index');
+        Route::get('/billing/export', [BillingController::class, 'export'])->name('billing.export');
         Route::get('/billing/{billing}/receipt', [BillingController::class, 'receipt'])->name('billing.receipt');
         Route::post('/billing/checkout', [BillingController::class, 'checkout'])->name('billing.checkout');
         Route::put('/billing/{billing}', [BillingController::class, 'update'])->name('billing.update');
@@ -202,6 +203,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'update'])->name('pet-shop-billing.update');
         Route::post('/pet-shop-billing/{billing}/payments', [PetShopBillingController::class, 'storePayment'])->name('pet-shop-billing.payments.store');
         Route::get('/pet-shop-reports', [PetShopReportController::class, 'index'])->name('pet-shop-reports.index');
+        Route::get('/pet-shop-reports/export', [PetShopReportController::class, 'export'])->name('pet-shop-reports.export');
     });
 
     Route::middleware('role:super_admin,clinic_owner')->group(function () {

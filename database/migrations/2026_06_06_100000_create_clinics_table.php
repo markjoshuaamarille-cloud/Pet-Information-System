@@ -16,6 +16,13 @@ return new class extends Migration
             $table->string('email')->nullable();
             $table->string('website')->nullable();
             $table->text('address')->nullable();
+            $table->string('address_line1')->nullable();
+            $table->string('address_line2')->nullable();
+            $table->string('barangay')->nullable();
+            $table->string('city')->nullable();
+            $table->string('province')->nullable();
+            $table->string('postal_code', 20)->nullable();
+            $table->string('country')->default('Philippines');
             $table->string('address_formatted')->nullable();
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();

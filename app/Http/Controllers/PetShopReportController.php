@@ -2,66 +2,118 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\BillingLineItem;
+use App\Support\PetShopReportBuilder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PetShopReportController extends Controller
 {
     public function index(Request $request): Response
     {
-        $clinicId = $request->attributes->get('active_clinic_id');
-        $period   = $request->get('period', 'monthly'); // daily|weekly|monthly|yearly
-
-        $dateFormat = match ($period) {
-            'daily'   => '%Y-%m-%d',
-            'weekly'  => '%Y-%u',
-            'yearly'  => '%Y',
-            default   => '%Y-%m',
-        };
-
-        $query = BillingLineItem::query()
-            ->join('billings', 'billing_line_items.billing_id', '=', 'billings.id')
-            ->join('medicines', 'billing_line_items.medicine_id', '=', 'medicines.id')
-            ->where('billings.sale_type', 'pet_shop_retail')
-            ->where('billings.status', 'paid');
-
-        if ($clinicId) {
-            $query->where('billings.clinic_id', $clinicId);
-        }
-
-        $rows = $query
-            ->select([
-                'medicines.id',
-                'medicines.name',
-                'medicines.category',
-                DB::raw("DATE_FORMAT(billings.created_at, '{$dateFormat}') as period_label"),
-                DB::raw('SUM(billing_line_items.quantity) as total_qty'),
-                DB::raw('SUM(billing_line_items.line_total) as total_revenue'),
-            ])
-            ->groupBy('medicines.id', 'medicines.name', 'medicines.category', 'period_label')
-            ->orderByDesc('total_qty')
-            ->get();
-
-        // Pivot: group by period → products sorted by qty
-        $byPeriod = $rows->groupBy('period_label')->map(function ($items) {
-            return [
-                'fast_moving' => $items->sortByDesc('total_qty')->take(10)->values(),
-                'slow_moving' => $items->sortBy('total_qty')->take(10)->values(),
-            ];
-        })->sortKeysDesc();
+        $report = $this->builder($request)->build();
 
         return Inertia::render('PetShopReports/Index', [
-            'reportData' => $byPeriod,
-            'period'     => $period,
-            'periods'    => [
-                ['value' => 'daily',   'label' => 'Daily'],
-                ['value' => 'weekly',  'label' => 'Weekly'],
+            'summary' => $report['summary'],
+            'salesTrend' => $report['sales_trend'],
+            'categoryRevenue' => $report['category_revenue'],
+            'paymentMethods' => $report['payment_methods'],
+            'topCustomers' => $report['top_customers'],
+            'zeroSales' => $report['zero_sales'],
+            'reorderAlerts' => $report['reorder_alerts'],
+            'reportData' => $report['report_data'],
+            'filters' => $report['filters'],
+            'periods' => [
+                ['value' => 'daily', 'label' => 'Daily'],
+                ['value' => 'weekly', 'label' => 'Weekly'],
                 ['value' => 'monthly', 'label' => 'Monthly'],
-                ['value' => 'yearly',  'label' => 'Yearly'],
+                ['value' => 'yearly', 'label' => 'Yearly'],
             ],
         ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $report = $this->builder($request)->build();
+        $filename = 'pet-shop-report-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($report) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, ['Pet Shop Report Summary']);
+            fputcsv($handle, ['Total Revenue', $report['summary']['total_revenue']]);
+            fputcsv($handle, ['Total Orders', $report['summary']['total_orders']]);
+            fputcsv($handle, ['Units Sold', $report['summary']['units_sold']]);
+            fputcsv($handle, ['Average Order Value', $report['summary']['avg_order_value']]);
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Revenue by Category']);
+            fputcsv($handle, ['Category', 'Units', 'Revenue']);
+            foreach ($report['category_revenue'] as $row) {
+                fputcsv($handle, [$row['label'], $row['units'], $row['revenue']]);
+            }
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Payment Methods']);
+            fputcsv($handle, ['Method', 'Payments', 'Amount']);
+            foreach ($report['payment_methods'] as $row) {
+                fputcsv($handle, [$row['label'], $row['count'], $row['amount']]);
+            }
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Top Customers']);
+            fputcsv($handle, ['Customer', 'Orders', 'Revenue']);
+            foreach ($report['top_customers'] as $row) {
+                fputcsv($handle, [$row['name'], $row['orders'], $row['revenue']]);
+            }
+            fputcsv($handle, []);
+
+            foreach ($report['report_data'] as $label => $data) {
+                fputcsv($handle, ["Fast Moving - {$label}"]);
+                fputcsv($handle, ['Product', 'Category', 'Qty Sold', 'Revenue']);
+                foreach ($data['fast_moving'] as $product) {
+                    fputcsv($handle, [
+                        $product['name'],
+                        $product['category'],
+                        $product['total_qty'],
+                        $product['total_revenue'],
+                    ]);
+                }
+                fputcsv($handle, []);
+
+                fputcsv($handle, ["Slow Moving - {$label}"]);
+                fputcsv($handle, ['Product', 'Category', 'Qty Sold', 'Revenue']);
+                foreach ($data['slow_moving'] as $product) {
+                    fputcsv($handle, [
+                        $product['name'],
+                        $product['category'],
+                        $product['total_qty'],
+                        $product['total_revenue'],
+                    ]);
+                }
+                fputcsv($handle, []);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
+        ]);
+    }
+
+    private function builder(Request $request): PetShopReportBuilder
+    {
+        $validated = $request->validate([
+            'period' => 'nullable|in:daily,weekly,monthly,yearly',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        return new PetShopReportBuilder(
+            clinicId: $request->attributes->get('active_clinic_id'),
+            period: $validated['period'] ?? 'monthly',
+            dateFrom: $validated['date_from'] ?? null,
+            dateTo: $validated['date_to'] ?? null,
+        );
     }
 }

@@ -12,7 +12,7 @@ import {
     formatClinicDateTime,
     toClinicDateInput,
 } from "@/utils/formatDateTime";
-import { Head, useForm } from "@inertiajs/react";
+import { Head, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
 const statuses = ["completed", "cancelled"];
@@ -97,12 +97,18 @@ export default function GroomingIndex({
     records,
     pets,
     groomingAppointments,
+    groomers = [],
     can_manage_records = true,
 }) {
+    const { auth } = usePage().props;
+    const defaultGroomerId =
+        auth?.user?.role === "groomer" ? String(auth.user.id) : "";
+
     const [viewingRecord, setViewingRecord] = useState(null);
     const form = useForm({
         pet_id: "",
         appointment_id: "",
+        groomer_id: defaultGroomerId,
         service_type: "",
         service_date: "",
         status: "completed",
@@ -165,6 +171,7 @@ export default function GroomingIndex({
         form.reset();
         form.setData("status", "completed");
         form.setData("service_type", "");
+        form.setData("groomer_id", defaultGroomerId);
     };
 
     const onAppointmentChange = (appointmentId) => {
@@ -291,6 +298,33 @@ export default function GroomingIndex({
                                     }
                                     required
                                 />
+                            </div>
+                            <div>
+                                <InputLabel value="Groomer" />
+                                <select
+                                    className="mt-1 w-full rounded-md border-gray-300"
+                                    value={form.data.groomer_id}
+                                    onChange={(e) =>
+                                        form.setData(
+                                            "groomer_id",
+                                            e.target.value,
+                                        )
+                                    }
+                                >
+                                    <option value="">
+                                        {groomers.length > 0
+                                            ? "Select groomer"
+                                            : "No groomers assigned"}
+                                    </option>
+                                    {groomers.map((groomer) => (
+                                        <option
+                                            key={groomer.id}
+                                            value={groomer.id}
+                                        >
+                                            {groomer.name}
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
                             <div>
                                 <InputLabel value="Status" />
@@ -476,6 +510,12 @@ export default function GroomingIndex({
                                         <dd>
                                             {viewingRecord.pet?.client?.name ??
                                                 "—"}
+                                        </dd>
+                                    </div>
+                                    <div>
+                                        <dt className="text-gray-500">Groomer</dt>
+                                        <dd>
+                                            {viewingRecord.groomer?.name ?? "—"}
                                         </dd>
                                     </div>
                                     <div>

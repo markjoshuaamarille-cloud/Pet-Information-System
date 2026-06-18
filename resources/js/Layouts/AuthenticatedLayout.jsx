@@ -206,7 +206,7 @@ const navItems = [
     {
         href: "billing.index",
         label: "Billing",
-        roles: ["super_admin", "cashier", "receptionist", "clinic_owner"],
+        roles: ["super_admin", "cashier", "receptionist", "veterinarian", "clinic_owner"],
         module: "billing",
     },
     {
