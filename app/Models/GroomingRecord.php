@@ -15,6 +15,7 @@ class GroomingRecord extends Model
         'clinic_id',
         'pet_id',
         'appointment_id',
+        'groomer_id',
         'service_type',
         'service_date',
         'price',
@@ -38,5 +39,10 @@ class GroomingRecord extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function groomer(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'groomer_id');
     }
 }

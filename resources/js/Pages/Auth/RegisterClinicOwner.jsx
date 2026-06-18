@@ -26,9 +26,10 @@ export default function RegisterClinicOwner() {
             <Head title="Register Your Clinic" />
 
             <div className="mb-6 rounded-lg border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-800">
-                Create your clinic owner account. After you submit this form, a
-                platform administrator will review your registration and contact
-                you for approval before you can sign in.
+                Create your clinic owner account. After you submit this form, the
+                platform administrator will be notified immediately and will review
+                your registration and contact you for approval before you can sign
+                in.
             </div>
 
             <form onSubmit={submit} className="space-y-4">

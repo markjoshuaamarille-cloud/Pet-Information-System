@@ -3,6 +3,7 @@
 use App\Models\Pet;
 use App\Models\SystemNotification;
 use App\Models\Vaccination;
+use App\Support\NoShowAppointmentCancellation;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -66,3 +67,11 @@ Artisan::command('pets:purge-deactivated', function () {
 })->purpose('Delete pet records deactivated for one year or longer');
 
 Schedule::command('pets:purge-deactivated')->dailyAt('02:00');
+
+Artisan::command('appointments:cancel-no-shows', function () {
+    $cancelled = NoShowAppointmentCancellation::cancelDueAppointments();
+
+    $this->info("No-show appointments auto-cancelled: {$cancelled}");
+})->purpose('Cancel scheduled appointments that were missed past the grace period');
+
+Schedule::command('appointments:cancel-no-shows')->hourly();

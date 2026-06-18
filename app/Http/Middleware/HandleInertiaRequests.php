@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Clinic;
 use App\Models\User;
 use App\Support\CustomerAlerts;
+use App\Support\PlatformAdminNotifier;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -99,6 +100,15 @@ class HandleInertiaRequests extends Middleware
                     && ! $request->attributes->get('active_clinic_id');
             },
             'hasDeactivatedClinicOnly' => fn () => $request->user()?->hasDeactivatedClinicOnly() ?? false,
+            'platformAdminAlerts' => function () use ($request): ?array {
+                $user = $request->user();
+
+                if (! $user instanceof User || ! $user->isPlatformAdmin()) {
+                    return null;
+                }
+
+                return PlatformAdminNotifier::pendingSummary();
+            },
         ];
     }
 }

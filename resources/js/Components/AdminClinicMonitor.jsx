@@ -1,4 +1,4 @@
-import { router, usePage } from '@inertiajs/react';
+import { router, usePage, Link } from '@inertiajs/react';
 
 /**
  * Super-admin-only clinic scope switcher shown on every authenticated page.
@@ -10,6 +10,7 @@ export default function AdminClinicMonitor() {
         assignedClinics = [],
         isPlatformAdmin,
         monitoringAllClinics,
+        platformAdminAlerts,
     } = usePage().props;
 
     if (!isPlatformAdmin) {
@@ -82,6 +83,48 @@ export default function AdminClinicMonitor() {
                     )}
                 </div>
             </div>
+            {(platformAdminAlerts?.total ?? 0) > 0 && (
+                <div className="border-t border-amber-200 bg-amber-50 px-4 py-2 sm:px-6 lg:px-8">
+                    <p className="text-sm text-amber-900">
+                        <span className="font-semibold">Pending review:</span>{' '}
+                        {platformAdminAlerts.pending_clinic_owners > 0 && (
+                            <>
+                                {platformAdminAlerts.pending_clinic_owners} clinic owner application
+                                {platformAdminAlerts.pending_clinic_owners === 1 ? '' : 's'}
+                            </>
+                        )}
+                        {platformAdminAlerts.pending_clinic_owners > 0 &&
+                            platformAdminAlerts.pending_clinics > 0 &&
+                            ' · '}
+                        {platformAdminAlerts.pending_clinics > 0 && (
+                            <>
+                                {platformAdminAlerts.pending_clinics} clinic registration
+                                {platformAdminAlerts.pending_clinics === 1 ? '' : 's'}
+                            </>
+                        )}
+                        .{' '}
+                        {platformAdminAlerts.pending_clinic_owners > 0 && (
+                            <Link
+                                href={route('admin.users.index')}
+                                className="font-medium underline hover:text-amber-950"
+                            >
+                                Review users
+                            </Link>
+                        )}
+                        {platformAdminAlerts.pending_clinic_owners > 0 &&
+                            platformAdminAlerts.pending_clinics > 0 &&
+                            ' · '}
+                        {platformAdminAlerts.pending_clinics > 0 && (
+                            <Link
+                                href={route('admin.clinics.index')}
+                                className="font-medium underline hover:text-amber-950"
+                            >
+                                Review clinics
+                            </Link>
+                        )}
+                    </p>
+                </div>
+            )}
         </div>
     );
 }

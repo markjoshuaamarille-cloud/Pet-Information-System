@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Clinic;
 use App\Support\GeoapifyAddress;
+use App\Support\PlatformAdminNotifier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -49,9 +50,14 @@ class ClinicRegistrationController extends Controller
             ),
         ];
 
-        Clinic::create($payload);
+        $clinic = Clinic::create($payload);
+
+        PlatformAdminNotifier::clinicRegistrationSubmitted(
+            $clinic,
+            $request->user(),
+        );
 
         return redirect()->route('clinic-registration.create')
-            ->with('success', 'Your clinic registration has been submitted and is pending admin approval.');
+            ->with('success', 'Your clinic registration has been submitted. The platform administrator has been notified and will review it for approval.');
     }
 }

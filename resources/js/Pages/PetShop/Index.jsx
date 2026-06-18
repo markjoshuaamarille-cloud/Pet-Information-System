@@ -404,7 +404,8 @@ export default function PetShopIndex({
         router.post(
             route("pet-shop.checkout"),
             {
-                clinic_id: selectedClinicId || checkoutForm.data.clinic_id || null,
+                clinic_id:
+                    selectedClinicId || checkoutForm.data.clinic_id || null,
                 client_id: Number(clientId),
                 notes: checkoutForm.data.notes || "",
                 items: cart.map((line) => ({
@@ -418,7 +419,10 @@ export default function PetShopIndex({
                     setCart([]);
                     checkoutForm.reset();
                     if (customerClientId) {
-                        checkoutForm.setData("client_id", String(customerClientId));
+                        checkoutForm.setData(
+                            "client_id",
+                            String(customerClientId),
+                        );
                     }
                 },
                 onFinish: () => setCheckoutProcessing(false),
@@ -434,7 +438,8 @@ export default function PetShopIndex({
         canCheckout &&
             !canSelectClient &&
             "Add items to your cart—clinic staff will process payment.",
-        canManageProducts && "Admins can edit listings and upload product photos.",
+        canManageProducts &&
+            "Admins can edit listings and upload product photos.",
     ]
         .filter(Boolean)
         .join(" ");
@@ -453,12 +458,21 @@ export default function PetShopIndex({
                     <FlashMessage />
 
                     {/* Customer store list — shown when browsing all stores */}
-                    {isCustomer && stores.length > 0 && browseStores && !selectedClinicId && (
-                        <StoreList
-                            stores={stores}
-                            onSelectStore={(id) => router.get(route('pet-shop.index'), { clinic_id: id }, { preserveState: false })}
-                        />
-                    )}
+                    {isCustomer &&
+                        stores.length > 0 &&
+                        browseStores &&
+                        !selectedClinicId && (
+                            <StoreList
+                                stores={stores}
+                                onSelectStore={(id) =>
+                                    router.get(
+                                        route("pet-shop.index"),
+                                        { clinic_id: id },
+                                        { preserveState: false },
+                                    )
+                                }
+                            />
+                        )}
 
                     {/* Customer: current store + option to change */}
                     {isCustomer && selectedClinicId && selectedStore && (
@@ -475,7 +489,10 @@ export default function PetShopIndex({
                                         {selectedStore.address}
                                         {selectedStore.distance_formatted && (
                                             <span className="ms-2 text-emerald-700">
-                                                · {selectedStore.distance_formatted}
+                                                ·{" "}
+                                                {
+                                                    selectedStore.distance_formatted
+                                                }
                                             </span>
                                         )}
                                     </p>
@@ -484,7 +501,11 @@ export default function PetShopIndex({
                             {stores.length > 1 && (
                                 <button
                                     type="button"
-                                    onClick={() => router.get(route('pet-shop.index'), { browse: 1 })}
+                                    onClick={() =>
+                                        router.get(route("pet-shop.index"), {
+                                            browse: 1,
+                                        })
+                                    }
                                     className="shrink-0 text-sm font-medium text-emerald-700 hover:text-emerald-900 hover:underline"
                                 >
                                     Change store
@@ -493,7 +514,7 @@ export default function PetShopIndex({
                         </div>
                     )}
 
-                    <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
+                    {/* <section className="mb-8 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
                         <div className="border-b border-slate-100 bg-gradient-to-r from-white via-indigo-50/30 to-white px-6 py-8 sm:px-8">
                             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-indigo-600">
                                 Clinic retail
@@ -516,7 +537,7 @@ export default function PetShopIndex({
                                 )}
                             </div>
                         </div>
-                    </section>
+                    </section> */}
 
                     <div className="mb-8 rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm sm:p-6">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -563,7 +584,9 @@ export default function PetShopIndex({
                             {canCheckout && (
                                 <button
                                     type="button"
-                                    onClick={() => setShowCart((value) => !value)}
+                                    onClick={() =>
+                                        setShowCart((value) => !value)
+                                    }
                                     className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
                                         showCart
                                             ? "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
@@ -646,8 +669,9 @@ export default function PetShopIndex({
                                         No products match your search
                                     </p>
                                     <p className="mt-1 text-sm text-slate-500">
-                                        Add in-stock inventory items (non-vaccine
-                                        categories) to list them here.
+                                        Add in-stock inventory items
+                                        (non-vaccine categories) to list them
+                                        here.
                                     </p>
                                 </div>
                             ) : (
@@ -808,189 +832,214 @@ export default function PetShopIndex({
                                         </p>
                                     </div>
                                     <div className="p-5">
+                                        {!canSelectClient &&
+                                            !customerClientId && (
+                                                <p className="mb-4 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
+                                                    Your account is not linked
+                                                    to a client record. Please
+                                                    contact the clinic to place
+                                                    orders.
+                                                </p>
+                                            )}
 
-                                {!canSelectClient && !customerClientId && (
-                                    <p className="mb-4 rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-sm text-red-700">
-                                        Your account is not linked to a client
-                                        record. Please contact the clinic to
-                                        place orders.
-                                    </p>
-                                )}
-
-                                {cart.length === 0 ? (
-                                    <div className="py-8 text-center">
-                                        <p className="text-sm font-medium text-slate-600">
-                                            Your cart is empty
-                                        </p>
-                                        <p className="mt-1 text-xs text-slate-500">
-                                            {canSelectClient
-                                                ? "Add products to begin a sale."
-                                                : "Browse products and add items to order."}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <form
-                                        onSubmit={submitCheckout}
-                                        className="space-y-4"
-                                    >
-                                        <ul className="max-h-72 space-y-3 overflow-y-auto pr-1 text-sm">
-                                            {cart.map((line) => (
-                                                <li
-                                                    key={line.medicine_id}
-                                                    className="rounded-xl border border-slate-100 bg-slate-50/50 p-3"
-                                                >
-                                                    <div className="flex items-start justify-between gap-2">
-                                                        <p className="font-medium text-slate-900">
-                                                            {line.name}
-                                                        </p>
-                                                        <button
-                                                            type="button"
-                                                            className="text-xs font-medium text-red-600 hover:text-red-700"
-                                                            onClick={() =>
-                                                                removeFromCart(
-                                                                    line.medicine_id,
-                                                                )
+                                        {cart.length === 0 ? (
+                                            <div className="py-8 text-center">
+                                                <p className="text-sm font-medium text-slate-600">
+                                                    Your cart is empty
+                                                </p>
+                                                <p className="mt-1 text-xs text-slate-500">
+                                                    {canSelectClient
+                                                        ? "Add products to begin a sale."
+                                                        : "Browse products and add items to order."}
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            <form
+                                                onSubmit={submitCheckout}
+                                                className="space-y-4"
+                                            >
+                                                <ul className="max-h-72 space-y-3 overflow-y-auto pr-1 text-sm">
+                                                    {cart.map((line) => (
+                                                        <li
+                                                            key={
+                                                                line.medicine_id
                                                             }
+                                                            className="rounded-xl border border-slate-100 bg-slate-50/50 p-3"
                                                         >
-                                                            Remove
-                                                        </button>
-                                                    </div>
-                                                    <div className="mt-3 flex items-center justify-between gap-2">
-                                                        <input
-                                                            type="number"
-                                                            min="1"
-                                                            max={
-                                                                line.max_quantity
-                                                            }
+                                                            <div className="flex items-start justify-between gap-2">
+                                                                <p className="font-medium text-slate-900">
+                                                                    {line.name}
+                                                                </p>
+                                                                <button
+                                                                    type="button"
+                                                                    className="text-xs font-medium text-red-600 hover:text-red-700"
+                                                                    onClick={() =>
+                                                                        removeFromCart(
+                                                                            line.medicine_id,
+                                                                        )
+                                                                    }
+                                                                >
+                                                                    Remove
+                                                                </button>
+                                                            </div>
+                                                            <div className="mt-3 flex items-center justify-between gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min="1"
+                                                                    max={
+                                                                        line.max_quantity
+                                                                    }
+                                                                    value={
+                                                                        line.quantity
+                                                                    }
+                                                                    onChange={(
+                                                                        e,
+                                                                    ) =>
+                                                                        updateCartQty(
+                                                                            line.medicine_id,
+                                                                            Number(
+                                                                                e
+                                                                                    .target
+                                                                                    .value,
+                                                                            ),
+                                                                        )
+                                                                    }
+                                                                    className="w-16 rounded-lg border-slate-200 text-sm shadow-sm"
+                                                                />
+                                                                <span className="font-semibold text-indigo-700">
+                                                                    {formatPeso(
+                                                                        line.unit_price *
+                                                                            line.quantity,
+                                                                    )}
+                                                                </span>
+                                                            </div>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+
+                                                {canSelectClient ? (
+                                                    <div>
+                                                        <InputLabel value="Client" />
+                                                        <select
                                                             value={
-                                                                line.quantity
+                                                                checkoutForm
+                                                                    .data
+                                                                    .client_id
                                                             }
                                                             onChange={(e) =>
-                                                                updateCartQty(
-                                                                    line.medicine_id,
-                                                                    Number(
-                                                                        e.target
-                                                                            .value,
-                                                                    ),
+                                                                checkoutForm.setData(
+                                                                    "client_id",
+                                                                    e.target
+                                                                        .value,
                                                                 )
                                                             }
-                                                            className="w-16 rounded-lg border-slate-200 text-sm shadow-sm"
+                                                            className="mt-1 w-full rounded-xl border-slate-200 shadow-sm"
+                                                            required
+                                                        >
+                                                            <option value="">
+                                                                Select client
+                                                            </option>
+                                                            {clients.map(
+                                                                (client) => (
+                                                                    <option
+                                                                        key={
+                                                                            client.id
+                                                                        }
+                                                                        value={
+                                                                            client.id
+                                                                        }
+                                                                    >
+                                                                        {
+                                                                            client.name
+                                                                        }
+                                                                    </option>
+                                                                ),
+                                                            )}
+                                                        </select>
+                                                        <InputError
+                                                            message={
+                                                                checkoutForm
+                                                                    .errors
+                                                                    .client_id
+                                                            }
+                                                            className="mt-1"
                                                         />
-                                                        <span className="font-semibold text-indigo-700">
+                                                    </div>
+                                                ) : (
+                                                    <InputError
+                                                        message={
+                                                            pageErrors.client_id ||
+                                                            checkoutForm.errors
+                                                                .client_id
+                                                        }
+                                                        className="mt-1"
+                                                    />
+                                                )}
+
+                                                <div>
+                                                    <InputLabel value="Notes" />
+                                                    <textarea
+                                                        value={
+                                                            checkoutForm.data
+                                                                .notes
+                                                        }
+                                                        onChange={(e) =>
+                                                            checkoutForm.setData(
+                                                                "notes",
+                                                                e.target.value,
+                                                            )
+                                                        }
+                                                        rows={2}
+                                                        className="mt-1 w-full rounded-xl border-slate-200 shadow-sm"
+                                                    />
+                                                </div>
+
+                                                <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-sm">
+                                                    <div className="flex justify-between text-base font-semibold text-slate-900">
+                                                        <span>Subtotal</span>
+                                                        <span className="text-indigo-700">
                                                             {formatPeso(
-                                                                line.unit_price *
-                                                                    line.quantity,
+                                                                cartSubtotal,
                                                             )}
                                                         </span>
                                                     </div>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                                    <p className="mt-2 text-xs leading-relaxed text-slate-500">
+                                                        {canSelectClient
+                                                            ? "Tax and discount are applied in Pet Shop Billing before payment."
+                                                            : "Your order will be reviewed by clinic staff for payment."}
+                                                    </p>
+                                                </div>
 
-                                        {canSelectClient ? (
-                                            <div>
-                                                <InputLabel value="Client" />
-                                                <select
-                                                    value={
-                                                        checkoutForm.data
-                                                            .client_id
-                                                    }
-                                                    onChange={(e) =>
-                                                        checkoutForm.setData(
-                                                            "client_id",
-                                                            e.target.value,
-                                                        )
-                                                    }
-                                                    className="mt-1 w-full rounded-xl border-slate-200 shadow-sm"
-                                                    required
-                                                >
-                                                    <option value="">
-                                                        Select client
-                                                    </option>
-                                                    {clients.map((client) => (
-                                                        <option
-                                                            key={client.id}
-                                                            value={client.id}
-                                                        >
-                                                            {client.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
                                                 <InputError
                                                     message={
+                                                        pageErrors.items ||
                                                         checkoutForm.errors
-                                                            .client_id
+                                                            .items
                                                     }
                                                     className="mt-1"
                                                 />
-                                            </div>
-                                        ) : (
-                                            <InputError
-                                                message={
-                                                    pageErrors.client_id ||
-                                                    checkoutForm.errors.client_id
-                                                }
-                                                className="mt-1"
-                                            />
+
+                                                <PrimaryButton
+                                                    type="submit"
+                                                    className="w-full justify-center rounded-xl py-2.5 shadow-md"
+                                                    disabled={
+                                                        checkoutProcessing ||
+                                                        cart.length === 0 ||
+                                                        (!canSelectClient &&
+                                                            !customerClientId) ||
+                                                        (canSelectClient &&
+                                                            !checkoutForm.data
+                                                                .client_id)
+                                                    }
+                                                >
+                                                    {checkoutProcessing
+                                                        ? "Processing..."
+                                                        : canSelectClient
+                                                          ? "Complete sale"
+                                                          : "Place order"}
+                                                </PrimaryButton>
+                                            </form>
                                         )}
-
-                                        <div>
-                                            <InputLabel value="Notes" />
-                                            <textarea
-                                                value={checkoutForm.data.notes}
-                                                onChange={(e) =>
-                                                    checkoutForm.setData(
-                                                        "notes",
-                                                        e.target.value,
-                                                    )
-                                                }
-                                                rows={2}
-                                                className="mt-1 w-full rounded-xl border-slate-200 shadow-sm"
-                                            />
-                                        </div>
-
-                                        <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-4 text-sm">
-                                            <div className="flex justify-between text-base font-semibold text-slate-900">
-                                                <span>Subtotal</span>
-                                                <span className="text-indigo-700">
-                                                    {formatPeso(cartSubtotal)}
-                                                </span>
-                                            </div>
-                                            <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                                                {canSelectClient
-                                                    ? "Tax and discount are applied in Pet Shop Billing before payment."
-                                                    : "Your order will be reviewed by clinic staff for payment."}
-                                            </p>
-                                        </div>
-
-                                        <InputError
-                                            message={
-                                                pageErrors.items ||
-                                                checkoutForm.errors.items
-                                            }
-                                            className="mt-1"
-                                        />
-
-                                        <PrimaryButton
-                                            type="submit"
-                                            className="w-full justify-center rounded-xl py-2.5 shadow-md"
-                                            disabled={
-                                                checkoutProcessing ||
-                                                cart.length === 0 ||
-                                                (!canSelectClient &&
-                                                    !customerClientId) ||
-                                                (canSelectClient &&
-                                                    !checkoutForm.data.client_id)
-                                            }
-                                        >
-                                            {checkoutProcessing
-                                                ? "Processing..."
-                                                : canSelectClient
-                                                  ? "Complete sale"
-                                                  : "Place order"}
-                                        </PrimaryButton>
-                                    </form>
-                                )}
                                     </div>
                                 </div>
                             </aside>

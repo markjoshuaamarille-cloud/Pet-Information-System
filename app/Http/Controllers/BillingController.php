@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 use App\Support\ClinicBilling;
+use App\Support\ClinicBillingReportBuilder;
 use App\Support\ClinicContext;
 use App\Support\ClinicPatientScope;
 use App\Support\ClinicScope;
@@ -24,13 +25,14 @@ use App\Support\ClinicServices;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class BillingController extends Controller
 {
     public function index(Request $request): Response
     {
         $user = $this->currentUser();
-        $canManageBilling = $user && $user->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'clinic_owner']);
+        $canManageBilling = $user && $user->hasAnyRole(['super_admin', 'cashier', 'receptionist', 'veterinarian', 'clinic_owner']);
         $clinicId = ClinicContext::activeClinicId($request);
         $restrictToClinic = ClinicScope::restrictsUnscopedData($user);
 
@@ -38,6 +40,19 @@ class BillingController extends Controller
         if ($restrictToClinic && ! $clinicId) {
             $billingsQuery->whereRaw('0 = 1');
         }
+
+        $reportFilters = $request->validate([
+            'period' => 'nullable|in:daily,weekly,monthly,yearly',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        $report = (new ClinicBillingReportBuilder(
+            clinicId: $clinicId,
+            period: $reportFilters['period'] ?? 'monthly',
+            dateFrom: $reportFilters['date_from'] ?? null,
+            dateTo: $reportFilters['date_to'] ?? null,
+        ))->build();
 
         // For the edit-invoice form: clients, pets, service catalogs, appointments
         $clients = collect();
@@ -109,6 +124,103 @@ class BillingController extends Controller
             'can_delete_billing' => (bool) ($user?->hasAnyRole(['super_admin', 'clinic_owner'])),
             'appointments' => $appointments,
             'requires_clinic_context' => $restrictToClinic && ! $clinicId,
+            'summary' => $report['summary'],
+            'salesTrend' => $report['sales_trend'],
+            'categoryRevenue' => $report['category_revenue'],
+            'paymentMethodStats' => $report['payment_methods'],
+            'topCustomers' => $report['top_customers'],
+            'zeroSales' => $report['zero_sales'],
+            'outstanding' => $report['outstanding'],
+            'reportData' => $report['report_data'],
+            'filters' => $report['filters'],
+            'periods' => [
+                ['value' => 'daily', 'label' => 'Daily'],
+                ['value' => 'weekly', 'label' => 'Weekly'],
+                ['value' => 'monthly', 'label' => 'Monthly'],
+                ['value' => 'yearly', 'label' => 'Yearly'],
+            ],
+        ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $clinicId = ClinicContext::activeClinicId($request);
+
+        $validated = $request->validate([
+            'period' => 'nullable|in:daily,weekly,monthly,yearly',
+            'date_from' => 'nullable|date',
+            'date_to' => 'nullable|date|after_or_equal:date_from',
+        ]);
+
+        $report = (new ClinicBillingReportBuilder(
+            clinicId: $clinicId,
+            period: $validated['period'] ?? 'monthly',
+            dateFrom: $validated['date_from'] ?? null,
+            dateTo: $validated['date_to'] ?? null,
+        ))->build();
+
+        $filename = 'clinic-billing-report-'.now()->format('Y-m-d').'.csv';
+
+        return response()->streamDownload(function () use ($report) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, ['Clinic Billing Report Summary']);
+            fputcsv($handle, ['Total Revenue', $report['summary']['total_revenue']]);
+            fputcsv($handle, ['Paid Invoices', $report['summary']['total_orders']]);
+            fputcsv($handle, ['Line Items', $report['summary']['units_sold']]);
+            fputcsv($handle, ['Average Invoice Value', $report['summary']['avg_order_value']]);
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Revenue by Service Type']);
+            fputcsv($handle, ['Category', 'Units', 'Revenue']);
+            foreach ($report['category_revenue'] as $row) {
+                fputcsv($handle, [$row['label'], $row['units'], $row['revenue']]);
+            }
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Payment Methods']);
+            fputcsv($handle, ['Method', 'Payments', 'Amount']);
+            foreach ($report['payment_methods'] as $row) {
+                fputcsv($handle, [$row['label'], $row['count'], $row['amount']]);
+            }
+            fputcsv($handle, []);
+
+            fputcsv($handle, ['Top Customers']);
+            fputcsv($handle, ['Customer', 'Invoices', 'Revenue']);
+            foreach ($report['top_customers'] as $row) {
+                fputcsv($handle, [$row['name'], $row['orders'], $row['revenue']]);
+            }
+            fputcsv($handle, []);
+
+            foreach ($report['report_data'] as $label => $data) {
+                fputcsv($handle, ["Top Services - {$label}"]);
+                fputcsv($handle, ['Service', 'Category', 'Qty', 'Revenue']);
+                foreach ($data['fast_moving'] as $service) {
+                    fputcsv($handle, [
+                        $service['name'],
+                        $service['category'],
+                        $service['total_qty'],
+                        $service['total_revenue'],
+                    ]);
+                }
+                fputcsv($handle, []);
+
+                fputcsv($handle, ["Low Volume Services - {$label}"]);
+                fputcsv($handle, ['Service', 'Category', 'Qty', 'Revenue']);
+                foreach ($data['slow_moving'] as $service) {
+                    fputcsv($handle, [
+                        $service['name'],
+                        $service['category'],
+                        $service['total_qty'],
+                        $service['total_revenue'],
+                    ]);
+                }
+                fputcsv($handle, []);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv',
         ]);
     }
 
@@ -536,13 +648,21 @@ class BillingController extends Controller
     public function receipt(Billing $billing): Response
     {
         $billing->load([
-            'client',
+            'clinic:id,name,contact,email,address,address_formatted,city,province',
+            'client.users:id,client_id,contact',
             'pet',
             'appointment',
             'serviceCatalog',
             'lineItems',
             'payments' => fn ($query) => $query->orderBy('paid_at'),
         ]);
+
+        if ($billing->client) {
+            $billing->client->setAttribute(
+                'contact',
+                $billing->client->effectiveContact() ?? '—',
+            );
+        }
 
         $appointment = $billing->appointment;
         $serviceLabel = $appointment
@@ -552,6 +672,7 @@ class BillingController extends Controller
         return Inertia::render('Billing/Receipt', [
             'billing' => [
                 ...$billing->toArray(),
+                'clinic' => $billing->clinic,
                 'client' => $billing->client,
                 'pet' => $billing->pet,
                 'appointment' => $appointment ? [

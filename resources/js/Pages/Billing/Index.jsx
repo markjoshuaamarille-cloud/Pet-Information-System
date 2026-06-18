@@ -13,7 +13,8 @@ import { formatClinicDate } from "@/utils/formatDateTime";
 const paymentMethods = ["cash", "card", "gcash", "maya", "bank_transfer"];
 const billingStatuses = ["unpaid", "partial", "paid", "cancelled"];
 
-const formatPeso = (value) => `₱${Number(value ?? 0).toFixed(2)}`;
+const formatPeso = (value) =>
+    `₱${Number(value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
 const SERVICE_LABELS = {
     checkup: "Checkup",
@@ -54,6 +55,82 @@ const billingMatchesSearch = (billing, query) => {
 
     return haystack.includes(query);
 };
+
+function StatCard({ label, value, accent = "indigo" }) {
+    const accents = {
+        indigo: "border-indigo-100 bg-indigo-50 text-indigo-800",
+        emerald: "border-emerald-100 bg-emerald-50 text-emerald-800",
+        amber: "border-amber-100 bg-amber-50 text-amber-800",
+        violet: "border-violet-100 bg-violet-50 text-violet-800",
+    };
+
+    return (
+        <div
+            className={`rounded-xl border p-5 shadow-sm ${accents[accent] ?? accents.indigo}`}
+        >
+            <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
+                {label}
+            </p>
+            <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
+        </div>
+    );
+}
+
+function BarChart({ items, valueKey = "revenue" }) {
+    const max = Math.max(
+        ...items.map((item) => Number(item[valueKey] ?? 0)),
+        1,
+    );
+
+    if (items.length === 0) {
+        return <p className="text-sm text-gray-400">No data for this period.</p>;
+    }
+
+    return (
+        <div className="space-y-3">
+            {items.map((item) => (
+                <div key={item.label}>
+                    <div className="mb-1 flex items-center justify-between text-xs text-gray-600">
+                        <span>{item.label}</span>
+                        <span className="font-medium">
+                            {valueKey === "revenue"
+                                ? formatPeso(item.revenue)
+                                : item.orders}
+                        </span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                        <div
+                            className="h-full rounded-full bg-indigo-500"
+                            style={{
+                                width: `${(Number(item[valueKey] ?? 0) / max) * 100}%`,
+                            }}
+                        />
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function ServiceRow({ service, rank }) {
+    return (
+        <tr className="hover:bg-gray-50">
+            <td className="px-4 py-2 text-xs text-gray-400">{rank}</td>
+            <td className="px-4 py-2 text-sm font-medium text-gray-800">
+                {service.name}
+            </td>
+            <td className="px-4 py-2 text-xs capitalize text-gray-500">
+                {service.category}
+            </td>
+            <td className="px-4 py-2 text-right text-sm font-semibold text-gray-800">
+                {Number(service.total_qty).toLocaleString()}
+            </td>
+            <td className="px-4 py-2 text-right text-sm text-gray-700">
+                {formatPeso(service.total_revenue)}
+            </td>
+        </tr>
+    );
+}
 
 function DeleteInvoiceModal({ billing, isPlatformAdmin, onClose }) {
     const form = useForm({ password: "" });
@@ -139,6 +216,16 @@ export default function BillingIndex({
     can_manage_billing = true,
     can_delete_billing = false,
     requires_clinic_context = false,
+    summary = {},
+    salesTrend = [],
+    categoryRevenue = [],
+    paymentMethodStats = [],
+    topCustomers = [],
+    zeroSales = [],
+    outstanding = [],
+    reportData = {},
+    filters = {},
+    periods = [],
 }) {
     const activeClinic = usePage().props.activeClinic;
     const isPlatformAdmin = usePage().props.isPlatformAdmin ?? false;
@@ -148,6 +235,51 @@ export default function BillingIndex({
     const [saleTypeFilter, setSaleTypeFilter] = useState("clinic_service");
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState("");
+    const [dateFrom, setDateFrom] = useState(filters.date_from ?? "");
+    const [dateTo, setDateTo] = useState(filters.date_to ?? "");
+
+    const reportQueryParams = () => {
+        const params = { period: filters.period ?? "monthly" };
+        if (dateFrom && dateTo) {
+            params.date_from = dateFrom;
+            params.date_to = dateTo;
+        }
+        return params;
+    };
+
+    const applyReportFilters = () => {
+        router.get(route("billing.index"), reportQueryParams(), {
+            preserveState: true,
+        });
+    };
+
+    const changeReportPeriod = (period) => {
+        router.get(
+            route("billing.index"),
+            {
+                period,
+                date_from: dateFrom || undefined,
+                date_to: dateTo || undefined,
+            },
+            { preserveState: true },
+        );
+    };
+
+    const clearReportDateRange = () => {
+        setDateFrom("");
+        setDateTo("");
+        router.get(
+            route("billing.index"),
+            { period: filters.period ?? "monthly" },
+            { preserveState: true },
+        );
+    };
+
+    const exportUrl = route("billing.export", reportQueryParams());
+    const periodEntries = Object.entries(reportData ?? {});
+    const hasReportData =
+        Number(summary?.total_orders ?? 0) > 0 || periodEntries.length > 0;
+    const showReports = !requires_clinic_context;
 
     const filteredBillings = useMemo(() => {
         const query = search.trim().toLowerCase();
@@ -524,6 +656,515 @@ export default function BillingIndex({
                             and click <strong>Bill visit</strong> on a completed appointment.
                         </div>
                     )}
+
+                    {showReports && (
+                        <div className="mb-8">
+                            <div className="mb-4 flex items-center justify-between">
+                                <h3 className="text-lg font-semibold text-gray-800">
+                                    Billing Reports
+                                </h3>
+                                <Link
+                                    href={exportUrl}
+                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                                >
+                                    Export CSV
+                                </Link>
+                            </div>
+
+                            <div className="mb-6 flex flex-wrap gap-2">
+                                {periods.map((p) => (
+                                    <button
+                                        key={p.value}
+                                        type="button"
+                                        onClick={() => changeReportPeriod(p.value)}
+                                        className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
+                                            (filters.period ?? "monthly") === p.value
+                                                ? "bg-indigo-600 text-white"
+                                                : "bg-white text-gray-600 shadow hover:bg-indigo-50"
+                                        }`}
+                                    >
+                                        {p.label}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="mb-6 rounded-lg bg-white p-4 shadow">
+                                <p className="mb-3 text-sm font-semibold text-gray-700">
+                                    Custom date range
+                                </p>
+                                <div className="flex flex-wrap items-end gap-3">
+                                    <div>
+                                        <label className="mb-1 block text-xs text-gray-500">
+                                            From
+                                        </label>
+                                        <TextInput
+                                            type="date"
+                                            value={dateFrom}
+                                            onChange={(e) =>
+                                                setDateFrom(e.target.value)
+                                            }
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="mb-1 block text-xs text-gray-500">
+                                            To
+                                        </label>
+                                        <TextInput
+                                            type="date"
+                                            value={dateTo}
+                                            onChange={(e) =>
+                                                setDateTo(e.target.value)
+                                            }
+                                        />
+                                    </div>
+                                    <PrimaryButton
+                                        type="button"
+                                        onClick={applyReportFilters}
+                                    >
+                                        Apply
+                                    </PrimaryButton>
+                                    {(filters.date_from || filters.date_to) && (
+                                        <button
+                                            type="button"
+                                            onClick={clearReportDateRange}
+                                            className="text-sm text-gray-500 hover:text-gray-700"
+                                        >
+                                            Clear range
+                                        </button>
+                                    )}
+                                </div>
+                                {filters.using_custom_range && (
+                                    <p className="mt-2 text-xs text-indigo-600">
+                                        Filtering by custom date range. Service
+                                        movement shows combined totals for this
+                                        range.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                                <StatCard
+                                    label="Total Revenue"
+                                    value={formatPeso(summary?.total_revenue)}
+                                    accent="emerald"
+                                />
+                                <StatCard
+                                    label="Paid Invoices"
+                                    value={Number(
+                                        summary?.total_orders ?? 0,
+                                    ).toLocaleString()}
+                                    accent="indigo"
+                                />
+                                <StatCard
+                                    label="Line Items"
+                                    value={Number(
+                                        summary?.units_sold ?? 0,
+                                    ).toLocaleString()}
+                                    accent="violet"
+                                />
+                                <StatCard
+                                    label="Avg Invoice Value"
+                                    value={formatPeso(summary?.avg_order_value)}
+                                    accent="amber"
+                                />
+                            </div>
+
+                            {!hasReportData && (
+                                <div className="mb-6 rounded-lg bg-white p-8 text-center text-sm text-gray-500 shadow">
+                                    No paid clinic invoices found for this
+                                    period.
+                                </div>
+                            )}
+
+                            {hasReportData && (
+                                <div className="mb-6 space-y-6">
+                                    <div className="grid gap-6 lg:grid-cols-2">
+                                        <div className="rounded-lg bg-white p-5 shadow">
+                                            <h4 className="mb-4 font-semibold text-gray-800">
+                                                Revenue Trend
+                                            </h4>
+                                            <BarChart
+                                                items={salesTrend}
+                                                valueKey="revenue"
+                                            />
+                                        </div>
+                                        <div className="rounded-lg bg-white p-5 shadow">
+                                            <h4 className="mb-4 font-semibold text-gray-800">
+                                                Revenue by Service Type
+                                            </h4>
+                                            {categoryRevenue.length === 0 ? (
+                                                <p className="text-sm text-gray-400">
+                                                    No category data.
+                                                </p>
+                                            ) : (
+                                                <table className="w-full text-sm">
+                                                    <thead className="text-xs text-gray-500">
+                                                        <tr>
+                                                            <th className="py-2 text-left">
+                                                                Category
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Units
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Revenue
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {categoryRevenue.map(
+                                                            (row) => (
+                                                                <tr
+                                                                    key={
+                                                                        row.category
+                                                                    }
+                                                                >
+                                                                    <td className="py-2 font-medium text-gray-800">
+                                                                        {
+                                                                            row.label
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {
+                                                                            row.units
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {formatPeso(
+                                                                            row.revenue,
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid gap-6 lg:grid-cols-2">
+                                        <div className="rounded-lg bg-white p-5 shadow">
+                                            <h4 className="mb-4 font-semibold text-gray-800">
+                                                Payment Methods
+                                            </h4>
+                                            {paymentMethodStats.length ===
+                                            0 ? (
+                                                <p className="text-sm text-gray-400">
+                                                    No payments recorded.
+                                                </p>
+                                            ) : (
+                                                <table className="w-full text-sm">
+                                                    <thead className="text-xs text-gray-500">
+                                                        <tr>
+                                                            <th className="py-2 text-left">
+                                                                Method
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Count
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Amount
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {paymentMethodStats.map(
+                                                            (row) => (
+                                                                <tr
+                                                                    key={
+                                                                        row.method
+                                                                    }
+                                                                >
+                                                                    <td className="py-2 font-medium text-gray-800">
+                                                                        {
+                                                                            row.label
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {
+                                                                            row.count
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {formatPeso(
+                                                                            row.amount,
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                        </div>
+                                        <div className="rounded-lg bg-white p-5 shadow">
+                                            <h4 className="mb-4 font-semibold text-gray-800">
+                                                Top Customers
+                                            </h4>
+                                            {topCustomers.length === 0 ? (
+                                                <p className="text-sm text-gray-400">
+                                                    No customer data.
+                                                </p>
+                                            ) : (
+                                                <table className="w-full text-sm">
+                                                    <thead className="text-xs text-gray-500">
+                                                        <tr>
+                                                            <th className="py-2 text-left">
+                                                                Customer
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Invoices
+                                                            </th>
+                                                            <th className="py-2 text-right">
+                                                                Revenue
+                                                            </th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {topCustomers.map(
+                                                            (row) => (
+                                                                <tr
+                                                                    key={
+                                                                        row.client_id
+                                                                    }
+                                                                >
+                                                                    <td className="py-2 font-medium text-gray-800">
+                                                                        {
+                                                                            row.name
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {
+                                                                            row.orders
+                                                                        }
+                                                                    </td>
+                                                                    <td className="py-2 text-right">
+                                                                        {formatPeso(
+                                                                            row.revenue,
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            ),
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {(outstanding.length > 0 ||
+                                        zeroSales.length > 0) && (
+                                        <div className="grid gap-6 lg:grid-cols-2">
+                                            {outstanding.length > 0 && (
+                                                <div className="rounded-lg border border-amber-200 bg-amber-50 p-5 shadow-sm">
+                                                    <h4 className="mb-3 font-semibold text-amber-900">
+                                                        Outstanding Invoices
+                                                    </h4>
+                                                    <p className="mb-3 text-xs text-amber-800">
+                                                        Unpaid or partially paid
+                                                        invoices requiring
+                                                        follow-up.
+                                                    </p>
+                                                    <ul className="space-y-2 text-sm">
+                                                        {outstanding.map(
+                                                            (item) => (
+                                                                <li
+                                                                    key={
+                                                                        item.id
+                                                                    }
+                                                                    className="flex items-center justify-between rounded-md bg-white/70 px-3 py-2"
+                                                                >
+                                                                    <span className="font-medium text-gray-800">
+                                                                        {
+                                                                            item.invoice_number
+                                                                        }{" "}
+                                                                        ·{" "}
+                                                                        {
+                                                                            item.client_name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-xs text-amber-800">
+                                                                        {formatPeso(
+                                                                            item.balance,
+                                                                        )}{" "}
+                                                                        ·{" "}
+                                                                        {
+                                                                            item.status
+                                                                        }
+                                                                    </span>
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                            {zeroSales.length > 0 && (
+                                                <div className="rounded-lg bg-white p-5 shadow">
+                                                    <h4 className="mb-3 font-semibold text-gray-800">
+                                                        No Sales in Period
+                                                    </h4>
+                                                    <p className="mb-3 text-xs text-gray-500">
+                                                        Catalog services with no
+                                                        billed activity in the
+                                                        selected period.
+                                                    </p>
+                                                    <ul className="space-y-2 text-sm">
+                                                        {zeroSales.map(
+                                                            (item) => (
+                                                                <li
+                                                                    key={
+                                                                        item.id
+                                                                    }
+                                                                    className="flex items-center justify-between border-b border-gray-100 pb-2"
+                                                                >
+                                                                    <span className="font-medium text-gray-800">
+                                                                        {
+                                                                            item.name
+                                                                        }
+                                                                    </span>
+                                                                    <span className="text-xs text-gray-500">
+                                                                        {
+                                                                            item.category
+                                                                        }
+                                                                    </span>
+                                                                </li>
+                                                            ),
+                                                        )}
+                                                    </ul>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+
+                                    {periodEntries.map(([label, data]) => (
+                                        <div
+                                            key={label}
+                                            className="overflow-hidden rounded-lg bg-white shadow"
+                                        >
+                                            <div className="border-b bg-gray-50 px-5 py-3">
+                                                <h4 className="font-semibold text-gray-700">
+                                                    Period: {label}
+                                                </h4>
+                                            </div>
+                                            <div className="grid divide-y md:grid-cols-2 md:divide-x md:divide-y-0 divide-gray-100">
+                                                <div>
+                                                    <div className="bg-green-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-green-700">
+                                                        Top Services (Top 10)
+                                                    </div>
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50 text-xs text-gray-500">
+                                                            <tr>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    #
+                                                                </th>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    Service
+                                                                </th>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    Type
+                                                                </th>
+                                                                <th className="px-4 py-2 text-right">
+                                                                    Qty
+                                                                </th>
+                                                                <th className="px-4 py-2 text-right">
+                                                                    Revenue
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {(
+                                                                data.fast_moving ??
+                                                                []
+                                                            ).map((s, i) => (
+                                                                <ServiceRow
+                                                                    key={`${s.name}-${label}`}
+                                                                    service={s}
+                                                                    rank={i + 1}
+                                                                />
+                                                            ))}
+                                                            {(
+                                                                data.fast_moving ??
+                                                                []
+                                                            ).length === 0 && (
+                                                                <tr>
+                                                                    <td
+                                                                        colSpan={
+                                                                            5
+                                                                        }
+                                                                        className="px-4 py-3 text-center text-xs text-gray-400"
+                                                                    >
+                                                                        No data
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <div>
+                                                    <div className="bg-red-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-red-700">
+                                                        Low Volume (Bottom 10)
+                                                    </div>
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50 text-xs text-gray-500">
+                                                            <tr>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    #
+                                                                </th>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    Service
+                                                                </th>
+                                                                <th className="px-4 py-2 text-left">
+                                                                    Type
+                                                                </th>
+                                                                <th className="px-4 py-2 text-right">
+                                                                    Qty
+                                                                </th>
+                                                                <th className="px-4 py-2 text-right">
+                                                                    Revenue
+                                                                </th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {(
+                                                                data.slow_moving ??
+                                                                []
+                                                            ).map((s, i) => (
+                                                                <ServiceRow
+                                                                    key={`${s.name}-slow-${label}`}
+                                                                    service={s}
+                                                                    rank={i + 1}
+                                                                />
+                                                            ))}
+                                                            {(
+                                                                data.slow_moving ??
+                                                                []
+                                                            ).length === 0 && (
+                                                                <tr>
+                                                                    <td
+                                                                        colSpan={
+                                                                            5
+                                                                        }
+                                                                        className="px-4 py-3 text-center text-xs text-gray-400"
+                                                                    >
+                                                                        No data
+                                                                    </td>
+                                                                </tr>
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <h3 className="mb-4 text-lg font-semibold text-gray-800">
+                        Invoices
+                    </h3>
 
                     <div className="mb-6 flex flex-wrap gap-2">
                         {[

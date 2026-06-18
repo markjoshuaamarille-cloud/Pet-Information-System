@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\PlatformAdminNotifier;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -43,8 +44,10 @@ class RegisteredClinicOwnerController extends Controller
 
         event(new Registered($user));
 
+        PlatformAdminNotifier::clinicOwnerRegistered($user);
+
         return redirect()
             ->route('login')
-            ->with('status', 'Registration submitted! An administrator will review your account and contact you at '.$validated['contact'].' or '.$validated['email'].' for approval.');
+            ->with('status', 'Registration submitted! The platform administrator has been notified and will review your account. We will contact you at '.$validated['contact'].' or '.$validated['email'].' for approval.');
     }
 }

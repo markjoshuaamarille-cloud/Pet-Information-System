@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Appointment;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Date;
 
 class GroomingSlotAvailability
@@ -24,14 +25,41 @@ class GroomingSlotAvailability
             ->count();
     }
 
-    public static function bookedCount(int $clinicId, Carbon $scheduledAt, ?int $excludeAppointmentId = null): int
+    public static function overlapsSlot(Carbon $appointmentStart, Carbon $slotStart): bool
     {
+        $appointmentEnd = $appointmentStart->copy()->addMinutes(self::SLOT_DURATION_MINUTES);
+        $slotEnd = $slotStart->copy()->addMinutes(self::SLOT_DURATION_MINUTES);
+
+        return $appointmentStart->lt($slotEnd) && $appointmentEnd->gt($slotStart);
+    }
+
+    /**
+     * @return Collection<int, Appointment>
+     */
+    public static function scheduledGroomingAppointmentsForDay(
+        int $clinicId,
+        Carbon $day,
+        ?int $excludeAppointmentId = null,
+    ): Collection {
         return Appointment::query()
             ->where('clinic_id', $clinicId)
             ->where('type', 'grooming')
             ->where('status', 'scheduled')
-            ->where('scheduled_at', $scheduledAt)
+            ->whereBetween('scheduled_at', [
+                $day->copy()->startOfDay(),
+                $day->copy()->endOfDay(),
+            ])
             ->when($excludeAppointmentId, fn ($query) => $query->where('id', '!=', $excludeAppointmentId))
+            ->get(['id', 'scheduled_at']);
+    }
+
+    public static function bookedCount(int $clinicId, Carbon $scheduledAt, ?int $excludeAppointmentId = null): int
+    {
+        return self::scheduledGroomingAppointmentsForDay($clinicId, $scheduledAt, $excludeAppointmentId)
+            ->filter(fn (Appointment $appointment) => self::overlapsSlot(
+                Date::parse($appointment->scheduled_at),
+                $scheduledAt,
+            ))
             ->count();
     }
 
@@ -51,17 +79,58 @@ class GroomingSlotAvailability
         Carbon $requestedAt,
         ?int $excludeAppointmentId = null,
     ): ?Carbon {
-        $cursor = $requestedAt->copy();
+        $searchFrom = $requestedAt->copy();
+        $lastDay = $requestedAt->copy()->addHours(self::MAX_LOOKAHEAD_HOURS)->startOfDay();
 
-        for ($attempt = 0; $attempt < self::MAX_LOOKAHEAD_HOURS; $attempt++) {
-            if (self::isAvailable($clinicId, $cursor, $excludeAppointmentId)) {
-                return $cursor;
+        for ($day = $searchFrom->copy()->startOfDay(); $day->lte($lastDay); $day->addDay()) {
+            $slot = self::nextAvailableSlotOnDay(
+                $clinicId,
+                $day,
+                $searchFrom,
+                $excludeAppointmentId,
+            );
+
+            if ($slot) {
+                return $slot;
             }
 
-            $cursor = $cursor->copy()->addMinutes(self::SLOT_DURATION_MINUTES);
+            $searchFrom = $day->copy()->addDay()->startOfDay();
         }
 
         return null;
+    }
+
+    private static function nextAvailableSlotOnDay(
+        int $clinicId,
+        Carbon $day,
+        Carbon $searchFrom,
+        ?int $excludeAppointmentId = null,
+    ): ?Carbon {
+        $dayStart = $day->copy()->startOfDay();
+        $dayEnd = $day->copy()->endOfDay();
+        $earliest = $searchFrom->greaterThan($dayStart) ? $searchFrom->copy() : $dayStart->copy();
+
+        if ($earliest->gt($dayEnd)) {
+            return null;
+        }
+
+        $candidates = collect([$earliest]);
+
+        foreach (self::scheduledGroomingAppointmentsForDay($clinicId, $day, $excludeAppointmentId) as $appointment) {
+            $appointmentEnd = Date::parse($appointment->scheduled_at)
+                ->addMinutes(self::SLOT_DURATION_MINUTES);
+
+            if ($appointmentEnd->gte($earliest) && $appointmentEnd->lte($dayEnd)) {
+                $candidates->push($appointmentEnd->copy());
+            }
+        }
+
+        return $candidates
+            ->map(fn (Carbon $candidate) => $candidate->copy())
+            ->unique(fn (Carbon $candidate) => $candidate->format('Y-m-d H:i:s'))
+            ->sort()
+            ->first(fn (Carbon $candidate) => $candidate->gte($earliest)
+                && self::isAvailable($clinicId, $candidate, $excludeAppointmentId));
     }
 
     /**
@@ -91,9 +160,9 @@ class GroomingSlotAvailability
             $message = 'This grooming salon has no active groomers available for booking.';
         } elseif (! $available) {
             $message = $nextSlot
-                ? 'This time slot is fully booked. Next available slot is '
+                ? 'All groomers are booked for this 1-hour window. Next available slot is '
                     .self::formatSlot($nextSlot).'.'
-                : 'This time slot is fully booked and no nearby slots were found.';
+                : 'All groomers are booked for this 1-hour window and no nearby slots were found.';
         }
 
         return [

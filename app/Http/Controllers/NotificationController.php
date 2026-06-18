@@ -7,6 +7,7 @@ use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\SystemNotification;
 use App\Models\User;
+use App\Support\PlatformAdminNotifier;
 use App\Models\Vaccination;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -42,6 +43,7 @@ class NotificationController extends Controller
         $user = auth()->user();
         $user = $user instanceof User ? $user : null;
         $clinicId = $request->attributes->get('active_clinic_id');
+        $isPlatformAdmin = (bool) $user?->isPlatformAdmin();
 
         if ($user?->isCustomer()) {
             $notifications = $user->client_id
@@ -95,16 +97,33 @@ class NotificationController extends Controller
             ->limit(50)
             ->get()
             ->map(fn (SystemNotification $notification) => [
+                'id' => 'system-'.$notification->id,
                 'type' => $notification->type,
                 'severity' => $notification->severity,
                 'message' => $notification->message,
                 'title' => $notification->title,
                 'created_at' => $notification->created_at?->toIso8601String(),
+                'action_href' => $isPlatformAdmin ? match ($notification->type) {
+                    'clinic_owner_application' => route('admin.users.index'),
+                    'clinic_registration' => route('admin.clinics.index'),
+                    default => null,
+                } : null,
             ]);
 
+        $allNotifications = $notifications->concat($systemNotifications);
+
+        if ($isPlatformAdmin) {
+            $allNotifications = $allNotifications->sortBy(function (array $item) {
+                return in_array($item['type'] ?? '', ['clinic_owner_application', 'clinic_registration'], true)
+                    ? 0
+                    : 1;
+            });
+        }
+
         return Inertia::render('Notifications/Index', [
-            'notifications' => $notifications->concat($systemNotifications)->values(),
+            'notifications' => $allNotifications->values(),
             'isCustomer' => false,
+            'platformAdminAlerts' => $isPlatformAdmin ? PlatformAdminNotifier::pendingSummary() : null,
         ]);
     }
 
