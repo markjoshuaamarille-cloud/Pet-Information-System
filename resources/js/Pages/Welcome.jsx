@@ -41,7 +41,8 @@ const ICONS = {
     check: "M20 6L9 17l-5-5",
     map: "M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0 1 18 0z M12 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2",
     phone: "M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z",
-    landline: "M3 5a2 2 0 0 1 2-2h3.28a1 1 0 0 1 .948.684l1.498 4.493a1 1 0 0 1-.502 1.21l-2.257 1.13a11.042 11.042 0 0 0 5.516 5.516l1.13-2.257a1 1 0 0 1 1.21-.502l4.493 1.498a1 1 0 0 1 .684.949V19a2 2 0 0 1-2 2h-1C9.716 21 3 14.284 3 6V5z",
+    landline:
+        "M3 5a2 2 0 0 1 2-2h3.28a1 1 0 0 1 .948.684l1.498 4.493a1 1 0 0 1-.502 1.21l-2.257 1.13a11.042 11.042 0 0 0 5.516 5.516l1.13-2.257a1 1 0 0 1 1.21-.502l4.493 1.498a1 1 0 0 1 .684.949V19a2 2 0 0 1-2 2h-1C9.716 21 3 14.284 3 6V5z",
     mail: "M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z M22 6l-10 7L2 6",
     link: "M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71 M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71",
 };
@@ -49,16 +50,28 @@ const ICONS = {
 const COMPANY = {
     name: "JE310 Solution",
     address: "3A PG Building, #63 West Ave., West Triangle, Quezon City",
-    mapUrl:
-        "https://www.google.com/maps/search/?api=1&query=3A+PG+Building+63+West+Ave+West+Triangle+Quezon+City+Philippines",
+    mapUrl: "https://www.google.com/maps/search/?api=1&query=3A+PG+Building+63+West+Ave+West+Triangle+Quezon+City+Philippines",
     mobile: "09175139900",
     mobileTel: "+639175139900",
     landline: "(02) 8376 1733",
     landlineTel: "+63283761733",
     email: "hr@je310solution.com",
+    mailSubject: "PAWGO Inquiry",
     website: "https://www.je310solution.com",
     websiteLabel: "www.je310solution.com",
 };
+
+const COMPANY_MAILTO = `mailto:${COMPANY.email}?subject=${encodeURIComponent(COMPANY.mailSubject)}`;
+
+function openCompanyEmail(event) {
+    event?.preventDefault?.();
+
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(COMPANY.email).catch(() => {});
+    }
+
+    window.location.href = COMPANY_MAILTO;
+}
 
 /* ─── nav ────────────────────────────────────────────────────── */
 function Navbar({ auth }) {
@@ -472,7 +485,7 @@ function Services() {
                                 <p className="mt-2 text-sm leading-relaxed text-gray-500">
                                     {body}
                                 </p>
-                                <button
+                                {/* <button
                                     style={{ color: accent }}
                                     className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold transition hover:gap-3"
                                 >
@@ -481,7 +494,7 @@ function Services() {
                                         path={ICONS.arrow}
                                         className="size-4"
                                     />
-                                </button>
+                                </button> */}
                             </div>
                         </div>
                     ))}
@@ -906,7 +919,7 @@ function CTABanner({ auth }) {
 }
 
 /* ─── contact ─────────────────────────────────────────────────── */
-function ContactPill({ icon, href, external, children }) {
+function ContactPill({ icon, href, external, onClick, children }) {
     const className =
         "group flex w-full items-center gap-4 rounded-full border border-gray-100 bg-white px-4 py-3 shadow-sm transition hover:border-[#E86716]/30 hover:shadow-md sm:max-w-xl";
 
@@ -926,6 +939,7 @@ function ContactPill({ icon, href, external, children }) {
             <a
                 href={href}
                 className={className}
+                onClick={onClick}
                 {...(external
                     ? { target: "_blank", rel: "noopener noreferrer" }
                     : {})}
@@ -958,29 +972,48 @@ function ContactSection() {
                             </span>
                             — we&apos;re happy to help.
                         </p>
-                        <a
-                            href={`mailto:${COMPANY.email}?subject=PAWGO%20Inquiry`}
+                        {/* <a
+                            href={COMPANY_MAILTO}
+                            onClick={openCompanyEmail}
                             className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#E86716] px-8 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#E86716]/25 transition hover:bg-[#cf5b12]"
                         >
                             Contact Us
                             <Icon path={ICONS.arrow} className="size-4" />
-                        </a>
+                        </a> */}
                     </div>
 
                     <div className="flex flex-col gap-3">
-                        <ContactPill icon={ICONS.map} href={COMPANY.mapUrl} external>
+                        <ContactPill
+                            icon={ICONS.map}
+                            href={COMPANY.mapUrl}
+                            external
+                        >
                             {COMPANY.address}
                         </ContactPill>
-                        <ContactPill icon={ICONS.phone} href={`tel:${COMPANY.mobileTel}`}>
+                        <ContactPill
+                            icon={ICONS.phone}
+                            href={`tel:${COMPANY.mobileTel}`}
+                        >
                             {COMPANY.mobile}
                         </ContactPill>
-                        <ContactPill icon={ICONS.landline} href={`tel:${COMPANY.landlineTel}`}>
+                        <ContactPill
+                            icon={ICONS.landline}
+                            href={`tel:${COMPANY.landlineTel}`}
+                        >
                             {COMPANY.landline}
                         </ContactPill>
-                        <ContactPill icon={ICONS.mail} href={`mailto:${COMPANY.email}`}>
+                        <ContactPill
+                            icon={ICONS.mail}
+                            href={COMPANY_MAILTO}
+                            onClick={openCompanyEmail}
+                        >
                             {COMPANY.email}
                         </ContactPill>
-                        <ContactPill icon={ICONS.link} href={COMPANY.website} external>
+                        <ContactPill
+                            icon={ICONS.link}
+                            href={COMPANY.website}
+                            external
+                        >
                             {COMPANY.websiteLabel}
                         </ContactPill>
                     </div>
@@ -1060,7 +1093,8 @@ function Footer() {
                             </li>
                             <li>
                                 <a
-                                    href={`mailto:${COMPANY.email}`}
+                                    href={COMPANY_MAILTO}
+                                    onClick={openCompanyEmail}
                                     className="transition hover:text-white"
                                 >
                                     {COMPANY.email}
@@ -1078,7 +1112,8 @@ function Footer() {
                             </li>
                         </ul>
                         <a
-                            href={`mailto:${COMPANY.email}?subject=PAWGO%20Inquiry`}
+                            href={COMPANY_MAILTO}
+                            onClick={openCompanyEmail}
                             className="mt-5 inline-flex items-center gap-2 rounded-full border border-white/20 px-5 py-2 text-xs font-semibold text-white transition hover:border-[#E86716] hover:bg-[#E86716]"
                         >
                             Contact Us

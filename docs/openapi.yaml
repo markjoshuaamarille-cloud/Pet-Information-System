@@ -4,13 +4,17 @@ info:
   description: |
     Full clinic mobile REST API (Laravel + Sanctum).
 
-    **Synced with:** `routes/api.php`
+    **Synced with:** `routes/api.php` and `docs/MOBILE_API.md`
 
     **Authentication:** `POST /auth/login` or `/auth/register`, then `Authorization: Bearer {token}`.
 
     **Default success shape:** `{ "message": string, "data": object|null }`
 
     **Exceptions:** `POST /nearby-places/geocode` and `POST /nearby-places/search` return JSON directly (no `message`/`data` wrapper on success).
+
+    **Customer mobile:** See MOBILE_API.md "Customer mobile endpoints" section for the subset of routes customers use.
+
+    **Web-only features** (not in this API): appointment rating, pet toggle-active, grooming slot check, billing checkout from appointments, reports export, customer appointment clinic_id.
   version: 1.0.0
   contact:
     name: Pet Information System
@@ -42,7 +46,6 @@ tags:
   - name: Reports
   - name: Admin Users
   - name: Nearby Places
-  - name: Survey
   - name: Profile
 
 components:
@@ -82,7 +85,8 @@ components:
         email: { type: string, format: email }
         role:
           type: string
-          enum: [super_admin, veterinarian, receptionist, groomer, customer, cashier]
+          enum: [super_admin, veterinarian, receptionist, groomer, customer, cashier, clinic_owner]
+          description: clinic_owner is primarily web; most mobile endpoints return 403
         client_id: { type: integer, nullable: true }
         email_verified_at: { type: string, format: date-time, nullable: true }
 
@@ -95,12 +99,38 @@ components:
 
     RegisterRequest:
       type: object
-      required: [name, email, password, password_confirmation]
+      required:
+        - name
+        - email
+        - password
+        - password_confirmation
+        - address_line1
+        - barangay
+        - city
+        - province
+        - latitude
+        - longitude
       properties:
         name: { type: string }
         email: { type: string, format: email }
         password: { type: string, format: password }
         password_confirmation: { type: string, format: password }
+        address_line1: { type: string, maxLength: 255 }
+        address_line2: { type: string, maxLength: 255, nullable: true }
+        barangay: { type: string, maxLength: 255 }
+        city: { type: string, maxLength: 255 }
+        province: { type: string, maxLength: 255 }
+        postal_code: { type: string, maxLength: 20, nullable: true }
+        country: { type: string, maxLength: 100, nullable: true }
+        address: { type: string, maxLength: 500, nullable: true }
+        address_formatted: { type: string, maxLength: 500, nullable: true }
+        latitude: { type: number, minimum: -90, maximum: 90 }
+        longitude: { type: number, minimum: -180, maximum: 180 }
+        geoapify_place_id: { type: string, maxLength: 255, nullable: true }
+        geoapify_label: { type: string, maxLength: 500, nullable: true }
+      description: |
+        Creates a customer account and linked clients record.
+        contact is set server-side (N/A), unlike web registration.
 
     AuthData:
       type: object
@@ -141,10 +171,12 @@ components:
 
     AppointmentInput:
       type: object
-      required: [pet_id, client_id, scheduled_at, type, status]
+      required: [pet_id, scheduled_at, type, status]
       properties:
         pet_id: { type: integer }
-        client_id: { type: integer }
+        client_id:
+          type: integer
+          description: Required for staff; optional for customers (auto-set from logged-in user)
         scheduled_at: { type: string, format: date-time }
         type:
           type: string
@@ -152,6 +184,7 @@ components:
         status:
           type: string
           enum: [scheduled, completed, cancelled]
+          description: Customers should send scheduled on create (server overrides). Updates force cancelled for customers.
         notes: { type: string, nullable: true }
 
     MedicineInput:
@@ -196,23 +229,6 @@ components:
               medicine_id: { type: integer }
               quantity: { type: integer, minimum: 1 }
         notes: { type: string, maxLength: 1000 }
-
-    SurveySubmit:
-      type: object
-      required: [q1, q2, q3, q4, q5, q6, q7, q8, q9, q10]
-      properties:
-        respondent_name: { type: string, maxLength: 255 }
-        q1: { type: integer, minimum: 1, maximum: 5 }
-        q2: { type: integer, minimum: 1, maximum: 5 }
-        q3: { type: integer, minimum: 1, maximum: 5 }
-        q4: { type: integer, minimum: 1, maximum: 5 }
-        q5: { type: integer, minimum: 1, maximum: 5 }
-        q6: { type: integer, minimum: 1, maximum: 5 }
-        q7: { type: integer, minimum: 1, maximum: 5 }
-        q8: { type: integer, minimum: 1, maximum: 5 }
-        q9: { type: integer, minimum: 1, maximum: 5 }
-        q10: { type: integer, minimum: 1, maximum: 5 }
-        comments: { type: string }
 
     ProfileUpdate:
       type: object
@@ -317,6 +333,9 @@ paths:
     post:
       tags: [Authentication]
       summary: Register customer account
+      description: |
+        Creates role=customer user and linked clients record.
+        Requires address fields and coordinates. contact is set server-side (N/A).
       requestBody:
         required: true
         content:
@@ -381,7 +400,11 @@ paths:
       tags: [Dashboard]
       security: [{ bearerAuth: [] }]
       summary: Dashboard stats and alerts
-      description: All authenticated roles. Returns stats, medicine alerts (staff), upcoming appointments, due health events.
+      description: |
+        All authenticated roles.
+        Customer data includes stats, upcoming_appointments, due_health_records,
+        appointments_section_title, can_manage_appointment_status (false), and empty medicine alert arrays.
+        Staff data includes expired_medicines, critical_medicines, expiring_soon, and can_manage_appointment_status.
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -466,7 +489,10 @@ paths:
       tags: [Pets]
       security: [{ bearerAuth: [] }]
       summary: List pets
-      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier. Response data includes pets, clients, can_manage_records."
+      description: |
+        Roles: super_admin, veterinarian, receptionist, customer, cashier.
+        Response data includes pets, clients, can_manage_records.
+        Customers are scoped to their linked client_id.
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -722,7 +748,10 @@ paths:
       tags: [Appointments]
       security: [{ bearerAuth: [] }]
       summary: List appointments
-      description: "Roles: super_admin, veterinarian, receptionist, cashier, customer"
+      description: |
+        Roles: super_admin, veterinarian, receptionist, cashier, customer.
+        Response data includes appointments, pets, clients, can_manage_status, service_types.
+        Customers own data only; create forces scheduled; update forces cancelled.
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -732,6 +761,8 @@ paths:
       tags: [Appointments]
       security: [{ bearerAuth: [] }]
       summary: Schedule appointment
+      description: |
+        Customers should send status=scheduled (server overrides). client_id optional for customers.
       requestBody:
         content:
           application/json:
@@ -1064,7 +1095,11 @@ paths:
       tags: [Notifications]
       security: [{ bearerAuth: [] }]
       summary: List notifications
-      description: "Roles: super_admin, veterinarian, receptionist, cashier, customer"
+      description: |
+        Roles: super_admin, veterinarian, receptionist, cashier, customer.
+        Response data includes notifications and is_customer.
+        Customers receive appointment and health due reminders.
+        Staff receive inventory expiry and stock alerts.
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -1196,6 +1231,10 @@ paths:
       tags: [Admin Users]
       security: [{ bearerAuth: [] }]
       summary: Update user role
+      description: |
+        Roles: super_admin only.
+        Assignable roles: super_admin, veterinarian, receptionist, groomer, customer, cashier.
+        clinic_owner is not assignable via this API.
       parameters:
         - name: user
           in: path
@@ -1301,7 +1340,10 @@ paths:
       tags: [Pet Shop]
       security: [{ bearerAuth: [] }]
       summary: List shop products
-      description: "Roles: super_admin, veterinarian, receptionist, customer, cashier"
+      description: |
+        Roles: super_admin, veterinarian, receptionist, customer, cashier.
+        Response data includes products, categories, clients (staff only),
+        can_manage_products, can_checkout, can_select_client, customer_client_id.
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -1311,7 +1353,9 @@ paths:
       tags: [Pet Shop]
       security: [{ bearerAuth: [] }]
       summary: Place retail order
-      description: "Roles: super_admin, cashier, receptionist, customer"
+      description: |
+        Roles: super_admin, cashier, receptionist, customer.
+        Customers must use their own client_id (from auth/user or pet-shop index customer_client_id).
       requestBody:
         content:
           application/json:
@@ -1423,38 +1467,6 @@ paths:
           $ref: "#/components/responses/Created"
         "422":
           $ref: "#/components/responses/ValidationError"
-
-  /survey:
-    get:
-      tags: [Survey]
-      security: [{ bearerAuth: [] }]
-      summary: Get survey questions
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
-    post:
-      tags: [Survey]
-      security: [{ bearerAuth: [] }]
-      summary: Submit survey
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/SurveySubmit"
-      responses:
-        "201":
-          $ref: "#/components/responses/Created"
-        "422":
-          $ref: "#/components/responses/ValidationError"
-
-  /survey/results:
-    get:
-      tags: [Survey]
-      security: [{ bearerAuth: [] }]
-      summary: Survey results and average SUS score
-      responses:
-        "200":
-          $ref: "#/components/responses/Success"
 
   /profile:
     get:
