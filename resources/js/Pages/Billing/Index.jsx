@@ -83,7 +83,9 @@ function BarChart({ items, valueKey = "revenue" }) {
     );
 
     if (items.length === 0) {
-        return <p className="text-sm text-gray-400">No data for this period.</p>;
+        return (
+            <p className="text-sm text-gray-400">No data for this period.</p>
+        );
     }
 
     return (
@@ -237,6 +239,7 @@ export default function BillingIndex({
     const [statusFilter, setStatusFilter] = useState("");
     const [dateFrom, setDateFrom] = useState(filters.date_from ?? "");
     const [dateTo, setDateTo] = useState(filters.date_to ?? "");
+    const [exportingCsv, setExportingCsv] = useState(false);
 
     const reportQueryParams = () => {
         const params = { period: filters.period ?? "monthly" };
@@ -276,6 +279,47 @@ export default function BillingIndex({
     };
 
     const exportUrl = route("billing.export", reportQueryParams());
+
+    const handleExportCsv = async () => {
+        if (exportingCsv) {
+            return;
+        }
+
+        setExportingCsv(true);
+
+        try {
+            const response = await window.axios.get(exportUrl, {
+                responseType: "blob",
+            });
+
+            const contentType = response.headers["content-type"] ?? "";
+            if (!contentType.includes("text/csv")) {
+                window.location.assign(exportUrl);
+                return;
+            }
+
+            const disposition = response.headers["content-disposition"] ?? "";
+            const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+            const filename =
+                filenameMatch?.[1] ??
+                `clinic-billing-report-${new Date().toISOString().slice(0, 10)}.csv`;
+
+            const blob = new Blob([response.data], { type: "text/csv" });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = downloadUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch {
+            window.location.assign(exportUrl);
+        } finally {
+            setExportingCsv(false);
+        }
+    };
+
     const periodEntries = Object.entries(reportData ?? {});
     const hasReportData =
         Number(summary?.total_orders ?? 0) > 0 || periodEntries.length > 0;
@@ -648,12 +692,17 @@ export default function BillingIndex({
 
                     {requires_clinic_context && (
                         <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                            Select an active clinic from the header to view invoices and payments for your clinic.
-                            To generate a new invoice, go to{' '}
-                            <a href={route('appointments.index')} className="font-medium underline">
+                            Select an active clinic from the header to view
+                            invoices and payments for your clinic. To generate a
+                            new invoice, go to{" "}
+                            <a
+                                href={route("appointments.index")}
+                                className="font-medium underline"
+                            >
                                 Scheduling
-                            </a>{' '}
-                            and click <strong>Bill visit</strong> on a completed appointment.
+                            </a>{" "}
+                            and click <strong>Bill visit</strong> on a completed
+                            appointment.
                         </div>
                     )}
 
@@ -663,12 +712,14 @@ export default function BillingIndex({
                                 <h3 className="text-lg font-semibold text-gray-800">
                                     Billing Reports
                                 </h3>
-                                <Link
-                                    href={exportUrl}
-                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                                <button
+                                    type="button"
+                                    onClick={handleExportCsv}
+                                    disabled={exportingCsv}
+                                    className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                                 >
-                                    Export CSV
-                                </Link>
+                                    {exportingCsv ? "Exporting…" : "Export CSV"}
+                                </button>
                             </div>
 
                             <div className="mb-6 flex flex-wrap gap-2">
@@ -676,9 +727,12 @@ export default function BillingIndex({
                                     <button
                                         key={p.value}
                                         type="button"
-                                        onClick={() => changeReportPeriod(p.value)}
+                                        onClick={() =>
+                                            changeReportPeriod(p.value)
+                                        }
                                         className={`rounded-full px-4 py-1.5 text-sm font-medium transition ${
-                                            (filters.period ?? "monthly") === p.value
+                                            (filters.period ?? "monthly") ===
+                                            p.value
                                                 ? "bg-indigo-600 text-white"
                                                 : "bg-white text-gray-600 shadow hover:bg-indigo-50"
                                         }`}
@@ -848,8 +902,7 @@ export default function BillingIndex({
                                             <h4 className="mb-4 font-semibold text-gray-800">
                                                 Payment Methods
                                             </h4>
-                                            {paymentMethodStats.length ===
-                                            0 ? (
+                                            {paymentMethodStats.length === 0 ? (
                                                 <p className="text-sm text-gray-400">
                                                     No payments recorded.
                                                 </p>
@@ -999,7 +1052,7 @@ export default function BillingIndex({
                                                     </ul>
                                                 </div>
                                             )}
-                                            {zeroSales.length > 0 && (
+                                            {/* {zeroSales.length > 0 && (
                                                 <div className="rounded-lg bg-white p-5 shadow">
                                                     <h4 className="mb-3 font-semibold text-gray-800">
                                                         No Sales in Period
@@ -1033,11 +1086,11 @@ export default function BillingIndex({
                                                         )}
                                                     </ul>
                                                 </div>
-                                            )}
+                                            )} */}
                                         </div>
                                     )}
 
-                                    {periodEntries.map(([label, data]) => (
+                                    {/* {periodEntries.map(([label, data]) => (
                                         <div
                                             key={label}
                                             className="overflow-hidden rounded-lg bg-white shadow"
@@ -1156,7 +1209,7 @@ export default function BillingIndex({
                                                 </div>
                                             </div>
                                         </div>
-                                    ))}
+                                    ))} */}
                                 </div>
                             )}
                         </div>
@@ -1752,9 +1805,10 @@ export default function BillingIndex({
                                                         </div>
                                                     ) : (
                                                         <div className="space-y-1">
-                                                            {(billing.line_items ??
-                                                                []).length >
-                                                            0 ? (
+                                                            {(
+                                                                billing.line_items ??
+                                                                []
+                                                            ).length > 0 ? (
                                                                 billing.line_items.map(
                                                                     (item) => (
                                                                         <p
@@ -1766,7 +1820,8 @@ export default function BillingIndex({
                                                                             {
                                                                                 item.description
                                                                             }{" "}
-                                                                            — Qty{" "}
+                                                                            —
+                                                                            Qty{" "}
                                                                             {
                                                                                 item.quantity
                                                                             }{" "}

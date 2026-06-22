@@ -5,28 +5,53 @@
 **Format:** JSON  
 **Authentication:** Laravel Sanctum Bearer token
 
+One shared API for all roles. Access is controlled per endpoint via the user's `role` (returned at login). Customers use a subset of endpoints only.
+
 ---
 
 ## Phase 0 — Scope
 
-This API provides **full clinic mobile** access for all roles:
-
-| Role | Access |
-|------|--------|
+| Role | Mobile API access |
+|------|-------------------|
 | `super_admin` | Full system |
-| `veterinarian` | Clinical records, appointments, vaccinations |
-| `receptionist` | Clients, scheduling, front desk |
+| `veterinarian` | Clinical records, appointments, vaccinations, grooming (read) |
+| `receptionist` | Clients, scheduling, front desk, grooming |
 | `groomer` | Grooming records |
 | `cashier` | Billing, pet shop checkout |
-| `customer` | Own pets, appointments, pet shop |
+| `customer` | Own pets, appointments, pet shop, notifications |
+| `clinic_owner` | Primarily **web app**; most mobile endpoints return `403` |
 
-The existing **web app (Inertia)** continues to run unchanged. Mobile clients use this API only.
+The existing **web app (Inertia)** continues to run unchanged. Mobile clients use this API.
+
+---
+
+## Customer mobile endpoints (quick reference)
+
+| Endpoint | Customer notes |
+|----------|----------------|
+| `POST /auth/register` | Address + coordinates required (see Register below) |
+| `POST /auth/login` | Same login as all roles |
+| `GET /dashboard` | Own pets/appointments stats; no inventory alerts |
+| `GET/POST/PUT/DELETE /pets` | Auto-scoped to `client_id`; `client_id` optional on write |
+| `GET /pets/{id}/client-record` | Read-only health view |
+| `GET/POST/PUT/DELETE /appointments` | Own data only; create forces `scheduled`; update forces `cancelled` |
+| `GET /pet-shop` | Returns `customer_client_id`, `can_checkout` |
+| `POST /pet-shop/checkout` | `client_id` must match logged-in customer's `client_id` |
+| `GET /notifications` | Returns `{ notifications, is_customer: true }` |
+| `GET/POST /nearby-places/*` | All authenticated |
+| `GET/PATCH /profile` | All authenticated |
 
 ---
 
 ## Phase 1 — Authentication
 
 ### Register (customer)
+
+Creates a `users` row with `role: customer` and links a `clients` record automatically. **`contact` is set server-side (`N/A`)** — unlike web registration, which requires `contact`.
+
+**Required fields:** `name`, `email`, `password`, `password_confirmation`, `address_line1`, `barangay`, `city`, `province`, `latitude`, `longitude`
+
+**Optional fields:** `address_line2`, `postal_code`, `country`, `address`, `address_formatted`, `geoapify_place_id`, `geoapify_label`
 
 ```http
 POST /api/v1/auth/register
@@ -36,7 +61,15 @@ Content-Type: application/json
   "name": "Jane Doe",
   "email": "jane@example.com",
   "password": "password",
-  "password_confirmation": "password"
+  "password_confirmation": "password",
+  "address_line1": "123 Main St",
+  "barangay": "Barangay Central",
+  "city": "Quezon City",
+  "province": "Metro Manila",
+  "postal_code": "1100",
+  "country": "Philippines",
+  "latitude": 14.676,
+  "longitude": 121.0437
 }
 ```
 
@@ -48,7 +81,14 @@ Content-Type: application/json
   "data": {
     "token": "1|...",
     "token_type": "Bearer",
-    "user": { "id": 1, "name": "Jane Doe", "email": "jane@example.com", "role": "customer", "client_id": 1 }
+    "user": {
+      "id": 1,
+      "name": "Jane Doe",
+      "email": "jane@example.com",
+      "role": "customer",
+      "client_id": 1,
+      "email_verified_at": null
+    }
   }
 }
 ```
@@ -140,7 +180,9 @@ POST /api/v1/auth/logout
 |--------|------|-------|
 | GET | `/dashboard` | All authenticated |
 
-Returns stats, medicine alerts (staff), upcoming appointments, due health events.
+**Customer response `data` keys:** `stats` (pets, clients, appointments_today, medicines=0), `upcoming_appointments`, `due_health_records`, `appointments_section_title`, `can_manage_appointment_status` (false), empty `expired_medicines`, `critical_medicines`, `expiring_soon`.
+
+**Staff response `data` keys:** `stats`, `expired_medicines`, `critical_medicines`, `expiring_soon`, `upcoming_appointments`, `due_health_records`, `can_manage_appointment_status`.
 
 ---
 
@@ -168,11 +210,13 @@ Returns stats, medicine alerts (staff), upcoming appointments, due health events
 | DELETE | `/pets/{id}` | super_admin, veterinarian, receptionist, customer |
 | GET | `/pets/{id}/client-record` | super_admin, veterinarian, receptionist, customer, cashier |
 
+**Index response `data` keys:** `pets`, `clients`, `can_manage_records`.
+
 **Note:** Use `POST /pets/{id}` with `multipart/form-data` when uploading a photo from mobile.
 
 **Create/update fields:** `client_id`, `pet_name`, `species`, `breed?`, `age?`, `gender?`, `birth_date?`, `weight?`, `color?`, `microchip_no?`, `vaccination_status?` (`up_to_date|partial|not_vaccinated|unknown`), `medical_history?`, `photo?` (file)
 
-Customers are scoped to their linked `client_id` automatically.
+Customers are scoped to their linked `client_id` automatically; `client_id` is optional on create/update for customers.
 
 ---
 
@@ -200,8 +244,14 @@ Customers are scoped to their linked `client_id` automatically.
 | PUT | `/appointments/{id}` | super_admin, veterinarian, receptionist, cashier, customer |
 | DELETE | `/appointments/{id}` | super_admin, veterinarian, receptionist, cashier, customer |
 
+**Index response `data` keys:** `appointments`, `pets`, `clients`, `can_manage_status`, `service_types`.
+
 **Types:** `checkup`, `vaccination`, `grooming`, `consultation`, `surgery`, `boarding`, `emergency_care`, `other`  
-**Status:** `scheduled`, `completed`, `cancelled` (customers can only create `scheduled`; updates force `cancelled`)
+**Status:** `scheduled`, `completed`, `cancelled`
+
+**Customer rules:** On create, server forces `status: scheduled` and sets `client_id` from the logged-in user. On update, server forces `status: cancelled`. Customers cannot set `completed`. Inactive pets cannot be scheduled.
+
+**Body fields:** `pet_id`, `client_id` (optional for customers), `scheduled_at`, `type`, `status`, `notes?`
 
 ---
 
@@ -266,6 +316,8 @@ Customers are scoped to their linked `client_id` automatically.
 | POST | `/pet-shop/checkout` | super_admin, cashier, receptionist, customer |
 | POST | `/pet-shop/{medicine}` | super_admin (product update) |
 
+**Index response `data` keys:** `products`, `categories`, `clients` (staff only), `can_manage_products`, `can_checkout`, `can_select_client`, `customer_client_id`.
+
 **Checkout body:**
 
 ```json
@@ -275,6 +327,8 @@ Customers are scoped to their linked `client_id` automatically.
   "notes": "Optional note"
 }
 ```
+
+Customers must use their own `client_id` (from `GET /auth/user` or `customer_client_id` on pet-shop index).
 
 ---
 
@@ -306,7 +360,10 @@ Customers are scoped to their linked `client_id` automatically.
 |--------|------|-------|
 | GET | `/notifications` | super_admin, veterinarian, receptionist, cashier, customer |
 
-Staff: inventory alerts + system notifications. Customers: appointments, due health/vaccination reminders.
+**Response `data` keys:** `notifications`, `is_customer`.
+
+- **Customers:** upcoming appointments and due health/vaccination reminders.
+- **Staff:** inventory expiry, critical stock, and expiring-soon alerts.
 
 ---
 
@@ -331,7 +388,8 @@ Staff: inventory alerts + system notifications. Customers: appointments, due hea
 | PUT | `/admin/users/{id}/role` | super_admin |
 | DELETE | `/admin/users/{id}` | super_admin |
 
-**Roles:** `super_admin`, `veterinarian`, `receptionist`, `groomer`, `customer`, `cashier`
+**Assignable roles (admin API):** `super_admin`, `veterinarian`, `receptionist`, `groomer`, `customer`, `cashier`  
+(`clinic_owner` is not assignable via this API.)
 
 ---
 
@@ -383,18 +441,6 @@ Requires `GEOAPIFY_API_KEY` in `.env` (see `config/services.php` → `geoapify.k
 
 ---
 
-### Survey
-
-| Method | Path | Roles |
-|--------|------|-------|
-| GET | `/survey` | All authenticated (returns questions) |
-| POST | `/survey` | All authenticated |
-| GET | `/survey/results` | All authenticated |
-
-**Submit:** `respondent_name?`, `q1`–`q10` (1–5), `comments?`
-
----
-
 ### Profile
 
 | Method | Path | Roles |
@@ -407,6 +453,22 @@ Requires `GEOAPIFY_API_KEY` in `.env` (see `config/services.php` → `geoapify.k
 **Update password** body: `current_password`, `password`, `password_confirmation`
 
 **Delete account** body: `{ "password": "your-current-password" }`
+
+---
+
+## Web-only features (not in API v1)
+
+These exist on the **web app** but are **not** available in `routes/api.php`:
+
+| Feature | Web route |
+|---------|-----------|
+| Appointment rating | `POST /appointments/{id}/rating` |
+| Pet activate/deactivate toggle | `PATCH /pets/{id}/toggle-active` |
+| Grooming slot availability | `POST /appointments/grooming-slot-availability` |
+| Unified billing checkout from appointments | `POST /billing/checkout` |
+| Pet shop reports & CSV export | `/pet-shop-reports` |
+| Clinic billing reports & CSV export | `GET /billing/export` |
+| Customer appointment `clinic_id` | Required on web; **not accepted** by mobile API appointments yet |
 
 ---
 

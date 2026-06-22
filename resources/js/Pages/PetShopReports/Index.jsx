@@ -1,4 +1,4 @@
-import { Head, Link, router, usePage } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
 import TextInput from '@/Components/TextInput';
@@ -87,6 +87,7 @@ export default function PetShopReportsIndex({
     const activeClinic = usePage().props.activeClinic;
     const [dateFrom, setDateFrom] = useState(filters.date_from ?? '');
     const [dateTo, setDateTo] = useState(filters.date_to ?? '');
+    const [exportingCsv, setExportingCsv] = useState(false);
 
     const queryParams = () => {
         const params = { period: filters.period ?? 'monthly' };
@@ -118,6 +119,47 @@ export default function PetShopReportsIndex({
     };
 
     const exportUrl = route('pet-shop-reports.export', queryParams());
+
+    const handleExportCsv = async () => {
+        if (exportingCsv) {
+            return;
+        }
+
+        setExportingCsv(true);
+
+        try {
+            const response = await window.axios.get(exportUrl, {
+                responseType: 'blob',
+            });
+
+            const contentType = response.headers['content-type'] ?? '';
+            if (!contentType.includes('text/csv')) {
+                window.location.assign(exportUrl);
+                return;
+            }
+
+            const disposition = response.headers['content-disposition'] ?? '';
+            const filenameMatch = disposition.match(/filename="?([^";]+)"?/i);
+            const filename =
+                filenameMatch?.[1] ??
+                `pet-shop-report-${new Date().toISOString().slice(0, 10)}.csv`;
+
+            const blob = new Blob([response.data], { type: 'text/csv' });
+            const downloadUrl = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = downloadUrl;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(downloadUrl);
+        } catch {
+            window.location.assign(exportUrl);
+        } finally {
+            setExportingCsv(false);
+        }
+    };
+
     const periodEntries = Object.entries(reportData ?? {});
     const hasData =
         Number(summary?.total_orders ?? 0) > 0 || periodEntries.length > 0;
@@ -153,12 +195,14 @@ export default function PetShopReportsIndex({
                                 </button>
                             ))}
                         </div>
-                        <Link
-                            href={exportUrl}
-                            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                        <button
+                            type="button"
+                            onClick={handleExportCsv}
+                            disabled={exportingCsv}
+                            className="inline-flex items-center rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            Export CSV
-                        </Link>
+                            {exportingCsv ? 'Exporting…' : 'Export CSV'}
+                        </button>
                     </div>
 
                     <div className="mb-6 rounded-lg bg-white p-4 shadow">
