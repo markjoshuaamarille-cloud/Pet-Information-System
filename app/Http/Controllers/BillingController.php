@@ -121,7 +121,7 @@ class BillingController extends Controller
             'pets' => $pets,
             'serviceCatalogs' => $serviceCatalogs,
             'can_manage_billing' => $canManageBilling,
-            'can_delete_billing' => (bool) ($user?->hasAnyRole(['super_admin', 'clinic_owner'])),
+            'can_delete_billing' => (bool) $user?->isPlatformAdmin(),
             'appointments' => $appointments,
             'requires_clinic_context' => $restrictToClinic && ! $clinicId,
             'summary' => $report['summary'],
@@ -520,6 +520,18 @@ class BillingController extends Controller
 
     public function update(Request $request, Billing $billing): RedirectResponse
     {
+        if ($billing->status === 'paid') {
+            return redirect()->back()->withErrors([
+                'billing' => 'Paid invoices cannot be edited.',
+            ]);
+        }
+
+        if ($billing->status === 'cancelled') {
+            return redirect()->back()->withErrors([
+                'billing' => 'Cancelled invoices cannot be edited.',
+            ]);
+        }
+
         $validated = $request->validate([
             'client_id' => 'required|exists:clients,id',
             'pet_id' => 'nullable|exists:pets,id',
@@ -564,20 +576,8 @@ class BillingController extends Controller
     {
         $user = $this->currentUser();
 
-        if (! $user?->hasAnyRole(['super_admin', 'clinic_owner'])) {
-            abort(403, 'Only a super admin or clinic owner can delete invoices.');
-        }
-
-        if ($user->isClinicOwner() && ! $user->isPlatformAdmin()) {
-            $clinicId = ClinicContext::activeClinicId($request) ?? $billing->clinic_id;
-
-            if (! $clinicId || (int) $billing->clinic_id !== (int) $clinicId) {
-                abort(403, 'You can only delete invoices for your active clinic.');
-            }
-
-            if (! $user->clinics()->where('clinics.id', $clinicId)->exists()) {
-                abort(403, 'You are not assigned to this clinic.');
-            }
+        if (! $user?->isPlatformAdmin()) {
+            abort(403, 'Only a super admin can delete invoices.');
         }
 
         $request->validate([

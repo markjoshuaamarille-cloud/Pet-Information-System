@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Clinic;
 use App\Support\GeoapifyAddress;
 use App\Support\PlatformAdminNotifier;
+use App\Support\ClinicRegistrationDocuments;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,6 +31,7 @@ class ClinicRegistrationController extends Controller
             'has_veterinary'    => ['boolean'],
             'has_pet_shop'      => ['boolean'],
             'has_grooming'      => ['boolean'],
+            ...ClinicRegistrationDocuments::validationRules(requireMandatory: true),
         ]);
 
         $payload = [
@@ -41,6 +43,7 @@ class ClinicRegistrationController extends Controller
             'has_veterinary'        => $request->boolean('has_veterinary'),
             'has_pet_shop'          => $request->boolean('has_pet_shop'),
             'has_grooming'          => $request->boolean('has_grooming'),
+            'other_requirements'    => [],
             'status'                => 'pending',
             'submitted_by_user_id'  => $request->user()->id,
             'enabled_modules'       => Clinic::defaultModulesForFlags(
@@ -49,6 +52,12 @@ class ClinicRegistrationController extends Controller
                 $request->boolean('has_grooming'),
             ),
         ];
+
+        $payload = ClinicRegistrationDocuments::mergeUploadedDocuments(
+            $request,
+            $payload,
+            requireMandatory: true,
+        );
 
         $clinic = Clinic::create($payload);
 

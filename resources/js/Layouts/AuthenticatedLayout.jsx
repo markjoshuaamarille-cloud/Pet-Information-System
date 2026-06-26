@@ -284,6 +284,11 @@ const navItems = [
         roles: ["super_admin"],
     },
     {
+        href: "admin.platform-commissions.index",
+        label: "Platform Commissions",
+        roles: ["super_admin"],
+    },
+    {
         href: "nearby-places.index",
         label: "Nearby Clinics",
         roles: [

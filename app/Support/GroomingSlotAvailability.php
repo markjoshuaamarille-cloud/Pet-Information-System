@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Date;
 
 class GroomingSlotAvailability
 {
-    public const SLOT_DURATION_MINUTES = 60;
+    public const SLOT_DURATION_MINUTES = 90;
 
     public const MAX_LOOKAHEAD_HOURS = 24 * 14;
 
@@ -160,9 +160,9 @@ class GroomingSlotAvailability
             $message = 'This grooming salon has no active groomers available for booking.';
         } elseif (! $available) {
             $message = $nextSlot
-                ? 'All groomers are booked for this 1-hour window. Next available slot is '
+                ? 'All groomers are booked for this 1.5-hour window. Next available slot is '
                     .self::formatSlot($nextSlot).'.'
-                : 'All groomers are booked for this 1-hour window and no nearby slots were found.';
+                : 'All groomers are booked for this 1.5-hour window and no nearby slots were found.';
         }
 
         return [

@@ -25,6 +25,149 @@ class ClinicServices
         'emergency_care',
     ];
 
+    public const VETERINARY_HEALTH_RECORD_TYPES = [
+        'consultation',
+        'vaccination',
+        'medication',
+        'surgery',
+        'boarding',
+        'emergency_care',
+    ];
+
+    public const VETERINARY_APPOINTMENT_TYPES = [
+        'checkup',
+        'vaccination',
+        'consultation',
+        'surgery',
+        'boarding',
+        'emergency_care',
+        'other',
+    ];
+
+    public const SERVICE_CATALOG_CATEGORIES = [
+        'consultation',
+        'grooming',
+        'surgery',
+        'boarding',
+        'emergency_care',
+    ];
+
+    /**
+     * Appointment booking types allowed for a clinic based on services offered.
+     *
+     * @return list<string>
+     */
+    public static function appointmentTypesForClinic(?\App\Models\Clinic $clinic): array
+    {
+        if ($clinic === null) {
+            return self::APPOINTMENT_TYPES;
+        }
+
+        $hasVet = (bool) $clinic->has_veterinary;
+        $hasGrooming = (bool) $clinic->has_grooming;
+
+        if ($hasGrooming && ! $hasVet) {
+            return ['grooming'];
+        }
+
+        $types = $hasVet ? self::VETERINARY_APPOINTMENT_TYPES : [];
+
+        if ($hasGrooming) {
+            $types[] = 'grooming';
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function appointmentTypeLabelsForClinic(?\App\Models\Clinic $clinic): array
+    {
+        $labels = self::appointmentTypeLabels();
+        $allowed = self::appointmentTypesForClinic($clinic);
+
+        return array_intersect_key($labels, array_flip($allowed));
+    }
+
+    public static function appointmentTypeValidationRuleForClinic(?\App\Models\Clinic $clinic): string
+    {
+        $types = self::appointmentTypesForClinic($clinic);
+
+        if ($types === []) {
+            return self::appointmentTypeValidationRule();
+        }
+
+        return 'required|in:'.implode(',', $types);
+    }
+
+    /**
+     * Service catalog categories shown when adding appointment services.
+     *
+     * @return list<string>
+     */
+    public static function serviceCatalogCategoriesForClinic(?\App\Models\Clinic $clinic): array
+    {
+        if ($clinic === null) {
+            return self::SERVICE_CATALOG_CATEGORIES;
+        }
+
+        $hasVet = (bool) $clinic->has_veterinary;
+        $hasGrooming = (bool) $clinic->has_grooming;
+
+        if ($hasGrooming && ! $hasVet) {
+            return ['grooming'];
+        }
+
+        $categories = $hasVet
+            ? ['consultation', 'surgery', 'boarding', 'emergency_care']
+            : [];
+
+        if ($hasGrooming) {
+            $categories[] = 'grooming';
+        }
+
+        return array_values(array_unique($categories));
+    }
+
+    /**
+     * Health record types allowed for a clinic based on services offered.
+     *
+     * @return list<string>
+     */
+    public static function healthRecordTypesForClinic(?\App\Models\Clinic $clinic): array
+    {
+        if ($clinic === null) {
+            return self::HEALTH_RECORD_TYPES;
+        }
+
+        $hasVet = (bool) $clinic->has_veterinary;
+        $hasGrooming = (bool) $clinic->has_grooming;
+
+        if ($hasGrooming && ! $hasVet) {
+            return ['grooming'];
+        }
+
+        $types = $hasVet ? self::VETERINARY_HEALTH_RECORD_TYPES : [];
+
+        if ($hasGrooming) {
+            $types[] = 'grooming';
+        }
+
+        return array_values(array_unique($types));
+    }
+
+    public static function healthRecordTypeValidationRuleForClinic(?\App\Models\Clinic $clinic): string
+    {
+        $types = self::healthRecordTypesForClinic($clinic);
+
+        if ($types === []) {
+            return self::healthRecordTypeValidationRule();
+        }
+
+        return 'required|in:'.implode(',', $types);
+    }
+
     /**
      * @return array<string, string>
      */

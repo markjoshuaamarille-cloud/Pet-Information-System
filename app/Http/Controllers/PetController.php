@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\Client;
+use App\Models\Clinic;
 use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\User;
 use App\Support\ClinicPatientScope;
+use App\Support\ClinicServices;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -39,6 +41,7 @@ class PetController extends Controller
             'pets' => $petsQuery->get(),
             'clients' => $clientsQuery->get(['id', 'name']),
             'can_manage_records' => (bool) ($user?->canManagePetRecords()),
+            'can_register_pet' => (bool) ($user?->canRegisterPet()),
             'can_toggle_pet_status' => (bool) $user?->isCustomer(),
         ]);
     }
@@ -76,7 +79,12 @@ class PetController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $user = $this->currentUser();
-        $isCustomer = (bool) $user?->isCustomer();
+
+        if (! $user?->canRegisterPet()) {
+            abort(403, 'Only customers and platform administrators can register pets.');
+        }
+
+        $isCustomer = (bool) $user->isCustomer();
         $request->merge([
             'microchip_no' => $this->normalizeMicrochipNo($request->input('microchip_no')),
         ]);
@@ -86,7 +94,7 @@ class PetController extends Controller
             'pet_name' => 'required|string|max:255',
             'species' => 'required|string|max:255',
             'breed' => 'nullable|string|max:255',
-            'age' => 'nullable|integer|min:0|max:150',
+            'age' => 'nullable|string|max:50',
             'gender' => 'nullable|string|max:50',
             'birth_date' => 'nullable|date|before_or_equal:today',
             'weight' => 'nullable|numeric|min:0|max:9999.99',
@@ -118,6 +126,9 @@ class PetController extends Controller
         $this->ensureCustomerOwnsPet($user, $pet);
 
         $clinicId = $request->attributes->get('active_clinic_id');
+        $clinic = $clinicId
+            ? Clinic::find($clinicId, ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming'])
+            : null;
 
         // Load clinical records with clinic label (hybrid: global pet, all-clinic records)
         $pet->load([
@@ -149,6 +160,7 @@ class PetController extends Controller
             'veterinarians' => $this->staffForClinic($clinicId, 'veterinarian'),
             'groomers' => $this->staffForClinic($clinicId, 'groomer'),
             'can_manage_health_records' => (bool) ($user?->canManageHealthRecords()),
+            'healthRecordTypes' => ClinicServices::healthRecordTypesForClinic($clinic),
         ]);
     }
 
@@ -166,7 +178,7 @@ class PetController extends Controller
             'pet_name' => 'required|string|max:255',
             'species' => 'required|string|max:255',
             'breed' => 'nullable|string|max:255',
-            'age' => 'nullable|integer|min:0|max:150',
+            'age' => 'nullable|string|max:50',
             'gender' => 'nullable|string|max:50',
             'birth_date' => 'nullable|date|before_or_equal:today',
             'weight' => 'nullable|numeric|min:0|max:9999.99',

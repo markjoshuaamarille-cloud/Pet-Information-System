@@ -7,24 +7,23 @@ use Carbon\Carbon;
 
 class NoShowAppointmentCancellation
 {
-    public const GROOMING_GRACE_HOURS = 6;
+    public const AUTO_CANCEL_NOTE = '[Auto-cancelled: no-show — did not attend on appointment day]';
 
-    public const DEFAULT_GRACE_HOURS = 24;
-
-    public const AUTO_CANCEL_NOTE = '[Auto-cancelled: no-show]';
-
-    public static function gracePeriodHours(string $appointmentType): int
+    public static function clinicTimezone(): string
     {
-        return $appointmentType === 'grooming'
-            ? self::GROOMING_GRACE_HOURS
-            : self::DEFAULT_GRACE_HOURS;
+        return (string) config('app.timezone', 'Asia/Manila');
     }
 
+    /**
+     * First moment after the appointment calendar day (clinic timezone).
+     */
     public static function cancellationDeadline(Appointment $appointment): Carbon
     {
-        return $appointment->scheduled_at->copy()->addHours(
-            self::gracePeriodHours($appointment->type),
-        );
+        return $appointment->scheduled_at
+            ->copy()
+            ->timezone(self::clinicTimezone())
+            ->startOfDay()
+            ->addDay();
     }
 
     public static function isDueForCancellation(Appointment $appointment, ?Carbon $now = null): bool
@@ -33,17 +32,17 @@ class NoShowAppointmentCancellation
             return false;
         }
 
-        $now ??= now();
+        $now ??= now(self::clinicTimezone());
 
         return $now->greaterThanOrEqualTo(self::cancellationDeadline($appointment));
     }
 
     /**
-     * Cancel scheduled appointments that passed their no-show grace period.
+     * Cancel scheduled appointments that were not attended by end of appointment day.
      */
     public static function cancelDueAppointments(?Carbon $now = null): int
     {
-        $now ??= now();
+        $now ??= now(self::clinicTimezone());
         $cancelled = 0;
 
         Appointment::query()

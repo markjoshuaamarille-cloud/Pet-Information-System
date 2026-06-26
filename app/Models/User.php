@@ -28,6 +28,7 @@ class User extends Authenticatable
         'contact',
         'role',
         'is_active',
+        'activated_at',
         'client_id',
         'password',
     ];
@@ -53,6 +54,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'activated_at' => 'datetime',
         ];
     }
 
@@ -112,6 +114,11 @@ class User extends Authenticatable
 
         return $this->isCustomer()
             || $this->hasAnyRole(['super_admin', 'veterinarian', 'receptionist', 'clinic_owner']);
+    }
+
+    public function canRegisterPet(): bool
+    {
+        return $this->isCustomer() || $this->isPlatformAdmin();
     }
 
     public function canManageHealthRecords(): bool

@@ -766,7 +766,7 @@ export default function Dashboard({
                 )}
 
                 {/* ── Activity placeholder ── */}
-                <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
+                {/* <section className="mx-auto max-w-7xl px-4 pb-10 sm:px-6 lg:px-8">
                     <div className="rounded-3xl border-2 border-dashed border-gray-200 bg-gradient-to-br from-violet-50/60 to-orange-50/60 p-10 text-center">
                         <h3 className="mt-4 text-lg font-bold text-gray-900">
                             Activity &amp; Insights
@@ -777,7 +777,7 @@ export default function Dashboard({
                             monitoring, and daily clinic activity feeds.
                         </p>
                     </div>
-                </section>
+                </section> */}
             </div>
 
             {/* ─────────────────── "HOW CAN WE HELP" / CLINIC DIRECTORY ─────────────────── */}

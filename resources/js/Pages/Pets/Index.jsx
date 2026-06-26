@@ -108,16 +108,27 @@ function ageFromBirthDate(birthDate) {
         return "";
     }
 
-    let age = today.getFullYear() - birth.getFullYear();
-    const hadBirthdayThisYear =
-        today.getMonth() > birth.getMonth()
-        || (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+    let years = today.getFullYear() - birth.getFullYear();
+    let months = today.getMonth() - birth.getMonth();
 
-    if (!hadBirthdayThisYear) {
-        age -= 1;
+    if (today.getDate() < birth.getDate()) {
+        months -= 1;
     }
 
-    return String(Math.max(0, age));
+    if (months < 0) {
+        years -= 1;
+        months += 12;
+    }
+
+    if (years > 0) {
+        return String(years);
+    }
+
+    if (months <= 0) {
+        return "Less than 1 month";
+    }
+
+    return months === 1 ? "1 month" : `${months} months`;
 }
 
 function SelectOrOtherField({
@@ -201,6 +212,7 @@ export default function PetsIndex({
     pets,
     clients,
     can_manage_records = true,
+    can_register_pet = false,
     can_toggle_pet_status = false,
 }) {
     const user = usePage().props.auth.user;
@@ -287,7 +299,9 @@ export default function PetsIndex({
             pet_name: pet.pet_name ?? "",
             species: pet.species ?? "",
             breed: pet.breed ?? "",
-            age: pet.age ?? "",
+            age: pet.birth_date
+                ? ageFromBirthDate(String(pet.birth_date).slice(0, 10))
+                : (pet.age ?? ""),
             gender: pet.gender ?? "",
             birth_date: pet.birth_date
                 ? String(pet.birth_date).slice(0, 10)
@@ -456,6 +470,8 @@ export default function PetsIndex({
         );
     };
 
+    const showPetForm = can_register_pet || editingId;
+
     return (
         <AuthenticatedLayout
             header={
@@ -479,7 +495,7 @@ export default function PetsIndex({
             <div className="py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
-                    {can_manage_records && (
+                    {showPetForm && (
                         <form
                             onSubmit={submit}
                             className="mb-6 rounded-lg bg-white p-6 shadow"
@@ -583,9 +599,10 @@ export default function PetsIndex({
                                 <div>
                                     <InputLabel value="Age" />
                                     <TextInput
-                                        type="number"
+                                        type="text"
                                         className="mt-1 block w-full"
                                         value={form.data.age}
+                                        placeholder="e.g. 2 or 6 months"
                                         onChange={(e) =>
                                             form.setData("age", e.target.value)
                                         }

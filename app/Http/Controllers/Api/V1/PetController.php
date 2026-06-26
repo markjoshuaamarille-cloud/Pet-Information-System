@@ -37,16 +37,20 @@ class PetController extends Controller
         return $this->success([
             'pets' => PetResource::collection($petsQuery->get()),
             'clients' => ClientResource::collection($clientsQuery->get(['id', 'name', 'contact', 'email', 'address'])),
-            'can_manage_records' => $user && ! $user->hasRole('cashier') && (
-                $user->hasAnyRole(['super_admin', 'veterinarian', 'receptionist']) || $user->isCustomer()
-            ),
+            'can_manage_records' => (bool) $user?->canManagePetRecords(),
+            'can_register_pet' => (bool) $user?->canRegisterPet(),
         ]);
     }
 
     public function store(Request $request): JsonResponse
     {
         $user = $this->currentUser();
-        $isCustomer = (bool) $user?->isCustomer();
+
+        if (! $user?->canRegisterPet()) {
+            abort(403, 'Only customers and platform administrators can register pets.');
+        }
+
+        $isCustomer = (bool) $user->isCustomer();
         $request->merge([
             'microchip_no' => $this->normalizeMicrochipNo($request->input('microchip_no')),
         ]);
@@ -56,7 +60,7 @@ class PetController extends Controller
             'pet_name' => 'required|string|max:255',
             'species' => 'required|string|max:255',
             'breed' => 'nullable|string|max:255',
-            'age' => 'nullable|integer|min:0|max:150',
+            'age' => 'nullable|string|max:50',
             'gender' => 'nullable|string|max:50',
             'birth_date' => 'nullable|date|before_or_equal:today',
             'weight' => 'nullable|numeric|min:0|max:9999.99',
@@ -122,7 +126,7 @@ class PetController extends Controller
             'pet_name' => 'required|string|max:255',
             'species' => 'required|string|max:255',
             'breed' => 'nullable|string|max:255',
-            'age' => 'nullable|integer|min:0|max:150',
+            'age' => 'nullable|string|max:50',
             'gender' => 'nullable|string|max:50',
             'birth_date' => 'nullable|date|before_or_equal:today',
             'weight' => 'nullable|numeric|min:0|max:9999.99',

@@ -59,8 +59,11 @@ Route::prefix('v1')->group(function (): void {
             Route::get('{pet}/client-record', [PetController::class, 'clientRecord']);
         });
 
-        Route::middleware('api.role:super_admin,veterinarian,receptionist,customer')->prefix('pets')->group(function (): void {
+        Route::middleware('api.role:super_admin,customer')->prefix('pets')->group(function (): void {
             Route::post('/', [PetController::class, 'store']);
+        });
+
+        Route::middleware('api.role:super_admin,veterinarian,receptionist,customer')->prefix('pets')->group(function (): void {
             Route::post('{pet}', [PetController::class, 'update']); // POST for multipart photo uploads
             Route::put('{pet}', [PetController::class, 'update']);
             Route::delete('{pet}', [PetController::class, 'destroy']);

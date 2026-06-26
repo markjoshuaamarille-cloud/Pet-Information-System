@@ -4,11 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Appointment;
 use App\Models\HealthRecord;
-use App\Models\Medicine;
 use App\Models\SystemNotification;
 use App\Models\User;
-use App\Support\PlatformAdminNotifier;
 use App\Models\Vaccination;
+use App\Support\PlatformAdminNotifier;
+use App\Support\StaffNotificationBuilder;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -38,7 +39,7 @@ class NotificationController extends Controller
         'other' => 'Other',
     ];
 
-    public function index(\Illuminate\Http\Request $request): Response
+    public function index(Request $request): Response
     {
         $user = auth()->user();
         $user = $user instanceof User ? $user : null;
@@ -56,72 +57,8 @@ class NotificationController extends Controller
             ]);
         }
 
-        $expired     = Medicine::expired()->forClinic($clinicId)->orderBy('expiry_date')->get();
-        $critical    = Medicine::criticalStock()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->orderBy('quantity')->get();
-        $expiringSoon = Medicine::expiringSoon()->forClinic($clinicId)->whereDate('expiry_date', '>=', now())->get();
-
-        $notifications = collect();
-
-        foreach ($expired as $medicine) {
-            $notifications->push([
-                'type' => 'expired',
-                'severity' => 'danger',
-                'message' => "{$medicine->name} has expired (".Carbon::parse($medicine->expiry_date)->format('M d, Y').").",
-                'medicine' => $medicine,
-            ]);
-        }
-
-        foreach ($critical as $medicine) {
-            $notifications->push([
-                'type' => 'critical_stock',
-                'severity' => 'warning',
-                'message' => "{$medicine->name} is at critical stock level ({$medicine->quantity} {$medicine->unit} remaining).",
-                'medicine' => $medicine,
-            ]);
-        }
-
-        foreach ($expiringSoon as $medicine) {
-            /** @var Medicine $medicine */
-            if (! $medicine->isCriticalStock()) {
-                $notifications->push([
-                    'type' => 'expiring_soon',
-                    'severity' => 'info',
-                    'message' => "{$medicine->name} expires on ".Carbon::parse($medicine->expiry_date)->format('M d, Y').".",
-                    'medicine' => $medicine,
-                ]);
-            }
-        }
-
-        $systemNotifications = SystemNotification::with(['pet', 'client'])
-            ->latest()
-            ->limit(50)
-            ->get()
-            ->map(fn (SystemNotification $notification) => [
-                'id' => 'system-'.$notification->id,
-                'type' => $notification->type,
-                'severity' => $notification->severity,
-                'message' => $notification->message,
-                'title' => $notification->title,
-                'created_at' => $notification->created_at?->toIso8601String(),
-                'action_href' => $isPlatformAdmin ? match ($notification->type) {
-                    'clinic_owner_application' => route('admin.users.index'),
-                    'clinic_registration' => route('admin.clinics.index'),
-                    default => null,
-                } : null,
-            ]);
-
-        $allNotifications = $notifications->concat($systemNotifications);
-
-        if ($isPlatformAdmin) {
-            $allNotifications = $allNotifications->sortBy(function (array $item) {
-                return in_array($item['type'] ?? '', ['clinic_owner_application', 'clinic_registration'], true)
-                    ? 0
-                    : 1;
-            });
-        }
-
         return Inertia::render('Notifications/Index', [
-            'notifications' => $allNotifications->values(),
+            'notifications' => StaffNotificationBuilder::build($clinicId, $isPlatformAdmin)->all(),
             'isCustomer' => false,
             'platformAdminAlerts' => $isPlatformAdmin ? PlatformAdminNotifier::pendingSummary() : null,
         ]);
@@ -130,7 +67,20 @@ class NotificationController extends Controller
     /**
      * @return list<array<string, mixed>>
      */
-    private function customerNotifications(int $clientId, int $daysAhead = 30): array
+    public function staffNotificationsForRequest(Request $request): array
+    {
+        $user = $request->user();
+        $user = $user instanceof User ? $user : null;
+        $clinicId = $request->attributes->get('active_clinic_id');
+        $isPlatformAdmin = (bool) $user?->isPlatformAdmin();
+
+        return StaffNotificationBuilder::build($clinicId, $isPlatformAdmin)->all();
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function customerNotifications(int $clientId, int $daysAhead = 30): array
     {
         $items = collect();
 

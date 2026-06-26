@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Support\ServiceCatalogDefaults;
+use App\Support\ClinicRegistrationDocuments;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -55,8 +56,15 @@ class Clinic extends Model
         'enabled_modules',
         'status',
         'submitted_by_user_id',
+        'barangay_clearance_path',
+        'business_permit_path',
+        'other_requirements',
         'approved_by_user_id',
         'approved_at',
+    ];
+
+    protected $appends = [
+        'registration_documents',
     ];
 
     protected $casts = [
@@ -64,6 +72,7 @@ class Clinic extends Model
         'has_pet_shop'     => 'boolean',
         'has_grooming'     => 'boolean',
         'enabled_modules'  => 'array',
+        'other_requirements' => 'array',
         'approved_at'      => 'datetime',
         'latitude'         => 'float',
         'longitude'        => 'float',
@@ -148,6 +157,52 @@ class Clinic extends Model
     public function hasModule(string $module): bool
     {
         return in_array($module, $this->enabled_modules ?? [], true);
+    }
+
+    /**
+     * @return list<array{key: string, label: string, url: string|null, required: bool}>
+     */
+    public function getRegistrationDocumentsAttribute(): array
+    {
+        $documents = [];
+
+        if ($this->barangay_clearance_path) {
+            $documents[] = [
+                'key' => 'barangay_clearance',
+                'label' => 'Barangay Clearance',
+                'url' => self::temporaryDocumentUrl($this->barangay_clearance_path),
+                'required' => true,
+            ];
+        }
+
+        if ($this->business_permit_path) {
+            $documents[] = [
+                'key' => 'business_permit',
+                'label' => "Mayor's Permit / Business Permit (BPLO)",
+                'url' => self::temporaryDocumentUrl($this->business_permit_path),
+                'required' => true,
+            ];
+        }
+
+        foreach ($this->other_requirements ?? [] as $index => $item) {
+            if (empty($item['path'])) {
+                continue;
+            }
+
+            $documents[] = [
+                'key' => 'other_'.$index,
+                'label' => (string) ($item['label'] ?? 'Other requirement'),
+                'url' => self::temporaryDocumentUrl($item['path'] ?? null),
+                'required' => false,
+            ];
+        }
+
+        return $documents;
+    }
+
+    private static function temporaryDocumentUrl(?string $path): ?string
+    {
+        return ClinicRegistrationDocuments::url($path);
     }
 
     /**

@@ -397,6 +397,10 @@ export default function BillingIndex({
     };
 
     const startEdit = (billing) => {
+        if (billing.status === "paid" || billing.status === "cancelled") {
+            return;
+        }
+
         setEditing(billing.id);
         form.setData({
             client_id: String(billing.client_id),
@@ -1886,7 +1890,11 @@ export default function BillingIndex({
                                                         <>
                                                             {(billing.sale_type ??
                                                                 "clinic_service") !==
-                                                                "pet_shop_retail" && (
+                                                                "pet_shop_retail" &&
+                                                                billing.status !==
+                                                                    "paid" &&
+                                                                billing.status !==
+                                                                    "cancelled" && (
                                                                 <button
                                                                     className="ms-3 text-indigo-600 hover:underline"
                                                                     onClick={() =>

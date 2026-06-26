@@ -2,16 +2,10 @@ import { Head, useForm, Link } from '@inertiajs/react';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import FlashMessage from '@/Components/FlashMessage';
 import AddressLocationForm from '@/Components/AddressLocationForm';
+import ClinicDocumentsFormSection from '@/Components/ClinicDocumentsFormSection';
 import { emptyAddressForm } from '@/utils/address';
 
-const ALL_MODULES_LABELS = {
-    dashboard: 'Dashboard', scheduling: 'Scheduling', vaccinations: 'Vaccinations',
-    grooming: 'Grooming', pet_shop: 'Pet Shop', pet_shop_billing: 'Pet Shop Billing',
-    inventory: 'Inventory', service_catalog: 'Service Catalog', pets: 'Pets',
-    reports: 'Reports', notifications: 'Notifications', billing: 'Billing',
-};
-
-export default function ClinicRegister({ allModules }) {
+export default function ClinicRegister() {
     const form = useForm({
         name: '',
         contact: '',
@@ -20,6 +14,10 @@ export default function ClinicRegister({ allModules }) {
         has_veterinary: false,
         has_pet_shop: false,
         has_grooming: false,
+        barangay_clearance: null,
+        business_permit: null,
+        other_requirement_labels: [''],
+        other_requirement_files: [null],
         ...emptyAddressForm(),
     });
 
@@ -37,7 +35,15 @@ export default function ClinicRegister({ allModules }) {
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        form.post(route('clinic-registration.store'));
+
+        if (!form.data.barangay_clearance || !form.data.business_permit) {
+            return;
+        }
+
+        form.post(route('clinic-registration.store'), {
+            forceFormData: true,
+            preserveScroll: true,
+        });
     };
 
     return (
@@ -59,7 +65,7 @@ export default function ClinicRegister({ allModules }) {
                                     { label: 'Clinic / Shop Name *', key: 'name', required: true },
                                     { label: 'Contact Number', key: 'contact' },
                                     { label: 'Email', key: 'email', type: 'email' },
-                                    { label: 'Website', key: 'website', type: 'url' },
+                                    { label: 'Website (optional)', key: 'website', type: 'text' },
                                 ].map(({ label, key, type = 'text', required }) => (
                                     <div key={key}>
                                         <label className="block text-xs font-medium text-gray-600">{label}</label>
@@ -113,10 +119,16 @@ export default function ClinicRegister({ allModules }) {
                                 </div>
                             </div>
 
+                            <ClinicDocumentsFormSection
+                                form={form}
+                                requireMandatory
+                                showExistingList={false}
+                            />
+
                             <div className="flex gap-3">
                                 <button
                                     type="submit"
-                                    disabled={form.processing}
+                                    disabled={form.processing || !form.data.barangay_clearance || !form.data.business_permit}
                                     className="rounded bg-indigo-600 px-6 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
                                 >
                                     {form.processing ? 'Submitting…' : 'Submit Registration'}

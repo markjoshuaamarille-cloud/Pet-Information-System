@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Clinic;
 use App\Models\HealthRecord;
 use App\Models\Medicine;
 use App\Models\Pet;
@@ -117,8 +118,13 @@ class HealthRecordController extends Controller
 
     private function validatePayload(Request $request, Pet $pet): array
     {
+        $clinicId = ClinicContext::activeClinicId($request);
+        $clinic = $clinicId
+            ? Clinic::find($clinicId, ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming'])
+            : null;
+
         $validated = $request->validate([
-            'type' => ClinicServices::healthRecordTypeValidationRule(),
+            'type' => ClinicServices::healthRecordTypeValidationRuleForClinic($clinic),
             'title' => 'required|string|max:255',
             'description' => 'nullable|string',
             'medicine_id' => [

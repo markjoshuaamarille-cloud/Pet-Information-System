@@ -8,7 +8,7 @@ import TextInput from "@/Components/TextInput";
 import InputLabel from "@/Components/InputLabel";
 import InputError from "@/Components/InputError";
 import { Head, Link, useForm, router, usePage } from "@inertiajs/react";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState, useEffect } from "react";
 import { formatClinicDateTime } from "@/utils/formatDateTime";
 
 const types = [
@@ -611,9 +611,21 @@ export default function PetShow({
     groomers = [],
     servicePrices = {},
     can_manage_health_records,
+    healthRecordTypes = types,
 }) {
     const { activeClinic, isPlatformAdmin, appTimezone } = usePage().props;
     const clinicTimeZone = appTimezone ?? "Asia/Manila";
+
+    const availableHealthRecordTypes = useMemo(() => {
+        if (!Array.isArray(healthRecordTypes)) {
+            return types;
+        }
+
+        return types.filter((type) => healthRecordTypes.includes(type));
+    }, [healthRecordTypes]);
+
+    const defaultHealthRecordType =
+        availableHealthRecordTypes[0] ?? "consultation";
 
     const canModifyHealthRecord = (record) => {
         if (!can_manage_health_records) {
@@ -888,6 +900,23 @@ export default function PetShow({
             setMedicationLines([]);
         }
     };
+
+    useEffect(() => {
+        if (
+            editingHealthRecordId ||
+            availableHealthRecordTypes.length === 0 ||
+            availableHealthRecordTypes.includes(healthForm.data.type)
+        ) {
+            return;
+        }
+
+        resetTypeSpecificFields(defaultHealthRecordType);
+    }, [
+        availableHealthRecordTypes,
+        defaultHealthRecordType,
+        editingHealthRecordId,
+        healthForm.data.type,
+    ]);
 
     const buildPayload = (data) => {
         const cleanedBase = {
@@ -1293,7 +1322,10 @@ export default function PetShow({
         setDiscountAmount("0");
         healthForm.transform((data) => data);
         healthForm.reset();
-        healthForm.setData(defaultHealthFormData());
+        healthForm.setData({
+            ...defaultHealthFormData(),
+            type: defaultHealthRecordType,
+        });
     };
 
     const startEditHealthRecord = (record) => {
@@ -1619,7 +1651,7 @@ export default function PetShow({
                                                 )
                                             }
                                         >
-                                            {types.map((t) => (
+                                            {availableHealthRecordTypes.map((t) => (
                                                 <option key={t} value={t}>
                                                     {typeLabels[t] ?? t}
                                                 </option>

@@ -27,6 +27,14 @@ const SERVICE_TYPE_LABELS = {
     emergency_care: 'Emergency Care',
 };
 
+const buildServiceTypeLabels = (allowedTypes) => {
+    const allowed = Array.isArray(allowedTypes) ? allowedTypes : Object.keys(SERVICE_TYPE_LABELS);
+
+    return Object.fromEntries(
+        Object.entries(SERVICE_TYPE_LABELS).filter(([key]) => allowed.includes(key)),
+    );
+};
+
 const INVENTORY_SERVICE_TYPES = ['vaccination', 'medication'];
 
 const VACCINE_INVENTORY_CATEGORIES = ['vaccine'];
@@ -721,9 +729,15 @@ function AppointmentServicesPanel({
     inventoryItems = [],
     canAddServices,
     onOpenInvoice,
+    healthRecordTypes = Object.keys(SERVICE_TYPE_LABELS),
 }) {
     const [showAddForm, setShowAddForm] = useState(false);
     const [editingRecordId, setEditingRecordId] = useState(null);
+
+    const availableServiceTypeLabels = useMemo(
+        () => buildServiceTypeLabels(healthRecordTypes),
+        [healthRecordTypes],
+    );
 
     const healthRecords = appointment.health_records ?? [];
     const billableUnbilled = healthRecords.filter(
@@ -734,7 +748,16 @@ function AppointmentServicesPanel({
     );
     const clinicalOnly = healthRecords.filter((r) => Number(r.line_total) <= 0);
 
-    const defaultServiceType = defaultServiceTypeForAppointment(appointment.type);
+    const defaultServiceType = useMemo(() => {
+        const fromAppointment = defaultServiceTypeForAppointment(appointment.type);
+        const allowed = Object.keys(availableServiceTypeLabels);
+
+        if (allowed.includes(fromAppointment)) {
+            return fromAppointment;
+        }
+
+        return allowed[0] ?? 'grooming';
+    }, [appointment.type, availableServiceTypeLabels]);
 
     const typeForCategory = (category) => {
         const valid = [
@@ -865,6 +888,18 @@ function AppointmentServicesPanel({
             quantity: '1',
         });
     };
+
+    useEffect(() => {
+        if (
+            editingRecordId ||
+            Object.keys(availableServiceTypeLabels).length === 0 ||
+            availableServiceTypeLabels[form.data.type]
+        ) {
+            return;
+        }
+
+        onServiceTypeChange(Object.keys(availableServiceTypeLabels)[0] ?? 'grooming');
+    }, [availableServiceTypeLabels, editingRecordId, form.data.type]);
 
     const onCatalogChange = (catalogId) => {
         const catalog = serviceCatalogs.find((c) => String(c.id) === catalogId);
@@ -1018,7 +1053,7 @@ function AppointmentServicesPanel({
                                 onChange={(e) => onServiceTypeChange(e.target.value)}
                                 required
                             >
-                                {Object.entries(SERVICE_TYPE_LABELS).map(([value, label]) => (
+                                {Object.entries(availableServiceTypeLabels).map(([value, label]) => (
                                     <option key={value} value={value}>
                                         {label}
                                     </option>
@@ -1327,7 +1362,7 @@ function GroomingSlotHint({ serviceType, clinicId, scheduledAt, onStatusChange, 
                 <p className="font-medium">Grooming slot available</p>
                 <p className="mt-1 text-xs text-emerald-800">
                     {status.remaining_slots} of {status.groomer_count} groomer
-                    {status.groomer_count === 1 ? '' : 's'} free for a 1-hour session starting at this time.
+                    {status.groomer_count === 1 ? '' : 's'} free for a 1.5-hour session starting at this time.
                     {status.booked_count > 0 && (
                         <>
                             {' '}
@@ -1344,7 +1379,7 @@ function GroomingSlotHint({ serviceType, clinicId, scheduledAt, onStatusChange, 
         <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p className="font-medium">All groomers are busy for this time</p>
             <p className="mt-1 text-xs text-amber-800">
-                Each grooming appointment blocks a groomer for 1 hour. This start time overlaps with{' '}
+                Each grooming appointment blocks a groomer for 1.5 hours. This start time overlaps with{' '}
                 {status.booked_count} other session{status.booked_count === 1 ? '' : 's'}, so no groomer is
                 available.
             </p>
@@ -1576,6 +1611,7 @@ export default function AppointmentsIndex({
     can_manage_status,
     can_add_services = false,
     serviceTypes,
+    healthRecordTypes = Object.keys(SERVICE_TYPE_LABELS),
     serviceCatalogs = [],
     inventoryItems = [],
     clientLat,
@@ -1606,10 +1642,17 @@ export default function AppointmentsIndex({
         pet_id: '',
         client_id: '',
         scheduled_at: '',
-        type: 'checkup',
+        type: Object.keys(serviceTypes ?? {})[0] ?? 'checkup',
         status: 'scheduled',
         notes: '',
     });
+
+    useEffect(() => {
+        const allowed = Object.keys(serviceTypes ?? {});
+        if (allowed.length > 0 && !allowed.includes(form.data.type)) {
+            form.setData('type', allowed[0]);
+        }
+    }, [serviceTypes, form.data.type]);
 
     const {
         visibleItems: visibleAppointments,
@@ -1924,6 +1967,7 @@ export default function AppointmentsIndex({
                                                         serviceCatalogs={serviceCatalogs}
                                                         inventoryItems={inventoryItems}
                                                         canAddServices={can_add_services}
+                                                        healthRecordTypes={healthRecordTypes}
                                                         onOpenInvoice={() =>
                                                             setInvoicingAppointmentId(a.id)
                                                         }
