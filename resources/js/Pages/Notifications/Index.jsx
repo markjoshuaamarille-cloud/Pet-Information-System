@@ -1,7 +1,7 @@
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout';
 import ListDisplayControls from '@/Components/ListDisplayControls';
 import useListDisplayLimit from '@/hooks/useListDisplayLimit';
-import { Head, Link } from '@inertiajs/react';
+import { Head, Link, usePage } from '@inertiajs/react';
 
 const severityStyle = {
     danger: 'border-red-200 bg-red-50 text-red-800',
@@ -41,9 +41,13 @@ const typeLabels = {
     emergency_care_due: 'Emergency',
     clinic_owner_application: 'Clinic Owner Application',
     clinic_registration: 'Clinic Registration',
+    expired: 'Expired Stock',
+    critical_stock: 'Critical Stock',
+    expiring_soon: 'Expiring Soon',
 };
 
 export default function NotificationsIndex({ notifications, isCustomer = false, platformAdminAlerts = null }) {
+    const { activeClinic, monitoringAllClinics } = usePage().props;
     const {
         visibleItems: visibleNotifications,
         displayLimit,
@@ -56,7 +60,11 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
         <AuthenticatedLayout
             header={
                 <h2 className="text-xl font-semibold text-gray-800">
-                    {isCustomer ? 'Personal Notifications' : 'System Notifications'}
+                    {isCustomer
+                        ? 'Personal Notifications'
+                        : activeClinic
+                          ? `${activeClinic.name} Notifications`
+                          : 'System Notifications'}
                 </h2>
             }
         >
@@ -66,8 +74,17 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
                     <p className="mb-4 text-sm text-gray-600">
                         {isCustomer
                             ? 'Reminders for your pets — upcoming appointments, vaccines, medications, and other due dates.'
-                            : 'Alerts for stock levels, due vaccinations, clinic applications, and other workflow reminders.'}
+                            : activeClinic
+                              ? `Alerts for ${activeClinic.name} only — stock levels, due vaccinations, and workflow reminders for this clinic, shop, or grooming location.`
+                              : monitoringAllClinics
+                                ? 'Select a clinic from the header switcher to view its notifications. Platform-wide clinic application alerts are shown below.'
+                                : 'Alerts for stock levels, due vaccinations, and other workflow reminders for your active clinic.'}
                     </p>
+                    {!isCustomer && monitoringAllClinics && (
+                        <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                            Each registered clinic, pet shop, and grooming location has its own separate notifications. Choose a clinic above to see that location&apos;s alerts.
+                        </div>
+                    )}
                     {!isCustomer && (platformAdminAlerts?.total ?? 0) > 0 && (
                         <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
                             <p className="font-semibold">Pending clinic applications</p>
@@ -95,7 +112,9 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
                         <div className="rounded-lg bg-white p-6 text-center text-gray-500 shadow">
                             {isCustomer
                                 ? 'No personal reminders at this time. Check back for appointment and health due date alerts.'
-                                : 'No alerts at this time.'}
+                                : monitoringAllClinics
+                                  ? 'No platform-wide alerts right now. Select a clinic to view its inventory and workflow notifications.'
+                                  : 'No alerts at this time for this clinic.'}
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-lg bg-white shadow">

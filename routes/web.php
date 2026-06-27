@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\Admin\PlatformCommissionController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClinicController;
 use App\Http\Controllers\ClinicContextController;
+use App\Http\Controllers\ClinicDocumentController;
 use App\Http\Controllers\ClinicRegistrationController;
 use App\Http\Controllers\ClinicSuggestController;
 use App\Http\Controllers\DashboardController;
@@ -56,8 +58,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/pets/{pet}/client-record', [PetController::class, 'clientRecord'])->name('pets.client-record');
     });
 
-    Route::middleware('role:super_admin,veterinarian,receptionist,customer,clinic_owner')->group(function () {
+    Route::middleware('role:super_admin,customer')->group(function () {
         Route::post('/pets', [PetController::class, 'store'])->name('pets.store');
+    });
+
+    Route::middleware('role:super_admin,veterinarian,receptionist,customer,clinic_owner')->group(function () {
         Route::put('/pets/{pet}', [PetController::class, 'update'])->name('pets.update');
         Route::delete('/pets/{pet}', [PetController::class, 'destroy'])->name('pets.destroy');
     });
@@ -128,8 +133,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/billing/{billing}/payments', [BillingController::class, 'storePayment'])->name('billing.payments.store');
     });
 
-    Route::middleware('role:super_admin,clinic_owner')->group(function () {
+    Route::middleware('role:super_admin')->group(function () {
         Route::delete('/billing/{billing}', [BillingController::class, 'destroy'])->name('billing.destroy');
+        Route::delete('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'destroy'])->name('pet-shop-billing.destroy');
     });
 
     Route::middleware('role:super_admin,veterinarian,receptionist,cashier,customer,clinic_owner')->group(function () {
@@ -167,12 +173,21 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/clinics/{clinic}/deactivate', [ClinicController::class, 'deactivate'])->name('clinics.deactivate');
         Route::post('/clinics/{clinic}/activate', [ClinicController::class, 'activate'])->name('clinics.activate');
         Route::post('/clinics/geoapify-import', [ClinicController::class, 'importFromGeoapify'])->name('clinics.geoapify-import');
+
+        Route::get('/platform-commissions', [PlatformCommissionController::class, 'index'])->name('platform-commissions.index');
+        Route::put('/platform-commissions/settings', [PlatformCommissionController::class, 'updateSettings'])->name('platform-commissions.settings.update');
+        Route::post('/platform-commissions/settlements', [PlatformCommissionController::class, 'storeSettlement'])->name('platform-commissions.settlements.store');
+        Route::get('/platform-commissions/settlements/{settlement}/receipt', [PlatformCommissionController::class, 'settlementReceipt'])->name('platform-commissions.settlement-receipt');
     });
 
     // Clinic registration (self-service — any authenticated user)
     Route::get('/register-clinic', [ClinicRegistrationController::class, 'create'])->name('clinic-registration.create');
     Route::post('/register-clinic', [ClinicRegistrationController::class, 'store'])->name('clinic-registration.store');
     Route::post('/register-clinic/geoapify-import', [ClinicController::class, 'importFromGeoapify'])->name('clinic-registration.geoapify-import');
+
+    Route::get('/clinic-documents/{path}', [ClinicDocumentController::class, 'show'])
+        ->where('path', '[A-Za-z0-9+/=]+')
+        ->name('clinic-documents.show');
 
     // Clinic context switcher
     Route::post('/clinic-context', [ClinicContextController::class, 'store'])->name('clinic-context.store');
@@ -204,10 +219,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/pet-shop-billing/{billing}/payments', [PetShopBillingController::class, 'storePayment'])->name('pet-shop-billing.payments.store');
         Route::get('/pet-shop-reports', [PetShopReportController::class, 'index'])->name('pet-shop-reports.index');
         Route::get('/pet-shop-reports/export', [PetShopReportController::class, 'export'])->name('pet-shop-reports.export');
-    });
-
-    Route::middleware('role:super_admin,clinic_owner')->group(function () {
-        Route::delete('/pet-shop-billing/{billing}', [PetShopBillingController::class, 'destroy'])->name('pet-shop-billing.destroy');
     });
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Clinic;
 use App\Models\User;
 use App\Support\GeoapifyAddress;
+use App\Support\ClinicRegistrationDocuments;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -39,6 +40,13 @@ class ClinicController extends Controller
         $validated['approved_by_user_id'] = $request->user()->id;
         $validated['approved_at'] = now();
         $validated['enabled_modules'] = $this->resolveModules($validated, $request->input('enabled_modules', []));
+        $validated['other_requirements'] = [];
+
+        $validated = ClinicRegistrationDocuments::mergeUploadedDocuments(
+            $request,
+            $validated,
+            requireMandatory: false,
+        );
 
         Clinic::create($validated);
 
@@ -49,6 +57,12 @@ class ClinicController extends Controller
     {
         $validated = $this->validateClinic($request, $clinic->id);
         $validated['enabled_modules'] = $this->resolveModules($validated, $request->input('enabled_modules', []));
+
+        $validated = ClinicRegistrationDocuments::mergeUploadedDocumentsForUpdate(
+            $request,
+            $validated,
+            $clinic,
+        );
 
         $clinic->update($validated);
 
@@ -191,6 +205,7 @@ class ClinicController extends Controller
             'has_veterinary'    => ['boolean'],
             'has_pet_shop'      => ['boolean'],
             'has_grooming'      => ['boolean'],
+            ...ClinicRegistrationDocuments::validationRules(requireMandatory: false),
         ]);
 
         return [

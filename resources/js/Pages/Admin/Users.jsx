@@ -358,6 +358,9 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                     <th className="px-4 py-3 text-left">
                                         Created
                                     </th>
+                                    <th className="px-4 py-3 text-left">
+                                        Activated
+                                    </th>
                                     <th className="px-4 py-3 text-right">
                                         Actions
                                     </th>
@@ -367,7 +370,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                 {visibleUsers.length === 0 && (
                                     <tr>
                                         <td
-                                            colSpan={8}
+                                            colSpan={9}
                                             className="px-4 py-8 text-center text-gray-500"
                                         >
                                             {hasActiveFilters
@@ -446,6 +449,13 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                             {new Date(
                                                 user.created_at,
                                             ).toLocaleDateString()}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {user.activated_at
+                                                ? new Date(
+                                                      user.activated_at,
+                                                  ).toLocaleDateString()
+                                                : "—"}
                                         </td>
                                         <td className="px-4 py-3 text-right space-x-2">
                                             {user.role !== "customer" && (

@@ -17,6 +17,7 @@ use App\Support\ClinicDateTime;
 use App\Support\ClinicPatientScope;
 use App\Support\ClinicServices;
 use App\Support\GroomingSlotAvailability;
+use App\Support\NoShowAppointmentCancellation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -37,6 +38,7 @@ class AppointmentController extends Controller
         $user = $this->currentUser();
 
         Pet::purgeDeactivatedBeyondOneYear();
+        NoShowAppointmentCancellation::cancelDueAppointments();
 
         $appointmentsQuery = Appointment::with([
             'pet',
@@ -88,8 +90,14 @@ class AppointmentController extends Controller
         }
 
         $clinicId = $request->attributes->get('active_clinic_id');
+        $clinic = $clinicId
+            ? Clinic::find($clinicId, ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming'])
+            : null;
+        $catalogCategories = ClinicServices::serviceCatalogCategoriesForClinic($clinic);
+
         $serviceCatalogs = $clinicId
             ? ServiceCatalog::forClinic($clinicId)
+                ->whereIn('category', $catalogCategories)
                 ->whereNotIn('category', ['general', 'vaccination', 'medication'])
                 ->orderByRaw("FIELD(category,'consultation','grooming','surgery','boarding','emergency_care')")
                 ->orderBy('name')
@@ -118,7 +126,8 @@ class AppointmentController extends Controller
             'clients'           => $clientsQuery->get(['id', 'name']),
             'can_manage_status' => (bool) ($user?->canManageAppointmentStatus()),
             'can_add_services'  => (bool) ($user?->hasAnyRole(['super_admin', 'veterinarian', 'receptionist', 'clinic_owner'])),
-            'serviceTypes'      => ClinicServices::appointmentTypeLabels(),
+            'serviceTypes'      => ClinicServices::appointmentTypeLabelsForClinic($clinic),
+            'healthRecordTypes' => ClinicServices::healthRecordTypesForClinic($clinic),
             'serviceCatalogs'   => $serviceCatalogs,
             'inventoryItems'    => $inventoryItems,
             'clientLat'         => $clientLat,
@@ -294,8 +303,13 @@ class AppointmentController extends Controller
 
     private function validateServicePayload(Request $request): array
     {
+        $clinicId = ClinicContext::activeClinicId($request);
+        $clinic = $clinicId
+            ? Clinic::find($clinicId, ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming'])
+            : null;
+
         return $request->validate([
-            'type'               => ClinicServices::healthRecordTypeValidationRule(),
+            'type'               => ClinicServices::healthRecordTypeValidationRuleForClinic($clinic),
             'title'              => 'required|string|max:255',
             'description'        => 'nullable|string|max:1000',
             'record_date'        => 'required|date',
@@ -388,6 +402,19 @@ class AppointmentController extends Controller
             'status'       => 'required|in:scheduled,completed,cancelled',
             'notes'        => 'nullable|string',
         ]);
+
+        $appointmentClinic = ! empty($validated['clinic_id'])
+            ? Clinic::find($validated['clinic_id'], ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming'])
+            : ($isCustomer ? null : Clinic::find(ClinicContext::activeClinicId($request), ['id', 'has_veterinary', 'has_pet_shop', 'has_grooming']));
+
+        if ($appointmentClinic) {
+            $allowedTypes = ClinicServices::appointmentTypesForClinic($appointmentClinic);
+            if ($allowedTypes !== [] && ! in_array($validated['type'], $allowedTypes, true)) {
+                return redirect()->back()->withErrors([
+                    'type' => 'This service type is not available for the selected clinic.',
+                ]);
+            }
+        }
 
         if ($user?->isCustomer()) {
             $validated['client_id'] = $this->customerClientId($user);

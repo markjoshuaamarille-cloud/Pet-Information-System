@@ -19,8 +19,8 @@ class UserManagementController extends Controller
     public function index(): Response
     {
         $users = User::with(['clinics:id,name'])
-            ->orderBy('name')
-            ->get(['id', 'name', 'email', 'contact', 'role', 'is_active', 'created_at', 'client_id']);
+            ->orderByDesc('created_at')
+            ->get(['id', 'name', 'email', 'contact', 'role', 'is_active', 'activated_at', 'created_at', 'client_id']);
 
         return Inertia::render('Admin/Users', [
             'users'   => $users,
@@ -63,6 +63,7 @@ class UserManagementController extends Controller
             'role' => $validated['role'],
             'client_id' => $clientId,
             'is_active' => $validated['role'] === 'customer',
+            'activated_at' => $validated['role'] === 'customer' ? now() : null,
             'password' => Hash::make($validated['password']),
         ]);
 
@@ -79,7 +80,12 @@ class UserManagementController extends Controller
             return redirect()->back()->with('error', 'You cannot deactivate your own account.');
         }
 
-        $user->update(['is_active' => ! $user->is_active]);
+        $activating = ! $user->is_active;
+
+        $user->update([
+            'is_active' => $activating,
+            'activated_at' => $activating ? now() : null,
+        ]);
 
         $message = $user->is_active
             ? "{$user->name} has been activated."
@@ -110,8 +116,10 @@ class UserManagementController extends Controller
 
         if ($validated['role'] === 'customer') {
             $updates['is_active'] = true;
+            $updates['activated_at'] = now();
         } elseif ($user->isCustomer()) {
             $updates['is_active'] = false;
+            $updates['activated_at'] = null;
         }
 
         if ($validated['role'] !== 'customer') {

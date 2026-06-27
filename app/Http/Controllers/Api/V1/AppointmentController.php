@@ -10,6 +10,7 @@ use App\Models\Client;
 use App\Models\Pet;
 use App\Support\ClinicDateTime;
 use App\Support\ClinicServices;
+use App\Support\NoShowAppointmentCancellation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -21,6 +22,8 @@ class AppointmentController extends Controller
     public function index(): JsonResponse
     {
         $user = $this->currentUser();
+
+        NoShowAppointmentCancellation::cancelDueAppointments();
 
         $appointmentsQuery = Appointment::with(['pet', 'client'])
             ->orderByDesc('created_at')

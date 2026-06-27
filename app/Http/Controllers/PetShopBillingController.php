@@ -45,7 +45,7 @@ class PetShopBillingController extends Controller
             'orders' => $orders,
             'stats' => $stats,
             'can_manage' => $canManage,
-            'can_delete_billing' => (bool) $user?->hasAnyRole(['super_admin', 'clinic_owner']),
+            'can_delete_billing' => (bool) $user?->isPlatformAdmin(),
         ]);
     }
 
@@ -164,20 +164,8 @@ class PetShopBillingController extends Controller
         $this->ensureRetailOrder($billing);
         $user = $this->currentUser();
 
-        if (! $user?->hasAnyRole(['super_admin', 'clinic_owner'])) {
-            abort(403, 'Only a super admin or clinic owner can delete invoices.');
-        }
-
-        if ($user->isClinicOwner() && ! $user->isPlatformAdmin()) {
-            $clinicId = ClinicContext::activeClinicId($request) ?? $billing->clinic_id;
-
-            if (! $clinicId || (int) $billing->clinic_id !== (int) $clinicId) {
-                abort(403, 'You can only delete invoices for your active clinic.');
-            }
-
-            if (! $user->clinics()->where('clinics.id', $clinicId)->exists()) {
-                abort(403, 'You are not assigned to this clinic.');
-            }
+        if (! $user?->isPlatformAdmin()) {
+            abort(403, 'Only a super admin can delete invoices.');
         }
 
         $this->ensureBillingForActiveClinic($request, $billing);

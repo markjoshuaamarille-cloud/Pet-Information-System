@@ -36,6 +36,7 @@ Artisan::command('reminders:vaccinations', function () {
                 'type' => 'vaccination_due',
                 'pet_id' => $pet->id,
                 'scheduled_for' => $scheduledFor,
+                'clinic_id' => $vaccination->clinic_id,
             ],
             [
                 'client_id' => $client?->id,
@@ -72,6 +73,7 @@ Artisan::command('appointments:cancel-no-shows', function () {
     $cancelled = NoShowAppointmentCancellation::cancelDueAppointments();
 
     $this->info("No-show appointments auto-cancelled: {$cancelled}");
-})->purpose('Cancel scheduled appointments that were missed past the grace period');
+})->purpose('Cancel scheduled appointments missed for the entire appointment day');
 
 Schedule::command('appointments:cancel-no-shows')->hourly();
+Schedule::command('appointments:cancel-no-shows')->dailyAt('00:15');
