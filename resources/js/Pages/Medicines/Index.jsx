@@ -169,7 +169,7 @@ export default function MedicinesIndex({ medicines, can_manage_activation = fals
             }
         >
             <Head title="Inventory" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
                     <form
@@ -387,6 +387,7 @@ export default function MedicinesIndex({ medicines, can_manage_activation = fals
                     </div>
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -534,6 +535,7 @@ export default function MedicinesIndex({ medicines, can_manage_activation = fals
                                 )}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={medicineListCount}
                             showingCount={medicineShowingCount}

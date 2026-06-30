@@ -9,6 +9,96 @@ use Illuminate\Validation\ValidationException;
 
 class PetShopBilling
 {
+    public static function isOpenForPriceSync(Billing $billing): bool
+    {
+        return $billing->isRetail()
+            && ! $billing->inventory_deducted
+            && ! in_array($billing->status, ['paid', 'cancelled'], true);
+    }
+
+    public static function withLivePricing(Billing $billing): Billing
+    {
+        if (! self::isOpenForPriceSync($billing)) {
+            return $billing;
+        }
+
+        $billing->loadMissing('lineItems.medicine');
+
+        $hasAdjustments = false;
+        $subtotal = 0.0;
+
+        foreach ($billing->lineItems as $lineItem) {
+            $quotedUnitPrice = (float) $lineItem->unit_price;
+            $currentUnitPrice = $lineItem->medicine
+                ? (float) $lineItem->medicine->unit_price
+                : $quotedUnitPrice;
+            $hasAdjustment = abs($quotedUnitPrice - $currentUnitPrice) >= 0.005;
+
+            if ($hasAdjustment) {
+                $hasAdjustments = true;
+            }
+
+            $displayLineTotal = round($currentUnitPrice * (int) $lineItem->quantity, 2);
+            $subtotal += $displayLineTotal;
+
+            $lineItem->setAttribute('quoted_unit_price', $quotedUnitPrice);
+            $lineItem->setAttribute('current_unit_price', $currentUnitPrice);
+            $lineItem->setAttribute('has_price_adjustment', $hasAdjustment);
+            $lineItem->setAttribute('display_line_total', $displayLineTotal);
+        }
+
+        $subtotal = round($subtotal, 2);
+        $discount = max((float) $billing->discount, 0);
+        $tax = $billing->tax_applied
+            ? round($subtotal * ((float) $billing->tax_rate / 100), 2)
+            : 0.0;
+        $displayTotal = max(round($subtotal + $tax - $discount, 2), 0);
+
+        $billing->setAttribute('has_price_adjustments', $hasAdjustments);
+        $billing->setAttribute('display_subtotal', $subtotal);
+        $billing->setAttribute('display_tax', $tax);
+        $billing->setAttribute('display_total_amount', $displayTotal);
+
+        return $billing;
+    }
+
+    public static function applyLivePricingToOpenOrder(Billing $billing): bool
+    {
+        if (! self::isOpenForPriceSync($billing)) {
+            return false;
+        }
+
+        $billing->loadMissing('lineItems.medicine');
+        $changed = false;
+
+        foreach ($billing->lineItems as $lineItem) {
+            if (! $lineItem->medicine_id || ! $lineItem->medicine) {
+                continue;
+            }
+
+            $currentUnitPrice = round((float) $lineItem->medicine->unit_price, 2);
+            $currentLineTotal = round($currentUnitPrice * (int) $lineItem->quantity, 2);
+
+            if (
+                abs((float) $lineItem->unit_price - $currentUnitPrice) >= 0.005
+                || abs((float) $lineItem->line_total - $currentLineTotal) >= 0.005
+            ) {
+                $lineItem->update([
+                    'unit_price' => $currentUnitPrice,
+                    'line_total' => $currentLineTotal,
+                    'description' => $lineItem->medicine->name,
+                ]);
+                $changed = true;
+            }
+        }
+
+        if ($changed) {
+            self::recalculateTotals($billing);
+        }
+
+        return $changed;
+    }
+
     public static function recalculateTotals(Billing $billing): void
     {
         $billing->loadMissing('lineItems');

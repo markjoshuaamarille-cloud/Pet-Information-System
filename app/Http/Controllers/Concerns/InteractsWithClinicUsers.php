@@ -76,4 +76,15 @@ trait InteractsWithClinicUsers
 
         return $normalized;
     }
+
+    protected function normalizePcciRegNo(mixed $value): ?string
+    {
+        if (! is_string($value)) {
+            return null;
+        }
+
+        $normalized = trim($value);
+
+        return $normalized === '' ? null : $normalized;
+    }
 }

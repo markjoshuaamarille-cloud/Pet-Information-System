@@ -6,10 +6,22 @@ import PrimaryButton from "@/Components/PrimaryButton";
 import TextInput from "@/Components/TextInput";
 import ListDisplayControls from "@/Components/ListDisplayControls";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
-import { Head, router, useForm } from "@inertiajs/react";
+import { Head, router, useForm, usePage } from "@inertiajs/react";
 import { useMemo, useState } from "react";
 
+function canToggleUserActive(user, currentUserId) {
+    if (
+        currentUserId != null &&
+        Number(user.id) === Number(currentUserId)
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
 export default function AdminUsers({ users, roles, clinics = [] }) {
+    const currentUserId = usePage().props.auth?.user?.id ?? null;
     const form = useForm({
         name: "",
         email: "",
@@ -121,7 +133,9 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
         });
     }, [users, search, roleFilter, clinicFilter]);
 
-    const hasActiveFilters = Boolean(search || roleFilter || clinicFilter);
+    const hasActiveFilters = Boolean(
+        search.trim() || roleFilter || clinicFilter,
+    );
 
     const clearFilters = () => {
         setSearch("");
@@ -130,12 +144,15 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
     };
 
     const {
-        visibleItems: visibleUsers,
+        visibleItems: limitedUsers,
         displayLimit,
         setDisplayLimit,
         totalCount: userListCount,
-        showingCount: userShowingCount,
     } = useListDisplayLimit(filteredUsers);
+
+    // When filtering, show every match so the target account is not cut off by the row limit.
+    const visibleUsers = hasActiveFilters ? filteredUsers : limitedUsers;
+    const userShowingCount = visibleUsers.length;
 
     return (
         <AuthenticatedLayout
@@ -147,7 +164,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
         >
             <Head title="Admin Users" />
 
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
@@ -334,6 +351,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                     </div>
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -361,7 +379,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                     <th className="px-4 py-3 text-left">
                                         Activated
                                     </th>
-                                    <th className="px-4 py-3 text-right">
+                                    <th className="sticky right-0 z-10 bg-gray-50 px-4 py-3 text-right shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)]">
                                         Actions
                                     </th>
                                 </tr>
@@ -380,7 +398,7 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                     </tr>
                                 )}
                                 {visibleUsers.map((user) => (
-                                    <tr key={user.id}>
+                                    <tr key={user.id} className="group">
                                         <td className="px-4 py-3">
                                             {user.name}
                                         </td>
@@ -412,13 +430,13 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                             </select>
                                         </td>
                                         <td className="px-4 py-3">
-                                            {user.role === "customer" ? (
+                                            {user.is_active ? (
                                                 <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
                                                     Active
                                                 </span>
-                                            ) : user.is_active ? (
-                                                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800">
-                                                    Active
+                                            ) : user.role === "customer" ? (
+                                                <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-medium text-rose-800">
+                                                    Deactivated
                                                 </span>
                                             ) : (
                                                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
@@ -457,41 +475,49 @@ export default function AdminUsers({ users, roles, clinics = [] }) {
                                                   ).toLocaleDateString()
                                                 : "—"}
                                         </td>
-                                        <td className="px-4 py-3 text-right space-x-2">
-                                            {user.role !== "customer" && (
+                                        <td className="sticky right-0 z-10 bg-white px-4 py-3 text-right shadow-[-4px_0_8px_-4px_rgba(0,0,0,0.08)] group-hover:bg-gray-50">
+                                            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 whitespace-nowrap">
+                                                {canToggleUserActive(
+                                                    user,
+                                                    currentUserId,
+                                                ) && (
+                                                    <button
+                                                        type="button"
+                                                        className={`text-sm hover:underline ${user.is_active ? "text-amber-600" : "text-emerald-600"}`}
+                                                        onClick={() =>
+                                                            toggleActive(user)
+                                                        }
+                                                    >
+                                                        {user.is_active
+                                                            ? "Deactivate"
+                                                            : "Activate"}
+                                                    </button>
+                                                )}
                                                 <button
                                                     type="button"
-                                                    className={`text-sm hover:underline ${user.is_active ? "text-amber-600" : "text-emerald-600"}`}
+                                                    className="text-sm text-indigo-600 hover:underline"
                                                     onClick={() =>
-                                                        toggleActive(user)
+                                                        openClinicModal(user)
                                                     }
                                                 >
-                                                    {user.is_active
-                                                        ? "Deactivate"
-                                                        : "Activate"}
+                                                    Clinics
                                                 </button>
-                                            )}
-                                            <button
-                                                type="button"
-                                                className="text-indigo-600 hover:underline text-sm"
-                                                onClick={() =>
-                                                    openClinicModal(user)
-                                                }
-                                            >
-                                                Clinics
-                                            </button>
-                                            <button
-                                                type="button"
-                                                className="text-red-600 hover:underline"
-                                                onClick={() => deleteUser(user)}
-                                            >
-                                                Delete
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    className="text-sm text-red-600 hover:underline"
+                                                    onClick={() =>
+                                                        deleteUser(user)
+                                                    }
+                                                >
+                                                    Delete
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={userListCount}
                             showingCount={userShowingCount}

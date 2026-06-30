@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\Admin\PlatformActivityController;
 use App\Http\Controllers\Admin\PlatformCommissionController;
 use App\Http\Controllers\Admin\UserManagementController;
 use App\Http\Controllers\BillingController;
@@ -47,6 +48,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::middleware('role:super_admin,receptionist')->group(function () {
         Route::get('/clients', [ClientController::class, 'index'])->name('clients.index');
+        Route::get('/clients/{client}/pets', [ClientController::class, 'pets'])->name('clients.pets');
         Route::post('/clients', [ClientController::class, 'store'])->name('clients.store');
         Route::put('/clients/{client}', [ClientController::class, 'update'])->name('clients.update');
         Route::delete('/clients/{client}', [ClientController::class, 'destroy'])->name('clients.destroy');
@@ -178,6 +180,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/platform-commissions/settings', [PlatformCommissionController::class, 'updateSettings'])->name('platform-commissions.settings.update');
         Route::post('/platform-commissions/settlements', [PlatformCommissionController::class, 'storeSettlement'])->name('platform-commissions.settlements.store');
         Route::get('/platform-commissions/settlements/{settlement}/receipt', [PlatformCommissionController::class, 'settlementReceipt'])->name('platform-commissions.settlement-receipt');
+
+        Route::get('/platform-activity', [PlatformActivityController::class, 'index'])->name('platform-activity.index');
     });
 
     // Clinic registration (self-service — any authenticated user)

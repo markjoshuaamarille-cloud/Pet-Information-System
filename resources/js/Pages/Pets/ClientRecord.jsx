@@ -24,7 +24,7 @@ export default function ClientRecord({ pet }) {
     return (
         <div className="min-h-screen bg-white p-8 print:p-4">
             <Head title={`Record - ${pet.pet_name}`} />
-            <div className="mx-auto max-w-3xl">
+            <div className="mx-auto max-w-3xl px-4 sm:px-6">
                 <div className="mb-6 border-b pb-4 text-center">
                     <h1 className="text-2xl font-bold">Pet Care Management System</h1>
                     <p className="text-gray-600">Client Pet Health Record</p>
@@ -60,7 +60,8 @@ export default function ClientRecord({ pet }) {
 
                 <section>
                     <h2 className="mb-3 text-lg font-semibold">Checkup History</h2>
-                    <table className="w-full border text-sm">
+                    <div className="overflow-x-auto">
+                    <table className="w-full min-w-[32rem] border text-sm">
                         <thead><tr className="bg-gray-100"><th className="border p-2 text-left">Date</th><th className="border p-2 text-left">Type</th><th className="border p-2 text-left">Details</th><th className="border p-2 text-left">Next Due</th></tr></thead>
                         <tbody>
                             {pet.health_records?.map((r) => (
@@ -73,6 +74,7 @@ export default function ClientRecord({ pet }) {
                             ))}
                         </tbody>
                     </table>
+                    </div>
                 </section>
 
                 <p className="mt-8 text-center text-xs text-gray-400">Generated {new Date().toLocaleDateString()}</p>

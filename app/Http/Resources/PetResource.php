@@ -25,6 +25,8 @@ class PetResource extends JsonResource
             'weight' => $this->weight,
             'color' => $this->color,
             'microchip_no' => $this->microchip_no,
+            'pcci_reg_no' => $this->pcci_reg_no,
+            'pcci_certificate_url' => $this->pcci_certificate_url,
             'vaccination_status' => $this->vaccination_status,
             'medical_history' => $this->medical_history,
             'photo_url' => $this->photo_url,

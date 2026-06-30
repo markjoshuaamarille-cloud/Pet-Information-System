@@ -49,7 +49,7 @@ export default function ClinicRegister() {
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Register Your Clinic / Shop</h2>}>
             <Head title="Register Clinic" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 

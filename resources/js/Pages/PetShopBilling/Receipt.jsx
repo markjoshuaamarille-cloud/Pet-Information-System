@@ -24,6 +24,21 @@ const formatDate = (value) => {
 
 const formatMoney = (value) => `₱${Number(value ?? 0).toFixed(2)}`;
 
+const orderEffectiveTotal = (order) =>
+    Number(order.display_total_amount ?? order.total_amount ?? 0);
+
+const orderEffectiveSubtotal = (order) =>
+    Number(order.display_subtotal ?? order.subtotal ?? 0);
+
+const orderEffectiveTax = (order) =>
+    Number(order.display_tax ?? order.tax ?? 0);
+
+const lineEffectiveTotal = (item) =>
+    Number(item.display_line_total ?? item.line_total ?? 0);
+
+const lineEffectiveUnitPrice = (item) =>
+    Number(item.current_unit_price ?? item.unit_price ?? 0);
+
 const methodLabels = {
     cash: "Cash",
     card: "Card",
@@ -62,7 +77,8 @@ function ReceiptLogo() {
 }
 
 export default function PetShopReceipt({ order }) {
-    const balance = Number(order.total_amount) - Number(order.amount_paid);
+    const totalAmount = orderEffectiveTotal(order);
+    const balance = totalAmount - Number(order.amount_paid);
     const clinic = order.clinic;
 
     return (
@@ -145,6 +161,17 @@ export default function PetShopReceipt({ order }) {
                                     <tr key={item.id}>
                                         <td className="border border-gray-300 p-1">
                                             {item.description}
+                                            {item.has_price_adjustment && (
+                                                <span className="mt-0.5 block text-[9px] text-amber-700">
+                                                    {formatMoney(
+                                                        item.quoted_unit_price,
+                                                    )}{" "}
+                                                    →{" "}
+                                                    {formatMoney(
+                                                        item.current_unit_price,
+                                                    )}
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="border border-gray-300 p-1 text-gray-600">
                                             {categoryLabels[
@@ -157,10 +184,14 @@ export default function PetShopReceipt({ order }) {
                                             {item.quantity}
                                         </td>
                                         <td className="border border-gray-300 p-1 text-right">
-                                            {formatMoney(item.unit_price)}
+                                            {formatMoney(
+                                                lineEffectiveUnitPrice(item),
+                                            )}
                                         </td>
                                         <td className="border border-gray-300 p-1 text-right font-medium">
-                                            {formatMoney(item.line_total)}
+                                            {formatMoney(
+                                                lineEffectiveTotal(item),
+                                            )}
                                         </td>
                                     </tr>
                                 ))
@@ -176,7 +207,7 @@ export default function PetShopReceipt({ order }) {
                             <tr>
                                 <td className="border border-gray-300 p-1">Subtotal</td>
                                 <td className="border border-gray-300 p-1 text-right">
-                                    {formatMoney(order.subtotal)}
+                                    {formatMoney(orderEffectiveSubtotal(order))}
                                 </td>
                             </tr>
                             <tr>
@@ -187,7 +218,7 @@ export default function PetShopReceipt({ order }) {
                                         : ""}
                                 </td>
                                 <td className="border border-gray-300 p-1 text-right">
-                                    {formatMoney(order.tax)}
+                                    {formatMoney(orderEffectiveTax(order))}
                                 </td>
                             </tr>
                             <tr>
@@ -199,7 +230,13 @@ export default function PetShopReceipt({ order }) {
                             <tr className="bg-gray-50 font-semibold">
                                 <td className="border border-gray-300 p-1">Total</td>
                                 <td className="border border-gray-300 p-1 text-right">
-                                    {formatMoney(order.total_amount)}
+                                    {formatMoney(totalAmount)}
+                                    {order.has_price_adjustments && (
+                                        <span className="mt-0.5 block text-[9px] font-normal text-amber-700">
+                                            Updated from{" "}
+                                            {formatMoney(order.total_amount)}
+                                        </span>
+                                    )}
                                 </td>
                             </tr>
                             <tr>

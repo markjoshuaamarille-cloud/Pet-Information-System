@@ -8,7 +8,7 @@ import SecondaryButton from "@/Components/SecondaryButton";
 import TextInput from "@/Components/TextInput";
 import useListDisplayLimit from "@/hooks/useListDisplayLimit";
 import { Head, router, useForm, usePage } from "@inertiajs/react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const units = [
     "pcs",
@@ -39,6 +39,10 @@ const stockStatusLabels = {
 
 function formatPeso(value) {
     return `₱${Number(value ?? 0).toFixed(2)}`;
+}
+
+function pricesDiffer(left, right) {
+    return Math.abs(Number(left) - Number(right)) >= 0.005;
 }
 
 function formatDate(value) {
@@ -174,9 +178,59 @@ export default function PetShopIndex({
     const [viewingProductId, setViewingProductId] = useState(null);
     const [imagePreview, setImagePreview] = useState(null);
     const [cart, setCart] = useState([]);
+    const [cartHydrated, setCartHydrated] = useState(false);
     const [showCart, setShowCart] = useState(false);
     const [checkoutProcessing, setCheckoutProcessing] = useState(false);
     const pageErrors = usePage().props.errors ?? {};
+
+    const cartStorageKey = useMemo(() => {
+        if (!isCustomer || !customerClientId || !selectedClinicId) {
+            return null;
+        }
+
+        return `pet-shop-cart:${customerClientId}:${selectedClinicId}`;
+    }, [isCustomer, customerClientId, selectedClinicId]);
+
+    useEffect(() => {
+        if (!cartStorageKey) {
+            setCartHydrated(true);
+            return;
+        }
+
+        setCartHydrated(false);
+
+        try {
+            const raw = localStorage.getItem(cartStorageKey);
+
+            if (!raw) {
+                setCart([]);
+                return;
+            }
+
+            const parsed = JSON.parse(raw);
+
+            if (Array.isArray(parsed)) {
+                setCart(parsed);
+            }
+        } catch {
+            setCart([]);
+        } finally {
+            setCartHydrated(true);
+        }
+    }, [cartStorageKey]);
+
+    useEffect(() => {
+        if (!cartStorageKey || !cartHydrated) {
+            return;
+        }
+
+        if (cart.length === 0) {
+            localStorage.removeItem(cartStorageKey);
+            return;
+        }
+
+        localStorage.setItem(cartStorageKey, JSON.stringify(cart));
+    }, [cart, cartStorageKey, cartHydrated]);
 
     const editForm = useForm({
         name: "",
@@ -223,14 +277,71 @@ export default function PetShopIndex({
         showingCount: productShowingCount,
     } = useListDisplayLimit(filteredProducts);
 
+    const productById = useMemo(() => {
+        const map = new Map();
+
+        products.forEach((product) => {
+            map.set(product.id, product);
+        });
+
+        return map;
+    }, [products]);
+
+    const getCartLinePricing = (line) => {
+        const product = productById.get(line.medicine_id);
+        const cartPrice = Number(line.unit_price);
+        const currentPrice =
+            product?.unit_price != null ? Number(product.unit_price) : cartPrice;
+        const hasPriceAdjustment =
+            product != null && pricesDiffer(cartPrice, currentPrice);
+
+        return {
+            cartPrice,
+            currentPrice,
+            hasPriceAdjustment,
+            lineTotal: currentPrice * line.quantity,
+        };
+    };
+
     const cartSubtotal = useMemo(
-        () =>
-            cart.reduce(
-                (sum, line) => sum + Number(line.unit_price) * line.quantity,
-                0,
-            ),
-        [cart],
+        () => cart.reduce((sum, line) => sum + getCartLinePricing(line).lineTotal, 0),
+        [cart, productById],
     );
+
+    useEffect(() => {
+        if (cart.length === 0) {
+            return;
+        }
+
+        setCart((current) => {
+            let changed = false;
+
+            const next = current.map((line) => {
+                const product = productById.get(line.medicine_id);
+
+                if (!product) {
+                    return line;
+                }
+
+                if (
+                    line.name === product.name &&
+                    line.max_quantity === product.quantity
+                ) {
+                    return line;
+                }
+
+                changed = true;
+
+                return {
+                    ...line,
+                    name: product.name,
+                    max_quantity: product.quantity,
+                };
+            });
+
+            return changed ? next : current;
+        });
+    }, [productById, cart.length]);
 
     const viewingProduct = useMemo(() => {
         if (!viewingProductId) {
@@ -859,7 +970,15 @@ export default function PetShopIndex({
                                                 className="space-y-4"
                                             >
                                                 <ul className="max-h-72 space-y-3 overflow-y-auto pr-1 text-sm">
-                                                    {cart.map((line) => (
+                                                    {cart.map((line) => {
+                                                        const {
+                                                            cartPrice,
+                                                            currentPrice,
+                                                            hasPriceAdjustment,
+                                                            lineTotal,
+                                                        } = getCartLinePricing(line);
+
+                                                        return (
                                                         <li
                                                             key={
                                                                 line.medicine_id
@@ -870,17 +989,27 @@ export default function PetShopIndex({
                                                                 <p className="font-medium text-slate-900">
                                                                     {line.name}
                                                                 </p>
-                                                                <button
-                                                                    type="button"
-                                                                    className="text-xs font-medium text-red-600 hover:text-red-700"
-                                                                    onClick={() =>
-                                                                        removeFromCart(
-                                                                            line.medicine_id,
-                                                                        )
-                                                                    }
-                                                                >
-                                                                    Remove
-                                                                </button>
+                                                                <div className="flex shrink-0 flex-col items-end gap-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-xs font-medium text-red-600 hover:text-red-700"
+                                                                        onClick={() =>
+                                                                            removeFromCart(
+                                                                                line.medicine_id,
+                                                                            )
+                                                                        }
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                    {hasPriceAdjustment && (
+                                                                        <p className="max-w-[11rem] text-right text-[10px] leading-snug text-amber-700">
+                                                                            Price adjusted:{" "}
+                                                                            {formatPeso(cartPrice)}{" "}
+                                                                            →{" "}
+                                                                            {formatPeso(currentPrice)}
+                                                                        </p>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                             <div className="mt-3 flex items-center justify-between gap-2">
                                                                 <input
@@ -908,13 +1037,13 @@ export default function PetShopIndex({
                                                                 />
                                                                 <span className="font-semibold text-indigo-700">
                                                                     {formatPeso(
-                                                                        line.unit_price *
-                                                                            line.quantity,
+                                                                        lineTotal,
                                                                     )}
                                                                 </span>
                                                             </div>
                                                         </li>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </ul>
 
                                                 {canSelectClient ? (

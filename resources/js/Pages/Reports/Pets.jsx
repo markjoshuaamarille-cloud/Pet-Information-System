@@ -29,7 +29,7 @@ export default function ReportsPets({ pets }) {
             }
         >
             <Head title="Pets Report" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <div className="mb-4 flex justify-between">
                         <Link href={route('reports.index')} className="text-sm text-gray-600 hover:underline">← Back</Link>
@@ -46,6 +46,7 @@ export default function ReportsPets({ pets }) {
                         </div>
                     </div>
                     <div className="overflow-hidden rounded-lg bg-white shadow print:shadow-none">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left">Pet</th><th className="px-4 py-3 text-left">Species</th><th className="px-4 py-3 text-left">Owner</th><th className="px-4 py-3 text-left">Health Records</th></tr></thead>
                             <tbody className="divide-y divide-gray-200">
@@ -59,6 +60,7 @@ export default function ReportsPets({ pets }) {
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={petListCount}
                             showingCount={petShowingCount}

@@ -1,4 +1,5 @@
 import AuthenticatedLayout from "@/Layouts/AuthenticatedLayout";
+import StoreDownloadBadges from "@/Components/StoreDownloadBadges";
 import { formatClinicDateTime } from "@/utils/formatDateTime";
 import FlashMessage from "@/Components/FlashMessage";
 import { Head, Link, usePage } from "@inertiajs/react";
@@ -604,21 +605,26 @@ export default function Dashboard({
                             clinic services — all in one place.
                         </p>
 
-                        <div className="mt-8 flex flex-wrap items-center gap-4">
-                            <Link
-                                href={route("appointments.index")}
-                                className="rounded-full bg-violet-600 px-7 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-violet-700 hover:shadow-violet-300"
-                            >
-                                {isCustomer
-                                    ? "Book a Visit"
-                                    : "Open Scheduling"}
-                            </Link>
-                            <Link
-                                href={route("pets.index")}
-                                className="text-sm font-semibold text-gray-700 underline-offset-4 hover:text-violet-600 hover:underline"
-                            >
-                                View My Pets →
-                            </Link>
+                        <div className="mt-8 flex flex-col items-start gap-5">
+                            <div className="flex flex-wrap items-center gap-4">
+                                <Link
+                                    href={route("appointments.index")}
+                                    className="rounded-full bg-violet-600 px-7 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-violet-700 hover:shadow-violet-300"
+                                >
+                                    {isCustomer
+                                        ? "Book a Visit"
+                                        : "Open Scheduling"}
+                                </Link>
+                                <Link
+                                    href={route("pets.index")}
+                                    className="text-sm font-semibold text-gray-700 underline-offset-4 hover:text-violet-600 hover:underline"
+                                >
+                                    {isCustomer
+                                        ? "View My Pets →"
+                                        : "Patient records →"}
+                                </Link>
+                            </div>
+                            <StoreDownloadBadges />
                         </div>
 
                         {/* floating badge */}
@@ -627,7 +633,7 @@ export default function Dashboard({
                                 <img
                                     src="/images/dashboard/kitten.png"
                                     alt="Adorable kitten"
-                                    class="h-full w-full object-cover"
+                                    className="h-full w-full object-cover"
                                 />
                             </div>
                             <div>

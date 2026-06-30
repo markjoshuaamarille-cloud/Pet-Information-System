@@ -11,10 +11,12 @@ use App\Models\Medicine;
 use App\Models\Pet;
 use App\Models\ServiceCatalog;
 use App\Models\User;
+use App\Support\AppointmentCancellationNotes;
 use App\Support\ActiveClinicGuard;
 use App\Support\ClinicContext;
 use App\Support\ClinicDateTime;
 use App\Support\ClinicPatientScope;
+use App\Support\ClinicRatingNotifier;
 use App\Support\ClinicServices;
 use App\Support\GroomingSlotAvailability;
 use App\Support\NoShowAppointmentCancellation;
@@ -496,7 +498,20 @@ class AppointmentController extends Controller
 
         if ($user?->isCustomer()) {
             $validated['client_id'] = $this->customerClientId($user);
-            $validated['status'] = 'cancelled';
+
+            if ($appointment->status !== 'cancelled') {
+                $validated['status'] = 'cancelled';
+                $validated['notes'] = AppointmentCancellationNotes::appendSelfCancelNote(
+                    $validated['notes'] ?? $appointment->notes,
+                );
+            }
+        } elseif (
+            ($validated['status'] ?? $appointment->status) === 'cancelled'
+            && $appointment->status !== 'cancelled'
+        ) {
+            $validated['notes'] = AppointmentCancellationNotes::appendStaffCancelNote(
+                $validated['notes'] ?? $appointment->notes,
+            );
         }
 
         $pet = Pet::findOrFail($validated['pet_id']);
@@ -532,7 +547,18 @@ class AppointmentController extends Controller
         $user = $this->currentUser();
         $this->ensureCustomerOwnsAppointment($user, $appointment);
 
-        $appointment->delete();
+        if ($appointment->status === 'cancelled') {
+            return redirect()->back()->with('success', 'Appointment already cancelled.');
+        }
+
+        $notes = $user?->isCustomer()
+            ? AppointmentCancellationNotes::appendSelfCancelNote($appointment->notes)
+            : AppointmentCancellationNotes::appendStaffCancelNote($appointment->notes);
+
+        $appointment->update([
+            'status' => 'cancelled',
+            'notes' => $notes,
+        ]);
 
         return redirect()->back()->with('success', 'Appointment cancelled.');
     }
@@ -568,6 +594,8 @@ class AppointmentController extends Controller
             'user_id' => $user->id,
             'rating' => $validated['rating'],
         ]);
+
+        ClinicRatingNotifier::appointmentRated($appointment, (int) $validated['rating'], $user);
 
         return redirect()->back()->with('success', 'Thank you for your rating!');
     }

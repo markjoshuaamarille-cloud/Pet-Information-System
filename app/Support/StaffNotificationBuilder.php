@@ -126,19 +126,30 @@ class StaffNotificationBuilder
      */
     private static function mapSystemNotifications(Collection $records, bool $isPlatformAdmin): Collection
     {
-        return $records->map(fn (SystemNotification $notification) => [
-            'id' => 'system-'.$notification->id,
-            'type' => $notification->type,
-            'severity' => $notification->severity,
-            'message' => $notification->message,
-            'title' => $notification->title,
-            'created_at' => $notification->created_at?->toIso8601String(),
-            'clinic_id' => $notification->clinic_id,
-            'action_href' => $isPlatformAdmin ? match ($notification->type) {
-                'clinic_owner_application' => route('admin.users.index'),
-                'clinic_registration' => route('admin.clinics.index'),
-                default => null,
-            } : null,
-        ]);
+        return $records->map(function (SystemNotification $notification) use ($isPlatformAdmin) {
+            $item = [
+                'id' => 'system-'.$notification->id,
+                'type' => $notification->type,
+                'severity' => $notification->severity,
+                'message' => $notification->message,
+                'title' => $notification->title,
+                'created_at' => $notification->created_at?->toIso8601String(),
+                'clinic_id' => $notification->clinic_id,
+            ];
+
+            if ($notification->type === 'clinic_rating') {
+                return array_merge($item, ClinicRatingNotifier::displayFields($notification));
+            }
+
+            if ($isPlatformAdmin) {
+                $item['action_href'] = match ($notification->type) {
+                    'clinic_owner_application' => route('admin.users.index'),
+                    'clinic_registration' => route('admin.clinics.index'),
+                    default => null,
+                };
+            }
+
+            return $item;
+        });
     }
 }

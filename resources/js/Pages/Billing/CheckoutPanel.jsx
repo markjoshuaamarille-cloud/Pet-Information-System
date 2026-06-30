@@ -559,6 +559,7 @@ export default function CheckoutPanel({
                         </div>
                     ) : (
                         <div className="overflow-hidden rounded-lg border border-gray-200">
+                            <div className="overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200 text-sm">
                                 <thead className="bg-gray-50">
                                     <tr>
@@ -652,6 +653,7 @@ export default function CheckoutPanel({
                                     })}
                                 </tbody>
                             </table>
+                            </div>
                         </div>
                     )}
                 </div>

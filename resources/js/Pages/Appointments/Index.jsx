@@ -403,7 +403,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 px-4 py-8">
             <div className="w-full max-w-2xl rounded-xl bg-white shadow-2xl">
                 {/* Header */}
-                <div className="flex items-center justify-between rounded-t-xl border-b px-6 py-4">
+                <div className="flex items-center justify-between rounded-t-xl border-b px-4 py-4 sm:px-6">
                     <h3 className="text-lg font-semibold text-gray-800">Generate Invoice</h3>
                     <button
                         type="button"
@@ -434,13 +434,14 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
 
                 <form onSubmit={submit} className="divide-y">
                     {/* Section 1 — Priced service records */}
-                    <div className="px-6 py-4">
+                    <div className="px-4 py-4 sm:px-6">
                         <h4 className="mb-3 text-sm font-semibold text-gray-700">
                             Services from this visit
                         </h4>
 
                         {billableRecords.length > 0 ? (
-                            <table className="w-full text-sm">
+                            <div className="overflow-x-auto">
+                            <table className="w-full min-w-[20rem] text-sm">
                                 <thead>
                                     <tr className="border-b text-xs text-gray-500">
                                         <th className="pb-1 text-left font-medium">Service</th>
@@ -466,6 +467,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
                                     ))}
                                 </tbody>
                             </table>
+                            </div>
                         ) : (
                             <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
                                 No priced service records found for this visit. Add charges in the
@@ -475,7 +477,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
                     </div>
 
                     {/* Section 2 — Extra charges (medications, supplies, etc.) */}
-                    <div className="px-6 py-4">
+                    <div className="px-4 py-4 sm:px-6">
                         <div className="mb-3 flex items-center justify-between">
                             <div>
                                 <h4 className="text-sm font-semibold text-gray-700">
@@ -543,7 +545,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
                     </div>
 
                     {/* Section 3 — Totals */}
-                    <div className="px-6 py-4">
+                    <div className="px-4 py-4 sm:px-6">
                         <div className="space-y-2 text-sm">
                             <div className="flex justify-between">
                                 <span className="text-gray-600">Subtotal</span>
@@ -602,7 +604,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
                     </div>
 
                     {/* Section 4 — Collect payment */}
-                    <div className="px-6 py-4">
+                    <div className="px-4 py-4 sm:px-6">
                         <label className="flex cursor-pointer items-center gap-2 text-sm font-medium text-gray-700">
                             <input
                                 type="checkbox"
@@ -686,7 +688,7 @@ function InvoiceModal({ appointment, serviceTypes, onClose }) {
                     </div>
 
                     {/* Footer */}
-                    <div className="rounded-b-xl px-6 py-4">
+                    <div className="rounded-b-xl px-4 py-4 sm:px-6">
                         {submitError && (
                             <p className="mb-3 text-sm text-red-600">{submitError}</p>
                         )}
@@ -951,7 +953,7 @@ function AppointmentServicesPanel({
     };
 
     return (
-        <div className="border-t bg-slate-50 px-6 py-4">
+        <div className="border-t bg-slate-50 px-4 py-4 sm:px-6">
             {/* Services list */}
             {healthRecords.length === 0 && (
                 <p className="text-xs text-gray-400">No service records for this visit yet.</p>
@@ -1723,7 +1725,7 @@ export default function AppointmentsIndex({
             header={<h2 className="text-xl font-semibold text-gray-800">Scheduling</h2>}
         >
             <Head title="Appointments" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
@@ -1833,6 +1835,7 @@ export default function AppointmentsIndex({
 
                     {/* Appointments table */}
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -1979,6 +1982,7 @@ export default function AppointmentsIndex({
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={appointmentListCount}
                             showingCount={appointmentShowingCount}

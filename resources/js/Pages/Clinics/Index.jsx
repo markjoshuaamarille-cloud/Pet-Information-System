@@ -614,7 +614,7 @@ export default function ClinicsIndex({ clinics, allModules }) {
     return (
         <AuthenticatedLayout header={<h2 className="text-xl font-semibold text-gray-800">Clinic &amp; Shop Management</h2>}>
             <Head title="Clinics" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
