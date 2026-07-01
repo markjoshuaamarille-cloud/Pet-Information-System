@@ -24,6 +24,8 @@ class Pet extends Model
         'weight',
         'color',
         'microchip_no',
+        'pcci_reg_no',
+        'pcci_certificate_path',
         'vaccination_status',
         'photo_path',
         'medical_history',
@@ -33,6 +35,7 @@ class Pet extends Model
 
     protected $appends = [
         'photo_url',
+        'pcci_certificate_url',
     ];
 
     protected function casts(): array
@@ -65,6 +68,10 @@ class Pet extends Model
                 Storage::disk('s3')->delete($pet->photo_path);
             }
 
+            if ($pet->pcci_certificate_path) {
+                Storage::disk('s3')->delete($pet->pcci_certificate_path);
+            }
+
             $pet->delete();
             $purged++;
         }
@@ -74,7 +81,17 @@ class Pet extends Model
 
     public function getPhotoUrlAttribute(): ?string
     {
-        if (! $this->photo_path) {
+        return $this->temporaryStorageUrl($this->photo_path);
+    }
+
+    public function getPcciCertificateUrlAttribute(): ?string
+    {
+        return $this->temporaryStorageUrl($this->pcci_certificate_path);
+    }
+
+    private function temporaryStorageUrl(?string $path): ?string
+    {
+        if (! $path) {
             return null;
         }
 
@@ -82,7 +99,7 @@ class Pet extends Model
             /** @var \Illuminate\Filesystem\FilesystemAdapter $disk */
             $disk = Storage::disk('s3');
 
-            return $disk->temporaryUrl($this->photo_path, now()->addHour());
+            return $disk->temporaryUrl($path, now()->addHour());
         } catch (\Throwable) {
             return null;
         }

@@ -1,3 +1,42 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    img,
+    video {
+        max-width: 100%;
+        height: auto;
+    }
+}
+
+@layer components {
+    .responsive-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .page-stack {
+        @apply space-y-4 sm:space-y-6;
+    }
+
+    .responsive-card-grid {
+        @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-3;
+    }
+
+    .responsive-stat-grid {
+        @apply grid gap-4 sm:grid-cols-2 xl:grid-cols-4;
+    }
+
+    .responsive-toolbar {
+        @apply flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between;
+    }
+
+    .responsive-actions {
+        @apply flex flex-wrap items-center gap-2 sm:gap-3;
+    }
+}

@@ -191,7 +191,7 @@ export default function VaccinationsIndex({
             }
         >
             <Head title="Vaccinations" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
@@ -424,6 +424,7 @@ export default function VaccinationsIndex({
                     )}
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -525,6 +526,7 @@ export default function VaccinationsIndex({
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={vaccinationListCount}
                             showingCount={vaccinationShowingCount}

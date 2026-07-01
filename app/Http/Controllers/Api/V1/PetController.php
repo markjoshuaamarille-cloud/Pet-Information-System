@@ -53,6 +53,7 @@ class PetController extends Controller
         $isCustomer = (bool) $user->isCustomer();
         $request->merge([
             'microchip_no' => $this->normalizeMicrochipNo($request->input('microchip_no')),
+            'pcci_reg_no' => $this->normalizePcciRegNo($request->input('pcci_reg_no')),
         ]);
 
         $validated = $request->validate([
@@ -66,9 +67,11 @@ class PetController extends Controller
             'weight' => 'nullable|numeric|min:0|max:9999.99',
             'color' => 'nullable|string|max:100',
             'microchip_no' => 'nullable|string|max:100|unique:pets,microchip_no',
+            'pcci_reg_no' => 'nullable|string|max:100|unique:pets,pcci_reg_no',
             'vaccination_status' => ['nullable', Rule::in(['up_to_date', 'partial', 'not_vaccinated', 'unknown'])],
             'medical_history' => 'nullable|string',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'pcci_certificate' => 'nullable|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
         ]);
 
         if ($user?->isCustomer()) {
@@ -79,7 +82,11 @@ class PetController extends Controller
             $validated['photo_path'] = $request->file('photo')->store('pets', 's3');
         }
 
-        unset($validated['photo']);
+        if ($request->hasFile('pcci_certificate')) {
+            $validated['pcci_certificate_path'] = $request->file('pcci_certificate')->store('pets/pcci-certificates', 's3');
+        }
+
+        unset($validated['photo'], $validated['pcci_certificate']);
 
         $pet = Pet::create($validated);
 
@@ -119,6 +126,7 @@ class PetController extends Controller
         $isCustomer = (bool) $user?->isCustomer();
         $request->merge([
             'microchip_no' => $this->normalizeMicrochipNo($request->input('microchip_no')),
+            'pcci_reg_no' => $this->normalizePcciRegNo($request->input('pcci_reg_no')),
         ]);
 
         $validated = $request->validate([
@@ -137,9 +145,16 @@ class PetController extends Controller
                 'max:100',
                 Rule::unique('pets', 'microchip_no')->ignore($pet->id),
             ],
+            'pcci_reg_no' => [
+                'nullable',
+                'string',
+                'max:100',
+                Rule::unique('pets', 'pcci_reg_no')->ignore($pet->id),
+            ],
             'vaccination_status' => ['nullable', Rule::in(['up_to_date', 'partial', 'not_vaccinated', 'unknown'])],
             'medical_history' => 'nullable|string',
             'photo' => 'nullable|image|mimes:jpg,jpeg,png,webp|max:5120',
+            'pcci_certificate' => 'nullable|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
         ]);
 
         if ($user?->isCustomer()) {
@@ -153,7 +168,14 @@ class PetController extends Controller
             $validated['photo_path'] = $request->file('photo')->store('pets', 's3');
         }
 
-        unset($validated['photo']);
+        if ($request->hasFile('pcci_certificate')) {
+            if ($pet->pcci_certificate_path) {
+                Storage::disk('s3')->delete($pet->pcci_certificate_path);
+            }
+            $validated['pcci_certificate_path'] = $request->file('pcci_certificate')->store('pets/pcci-certificates', 's3');
+        }
+
+        unset($validated['photo'], $validated['pcci_certificate']);
 
         $pet->update($validated);
 
@@ -167,6 +189,10 @@ class PetController extends Controller
 
         if ($pet->photo_path) {
             Storage::disk('s3')->delete($pet->photo_path);
+        }
+
+        if ($pet->pcci_certificate_path) {
+            Storage::disk('s3')->delete($pet->pcci_certificate_path);
         }
 
         $pet->delete();

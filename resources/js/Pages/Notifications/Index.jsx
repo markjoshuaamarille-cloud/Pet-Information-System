@@ -3,6 +3,37 @@ import ListDisplayControls from '@/Components/ListDisplayControls';
 import useListDisplayLimit from '@/hooks/useListDisplayLimit';
 import { Head, Link, usePage } from '@inertiajs/react';
 
+function StarIcon({ filled = false, className = 'h-4 w-4' }) {
+    return (
+        <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className={`${className} ${filled ? 'text-amber-400' : 'text-gray-300'}`}
+            aria-hidden="true"
+        >
+            <path
+                fillRule="evenodd"
+                d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.753-.382-1.831-4.401Z"
+                clipRule="evenodd"
+            />
+        </svg>
+    );
+}
+
+function StarRatingDisplay({ value, max = 5 }) {
+    const numeric = Number(value ?? 0);
+    const rounded = Math.min(max, Math.max(0, Math.round(numeric)));
+
+    return (
+        <div className="inline-flex items-center gap-0.5" aria-label={`${numeric} out of ${max} stars`}>
+            {Array.from({ length: max }, (_, index) => (
+                <StarIcon key={index} filled={index < rounded} />
+            ))}
+        </div>
+    );
+}
+
 const severityStyle = {
     danger: 'border-red-200 bg-red-50 text-red-800',
     warning: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -41,6 +72,7 @@ const typeLabels = {
     emergency_care_due: 'Emergency',
     clinic_owner_application: 'Clinic Owner Application',
     clinic_registration: 'Clinic Registration',
+    clinic_rating: 'Customer Rating',
     expired: 'Expired Stock',
     critical_stock: 'Critical Stock',
     expiring_soon: 'Expiring Soon',
@@ -69,7 +101,7 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
             }
         >
             <Head title={isCustomer ? 'Personal Notifications' : 'Notifications'} />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
                     <p className="mb-4 text-sm text-gray-600">
                         {isCustomer
@@ -135,6 +167,26 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
                                         )}
                                     </div>
                                     {n.title && <p className="mt-1 font-semibold">{n.title}</p>}
+                                    {n.type === 'clinic_rating' && n.rating_stars != null && (
+                                        <div className="mt-2 flex flex-wrap items-center gap-3">
+                                            <div className="flex items-center gap-2">
+                                                <StarRatingDisplay value={n.rating_stars} />
+                                                <span className="text-sm font-medium">
+                                                    {n.rating_stars}/5 stars
+                                                </span>
+                                            </div>
+                                            {(n.average_rating != null || n.rating_count != null) && (
+                                                <span className="rounded-full bg-white/70 px-2.5 py-0.5 text-xs font-medium">
+                                                    Clinic average:{' '}
+                                                    {n.average_rating != null
+                                                        ? Number(n.average_rating).toFixed(1)
+                                                        : '—'}{' '}
+                                                    ({n.rating_count ?? 0} review
+                                                    {n.rating_count === 1 ? '' : 's'})
+                                                </span>
+                                            )}
+                                        </div>
+                                    )}
                                     <p className="mt-1">{n.message}</p>
                                     {isCustomer && n.pet_id && (
                                         <Link
@@ -149,7 +201,7 @@ export default function NotificationsIndex({ notifications, isCustomer = false, 
                                             href={n.action_href}
                                             className="mt-2 inline-block text-sm font-medium underline"
                                         >
-                                            Review application
+                                            {n.action_label ?? 'Review application'}
                                         </Link>
                                     )}
                                 </li>

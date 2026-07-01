@@ -72,10 +72,6 @@ class UserManagementController extends Controller
 
     public function toggleActive(Request $request, User $user): RedirectResponse
     {
-        if ($user->isCustomer()) {
-            return redirect()->back()->with('error', 'Customer accounts cannot be deactivated.');
-        }
-
         if ($request->user()?->id === $user->id) {
             return redirect()->back()->with('error', 'You cannot deactivate your own account.');
         }

@@ -28,7 +28,8 @@ class PetShopBillingController extends Controller
             ->where('sale_type', 'pet_shop_retail')
             ->forClinic($clinicId)
             ->latest()
-            ->get();
+            ->get()
+            ->each(fn (Billing $order) => PetShopBilling::withLivePricing($order));
 
         $stats = $canManage ? [
             'total_orders' => $orders->count(),
@@ -56,9 +57,11 @@ class PetShopBillingController extends Controller
         $billing->load([
             'clinic:id,name,contact,email,address,address_formatted,city,province',
             'client.users:id,client_id,contact',
-            'lineItems.medicine:id,name,category',
+            'lineItems.medicine:id,name,category,unit_price',
             'payments' => fn ($query) => $query->orderBy('paid_at'),
         ]);
+
+        PetShopBilling::withLivePricing($billing);
 
         if ($billing->client) {
             $billing->client->setAttribute(
@@ -104,6 +107,8 @@ class PetShopBillingController extends Controller
             'notes' => $validated['notes'] ?? $billing->notes,
         ]);
 
+        PetShopBilling::applyLivePricingToOpenOrder($billing);
+        $billing->refresh();
         PetShopBilling::recalculateTotals($billing);
 
         return redirect()->back()->with('success', 'Order updated successfully.');
@@ -130,6 +135,9 @@ class PetShopBillingController extends Controller
 
         try {
             DB::transaction(function () use ($billing, $validated): void {
+                PetShopBilling::applyLivePricingToOpenOrder($billing);
+                $billing->refresh();
+
                 Payment::create([
                     'billing_id' => $billing->id,
                     ...$validated,

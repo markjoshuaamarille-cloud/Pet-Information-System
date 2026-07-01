@@ -17,6 +17,18 @@ function formatPeso(value) {
     return `₱${Number(value ?? 0).toFixed(2)}`;
 }
 
+function orderEffectiveTotal(order) {
+    return Number(order.display_total_amount ?? order.total_amount ?? 0);
+}
+
+function orderEffectiveSubtotal(order) {
+    return Number(order.display_subtotal ?? order.subtotal ?? 0);
+}
+
+function lineEffectiveTotal(item) {
+    return Number(item.display_line_total ?? item.line_total ?? 0);
+}
+
 function formatDateTime(value) {
     if (!value) {
         return "—";
@@ -195,7 +207,7 @@ export default function PetShopBillingIndex({
             return { subtotal: 0, tax: 0, total: 0 };
         }
 
-        const subtotal = Number(editingOrder.subtotal ?? 0);
+        const subtotal = orderEffectiveSubtotal(editingOrder);
         const discount = Number(editForm.data.discount || 0);
         const taxRate = Number(editForm.data.tax_rate || 0);
         const tax = editForm.data.tax_applied
@@ -245,7 +257,8 @@ export default function PetShopBillingIndex({
     };
 
     const openPayment = (order) => {
-        const balance = Number(order.total_amount) - Number(order.amount_paid);
+        const balance =
+            orderEffectiveTotal(order) - Number(order.amount_paid);
         setPayingOrder(order);
         paymentForm.setData({
             amount: balance > 0 ? balance.toFixed(2) : "0",
@@ -288,7 +301,7 @@ export default function PetShopBillingIndex({
             }
         >
             <Head title="Pet Shop Billing" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
@@ -390,6 +403,7 @@ export default function PetShopBillingIndex({
                     </div>
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -430,8 +444,10 @@ export default function PetShopBillingIndex({
                                     </tr>
                                 ) : (
                                     visibleOrders.map((order) => {
+                                        const effectiveTotal =
+                                            orderEffectiveTotal(order);
                                         const balance =
-                                            Number(order.total_amount) -
+                                            effectiveTotal -
                                             Number(order.amount_paid);
 
                                         return (
@@ -455,30 +471,52 @@ export default function PetShopBillingIndex({
                                                             order.line_items ??
                                                             []
                                                         ).map((item) => (
-                                                            <p
-                                                                key={item.id}
-                                                                className="text-xs text-gray-600"
-                                                            >
-                                                                {
-                                                                    item.description
-                                                                }{" "}
-                                                                ×{" "}
-                                                                {item.quantity}{" "}
-                                                                (
-                                                                {formatPeso(
-                                                                    item.line_total,
+                                                            <div key={item.id}>
+                                                                <p className="text-xs text-gray-600">
+                                                                    {
+                                                                        item.description
+                                                                    }{" "}
+                                                                    ×{" "}
+                                                                    {item.quantity}{" "}
+                                                                    (
+                                                                    {formatPeso(
+                                                                        lineEffectiveTotal(
+                                                                            item,
+                                                                        ),
+                                                                    )}
+                                                                    )
+                                                                </p>
+                                                                {item.has_price_adjustment && (
+                                                                    <p className="text-[10px] text-amber-700">
+                                                                        Price
+                                                                        adjusted:{" "}
+                                                                        {formatPeso(
+                                                                            item.quoted_unit_price,
+                                                                        )}{" "}
+                                                                        →{" "}
+                                                                        {formatPeso(
+                                                                            item.current_unit_price,
+                                                                        )}
+                                                                    </p>
                                                                 )}
-                                                                )
-                                                            </p>
+                                                            </div>
                                                         ))}
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-3">
                                                     <p className="font-medium">
                                                         {formatPeso(
-                                                            order.total_amount,
+                                                            effectiveTotal,
                                                         )}
                                                     </p>
+                                                    {order.has_price_adjustments && (
+                                                        <p className="text-[10px] text-amber-700">
+                                                            Updated from{" "}
+                                                            {formatPeso(
+                                                                order.total_amount,
+                                                            )}
+                                                        </p>
+                                                    )}
                                                     {order.tax_applied && (
                                                         <p className="text-xs text-gray-500">
                                                             incl. tax{" "}
@@ -582,6 +620,7 @@ export default function PetShopBillingIndex({
                                 )}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={orderListCount}
                             showingCount={orderShowingCount}
@@ -612,8 +651,17 @@ export default function PetShopBillingIndex({
                             <div className="rounded bg-gray-50 p-3 text-sm">
                                 <p>
                                     Subtotal:{" "}
-                                    {formatPeso(editingOrder.subtotal)}
+                                    {formatPeso(
+                                        orderEffectiveSubtotal(editingOrder),
+                                    )}
                                 </p>
+                                {editingOrder.has_price_adjustments && (
+                                    <p className="mt-1 text-xs text-amber-700">
+                                        Line items use current store prices
+                                        (quoted subtotal was{" "}
+                                        {formatPeso(editingOrder.subtotal)}).
+                                    </p>
+                                )}
                             </div>
 
                             <div className="flex flex-wrap items-center gap-3">
@@ -733,7 +781,13 @@ export default function PetShopBillingIndex({
 
                         <p className="mb-4 text-sm text-gray-600">
                             Order {payingOrder.invoice_number} — Total{" "}
-                            {formatPeso(payingOrder.total_amount)}
+                            {formatPeso(orderEffectiveTotal(payingOrder))}
+                            {payingOrder.has_price_adjustments && (
+                                <span className="block text-xs text-amber-700">
+                                    Includes updated product prices (was{" "}
+                                    {formatPeso(payingOrder.total_amount)})
+                                </span>
+                            )}
                         </p>
 
                         <form onSubmit={submitPayment} className="space-y-4">

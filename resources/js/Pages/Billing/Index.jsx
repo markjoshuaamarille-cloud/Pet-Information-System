@@ -690,7 +690,7 @@ export default function BillingIndex({
             }
         >
             <Head title="Billing" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
@@ -855,7 +855,8 @@ export default function BillingIndex({
                                                     No category data.
                                                 </p>
                                             ) : (
-                                                <table className="w-full text-sm">
+                                                <div className="overflow-x-auto">
+                                                <table className="w-full min-w-[18rem] text-sm">
                                                     <thead className="text-xs text-gray-500">
                                                         <tr>
                                                             <th className="py-2 text-left">
@@ -897,6 +898,7 @@ export default function BillingIndex({
                                                         )}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -911,7 +913,8 @@ export default function BillingIndex({
                                                     No payments recorded.
                                                 </p>
                                             ) : (
-                                                <table className="w-full text-sm">
+                                                <div className="overflow-x-auto">
+                                                <table className="w-full min-w-[18rem] text-sm">
                                                     <thead className="text-xs text-gray-500">
                                                         <tr>
                                                             <th className="py-2 text-left">
@@ -953,6 +956,7 @@ export default function BillingIndex({
                                                         )}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             )}
                                         </div>
                                         <div className="rounded-lg bg-white p-5 shadow">
@@ -964,7 +968,8 @@ export default function BillingIndex({
                                                     No customer data.
                                                 </p>
                                             ) : (
-                                                <table className="w-full text-sm">
+                                                <div className="overflow-x-auto">
+                                                <table className="w-full min-w-[18rem] text-sm">
                                                     <thead className="text-xs text-gray-500">
                                                         <tr>
                                                             <th className="py-2 text-left">
@@ -1006,6 +1011,7 @@ export default function BillingIndex({
                                                         )}
                                                     </tbody>
                                                 </table>
+                                                </div>
                                             )}
                                         </div>
                                     </div>
@@ -1688,6 +1694,7 @@ export default function BillingIndex({
                     )}
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -1942,6 +1949,7 @@ export default function BillingIndex({
                                 )}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={billingListCount}
                             showingCount={billingShowingCount}

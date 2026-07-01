@@ -234,7 +234,7 @@ export default function GroomingIndex({
             }
         >
             <Head title="Grooming" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
                     {can_manage_records && (
@@ -410,6 +410,7 @@ export default function GroomingIndex({
                     )}
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
+                        <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 text-sm">
                             <thead className="bg-gray-50">
                                 <tr>
@@ -465,6 +466,7 @@ export default function GroomingIndex({
                                 ))}
                             </tbody>
                         </table>
+                        </div>
                         <ListDisplayControls
                             totalCount={recordListCount}
                             showingCount={recordShowingCount}

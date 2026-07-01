@@ -1487,7 +1487,7 @@ export default function PetShow({
             }
         >
             <Head title={pet.pet_name} />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
                     <div className="flex gap-3">
@@ -1570,6 +1570,31 @@ export default function PetShow({
                                         Microchip No
                                     </dt>
                                     <dd>{pet.microchip_no || "—"}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-gray-500">
+                                        PCCI Registration No
+                                    </dt>
+                                    <dd>{pet.pcci_reg_no || "—"}</dd>
+                                </div>
+                                <div>
+                                    <dt className="text-gray-500">
+                                        PCCI Certificate
+                                    </dt>
+                                    <dd>
+                                        {pet.pcci_certificate_url ? (
+                                            <a
+                                                href={pet.pcci_certificate_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="font-medium text-indigo-600 hover:underline"
+                                            >
+                                                View uploaded certificate
+                                            </a>
+                                        ) : (
+                                            "—"
+                                        )}
+                                    </dd>
                                 </div>
                                 <div>
                                     <dt className="text-gray-500">

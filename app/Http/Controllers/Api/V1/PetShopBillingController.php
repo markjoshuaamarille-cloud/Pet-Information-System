@@ -26,7 +26,8 @@ class PetShopBillingController extends Controller
             ->with(['client', 'lineItems.medicine', 'payments'])
             ->where('sale_type', 'pet_shop_retail')
             ->latest()
-            ->get();
+            ->get()
+            ->each(fn (Billing $order) => PetShopBilling::withLivePricing($order));
 
         $stats = $canManage ? [
             'total_orders' => $orders->count(),
@@ -62,6 +63,9 @@ class PetShopBillingController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        PetShopBilling::applyLivePricingToOpenOrder($billing);
+        $billing->refresh();
+
         $billing->update([
             'tax_applied' => $request->boolean('tax_applied'),
             'tax_rate' => $validated['tax_rate'],
@@ -93,6 +97,9 @@ class PetShopBillingController extends Controller
 
         try {
             $payment = DB::transaction(function () use ($billing, $validated) {
+                PetShopBilling::applyLivePricingToOpenOrder($billing);
+                $billing->refresh();
+
                 $payment = Payment::create(['billing_id' => $billing->id, ...$validated]);
                 $billing->refresh();
                 $newAmountPaid = (float) $billing->amount_paid + (float) $validated['amount'];

@@ -432,8 +432,8 @@ export default function PlatformCommissionsIndex({
         >
             <Head title="Platform Commissions" />
 
-            <div className="py-8">
-                <div className="mx-auto max-w-7xl space-y-6 sm:px-6 lg:px-8">
+            <div className="py-6 sm:py-8">
+                <div className="mx-auto max-w-7xl space-y-6 px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
 
                     <form

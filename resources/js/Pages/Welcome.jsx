@@ -1,5 +1,6 @@
 import { Head, Link } from "@inertiajs/react";
 import { useState } from "react";
+import StoreDownloadBadges from "@/Components/StoreDownloadBadges";
 
 /* ─── colour palette ─────────────────────────────────────────── */
 // cream bg:   #FBF7F2
@@ -79,7 +80,7 @@ function Navbar({ auth }) {
 
     return (
         <nav className="fixed inset-x-0 top-0 z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="flex h-16 items-center justify-between">
                     {/* logo */}
                     <Link href="/" className="flex items-center gap-2.5">
@@ -228,7 +229,7 @@ function Hero({ auth }) {
             <div className="pointer-events-none absolute -top-32 -right-32 h-[600px] w-[600px] rounded-full bg-[#E86716]/10 blur-3xl" />
             <div className="pointer-events-none absolute -bottom-20 -left-20 h-[400px] w-[400px] rounded-full bg-[#0A7C84]/10 blur-3xl" />
 
-            <div className="relative mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid items-center gap-12 lg:grid-cols-2">
                     {/* left copy */}
                     <div className="max-w-xl">
@@ -263,35 +264,41 @@ function Hero({ auth }) {
 
                         <div className="mt-8 flex flex-wrap gap-4">
                             {auth.user ? (
-                                <Link
-                                    href={route("dashboard")}
-                                    className="inline-flex items-center gap-2 rounded-full bg-[#E86716] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#E86716]/30 transition hover:bg-[#cf5b12]"
-                                >
-                                    Go to Dashboard{" "}
-                                    <Icon
-                                        path={ICONS.arrow}
-                                        className="size-4"
-                                    />
-                                </Link>
-                            ) : (
-                                <>
+                                <div className="flex flex-col items-start gap-5">
                                     <Link
-                                        href={route("register")}
+                                        href={route("dashboard")}
                                         className="inline-flex items-center gap-2 rounded-full bg-[#E86716] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#E86716]/30 transition hover:bg-[#cf5b12]"
                                     >
-                                        Get Started Free{" "}
+                                        Go to Dashboard{" "}
                                         <Icon
                                             path={ICONS.arrow}
                                             className="size-4"
                                         />
                                     </Link>
-                                    <Link
-                                        href={route("login")}
-                                        className="inline-flex items-center gap-2 rounded-full border-2 border-[#0D2137] px-7 py-3.5 text-sm font-bold text-[#0D2137] transition hover:bg-[#0D2137] hover:text-white"
-                                    >
-                                        Sign In
-                                    </Link>
-                                </>
+                                    <StoreDownloadBadges />
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-start gap-5">
+                                    <div className="flex flex-wrap gap-4">
+                                        <Link
+                                            href={route("register")}
+                                            className="inline-flex items-center gap-2 rounded-full bg-[#E86716] px-7 py-3.5 text-sm font-bold text-white shadow-lg shadow-[#E86716]/30 transition hover:bg-[#cf5b12]"
+                                        >
+                                            Get Started Free{" "}
+                                            <Icon
+                                                path={ICONS.arrow}
+                                                className="size-4"
+                                            />
+                                        </Link>
+                                        <Link
+                                            href={route("login")}
+                                            className="inline-flex items-center gap-2 rounded-full border-2 border-[#0D2137] px-7 py-3.5 text-sm font-bold text-[#0D2137] transition hover:bg-[#0D2137] hover:text-white"
+                                        >
+                                            Sign In
+                                        </Link>
+                                    </div>
+                                    <StoreDownloadBadges />
+                                </div>
                             )}
                         </div>
 
@@ -370,7 +377,7 @@ function Hero({ auth }) {
 function TrustedBar() {
     return (
         <section className="bg-white py-10">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <p className="text-center text-xs font-semibold uppercase tracking-widest text-gray-400 mb-8">
                     Everything your pet needs, in one platform
                 </p>
@@ -455,7 +462,7 @@ function Services() {
 
     return (
         <section id="services" className="bg-white py-20 lg:py-28">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-14 text-center">
                     <span className="text-xs font-semibold uppercase tracking-widest text-[#E86716]">
                         Our Services
@@ -538,7 +545,7 @@ function HowItWorks() {
 
     return (
         <section id="how" className="bg-[#FBF7F2] py-20 lg:py-28">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-14 text-center">
                     <span className="text-xs font-semibold uppercase tracking-widest text-[#E86716]">
                         How It Works
@@ -597,7 +604,7 @@ function PetParenting({ auth }) {
         <section className="relative overflow-hidden bg-[#0A7C84] py-20 lg:py-28">
             <div className="pointer-events-none absolute inset-0 bg-[url('data:image/svg+xml,%3Csvg width=%2260%22 height=%2260%22 viewBox=%220 0 60 60%22 xmlns=%22http%3A//www.w3.org/2000/svg%22%3E%3Cg fill=%22none%22 fill-rule=%22evenodd%22%3E%3Cg fill=%22%23fff%22 fill-opacity=%220.03%22%3E%3Cpath d=%22M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z%22/%3E%3C/g%3E%3C/g%3E%3C/svg%3E')]" />
 
-            <div className="relative mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid items-center gap-12 lg:grid-cols-2">
                     <div>
                         <span className="text-xs font-semibold uppercase tracking-widest text-teal-200">
@@ -703,7 +710,7 @@ function PetParenting({ auth }) {
 function ForClinics({ auth }) {
     return (
         <section id="clinics" className="bg-white py-20 lg:py-28">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid items-center gap-12 lg:grid-cols-2">
                     <div className="order-2 lg:order-1">
                         <div className="grid grid-cols-2 gap-4">
@@ -828,7 +835,7 @@ function Reviews() {
 
     return (
         <section className="bg-[#FBF7F2] py-20 lg:py-28">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="mb-14 text-center">
                     <span className="text-xs font-semibold uppercase tracking-widest text-[#E86716]">
                         Testimonials
@@ -964,7 +971,7 @@ function ContactPill({ icon, href, external, onClick, children }) {
 function ContactSection() {
     return (
         <section id="contact" className="bg-[#FBF7F2] py-20 lg:py-24">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid items-start gap-12 lg:grid-cols-2">
                     <div>
                         <span className="text-xs font-semibold uppercase tracking-widest text-[#E86716]">
@@ -1032,109 +1039,11 @@ function ContactSection() {
     );
 }
 
-/* ─── app store badges ───────────────────────────────────────── */
-const APP_STORE_URL = "#";
-const GOOGLE_PLAY_URL = "#";
-
-function AppStoreBadge({ href = APP_STORE_URL }) {
-    return (
-        <a
-            href={href}
-            aria-label="Download on the App Store — coming soon"
-            className="inline-block opacity-90 transition hover:opacity-100"
-        >
-            <svg
-                viewBox="0 0 135 40"
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-10 w-auto"
-                aria-hidden="true"
-            >
-                <rect width="135" height="40" rx="6" fill="#000" />
-                <path
-                    d="M24.8 20.3c-.1-3.2 2.6-4.7 2.7-4.8-1.5-2.2-3.8-2.5-4.6-2.5-2-.2-3.9 1.2-4.9 1.2-1 0-2.6-1.1-4.3-1.1-2.2 0-4.2 1.3-5.3 3.3-2.3 4-0.6 9.9 1.6 13.1 1.1 1.6 2.4 3.3 4.1 3.2 1.7-.1 2.3-1.1 4.3-1.1s2.6 1.1 4.4 1.1c1.8 0 2.9-1.6 4-3.2 1.3-1.8 1.8-3.6 1.8-3.7-.1 0-3.5-1.3-3.5-5.5zm-3.3-8.9c.9-1.1 1.6-2.6 1.4-4.1-1.4.1-3 0.9-4 2-0.8 1-1.5 2.6-1.3 4.1 1.5.1 3.1-.8 3.9-2z"
-                    fill="#fff"
-                    transform="translate(6 4) scale(0.85)"
-                />
-                <text
-                    x="44"
-                    y="14"
-                    fill="#fff"
-                    fontSize="7"
-                    fontFamily="system-ui, sans-serif"
-                >
-                    Download on the
-                </text>
-                <text
-                    x="44"
-                    y="28"
-                    fill="#fff"
-                    fontSize="13"
-                    fontWeight="600"
-                    fontFamily="system-ui, sans-serif"
-                >
-                    App Store
-                </text>
-            </svg>
-        </a>
-    );
-}
-
-function GooglePlayBadge({ href = GOOGLE_PLAY_URL }) {
-    return (
-        <a
-            href={href}
-            aria-label="Get it on Google Play — coming soon"
-            className="inline-block opacity-90 transition hover:opacity-100"
-        >
-            <svg
-                viewBox="0 0 135 40"
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-10 w-auto"
-                aria-hidden="true"
-            >
-                <rect width="135" height="40" rx="6" fill="#000" />
-                <path d="M11 8.5v23l12.5-11.5L11 8.5z" fill="#32BBFF" />
-                <path
-                    d="M11 8.5l12.5 11.5 4.5-4.1L17.5 8.5H11z"
-                    fill="#32BBFF"
-                />
-                <path d="M11 31.5l12.5-11.5-4.5-4.1L11 31.5z" fill="#F9AB00" />
-                <path d="M23.5 20l4.5-4.1 9.5 5.5-14-1.4z" fill="#F14336" />
-                <path d="M23.5 20l14 1.4-9.5 5.5-4.5-4.1z" fill="#00F076" />
-                <path
-                    d="M28 15.9l9.5 5.5-9.5 5.5V15.9z"
-                    fill="#00F076"
-                    opacity="0.85"
-                />
-                <text
-                    x="44"
-                    y="14"
-                    fill="#fff"
-                    fontSize="7"
-                    fontFamily="system-ui, sans-serif"
-                >
-                    GET IT ON
-                </text>
-                <text
-                    x="44"
-                    y="28"
-                    fill="#fff"
-                    fontSize="13"
-                    fontWeight="600"
-                    fontFamily="system-ui, sans-serif"
-                >
-                    Google Play
-                </text>
-            </svg>
-        </a>
-    );
-}
-
 /* ─── footer ─────────────────────────────────────────────────── */
 function Footer() {
     return (
         <footer className="bg-[#0D2137] py-12">
-            <div className="mx-auto max-w-7xl px-6 lg:px-8">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                 <div className="grid gap-10 border-b border-white/10 pb-10 lg:grid-cols-3">
                     <div>
                         <div className="flex items-center gap-2.5">
@@ -1152,14 +1061,7 @@ function Footer() {
                             for clinics, groomers, and pet owners.
                         </p>
                         <div className="mt-6">
-                            <p className="text-xs font-semibold uppercase tracking-widest text-gray-500">
-                                Mobile app
-                            </p>
-
-                            <div className="mt-3 flex flex-wrap items-center gap-3">
-                                <AppStoreBadge />
-                                <GooglePlayBadge />
-                            </div>
+                            <StoreDownloadBadges />
                         </div>
                     </div>
 

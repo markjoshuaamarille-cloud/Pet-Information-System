@@ -239,11 +239,18 @@ export default function PetsIndex({
         weight: "",
         color: "",
         microchip_no: "",
+        pcci_reg_no: "",
         vaccination_status: "unknown",
         medical_history: "",
         photo: null,
+        pcci_certificate: null,
     };
     const form = useForm(initialFormData);
+
+    const editingPet = useMemo(
+        () => pets.find((pet) => pet.id === editingId) ?? null,
+        [pets, editingId],
+    );
 
     const submit = (e) => {
         e.preventDefault();
@@ -262,10 +269,12 @@ export default function PetsIndex({
             onFinish: () => form.transform((data) => data),
         };
 
-        const hasPhoto = form.data.photo instanceof File;
+        const hasUpload =
+            form.data.photo instanceof File ||
+            form.data.pcci_certificate instanceof File;
 
         // PHP does not parse multipart bodies on PUT; use POST + _method when uploading files.
-        if (hasPhoto) {
+        if (hasUpload) {
             form.transform((data) => ({
                 ...data,
                 ...(editingId ? { _method: "put" } : {}),
@@ -282,7 +291,7 @@ export default function PetsIndex({
             return;
         }
 
-        form.transform(({ photo, ...data }) => data);
+        form.transform(({ photo, pcci_certificate, ...data }) => data);
 
         if (editingId) {
             form.put(route("pets.update", editingId), submitOptions);
@@ -309,9 +318,11 @@ export default function PetsIndex({
             weight: pet.weight ?? "",
             color: pet.color ?? "",
             microchip_no: pet.microchip_no ?? "",
+            pcci_reg_no: pet.pcci_reg_no ?? "",
             vaccination_status: pet.vaccination_status ?? "unknown",
             medical_history: pet.medical_history ?? "",
             photo: null,
+            pcci_certificate: null,
         });
     };
 
@@ -424,6 +435,7 @@ export default function PetsIndex({
                 pet.species,
                 pet.breed,
                 pet.microchip_no,
+                pet.pcci_reg_no,
                 pet.color,
                 vaccinationLabel,
             ]
@@ -492,7 +504,7 @@ export default function PetsIndex({
             }
         >
             <Head title="Pets" />
-            <div className="py-8">
+            <div className="py-6 sm:py-8">
                 <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
                     <FlashMessage />
                     {showPetForm && (
@@ -624,13 +636,17 @@ export default function PetsIndex({
                                         type="date"
                                         className="mt-1 block w-full"
                                         value={form.data.birth_date}
-                                        max={new Date().toISOString().slice(0, 10)}
+                                        max={new Date()
+                                            .toISOString()
+                                            .slice(0, 10)}
                                         onChange={(e) => {
                                             const birthDate = e.target.value;
                                             form.setData({
                                                 ...form.data,
                                                 birth_date: birthDate,
-                                                age: ageFromBirthDate(birthDate),
+                                                age: ageFromBirthDate(
+                                                    birthDate,
+                                                ),
                                             });
                                         }}
                                     />
@@ -697,6 +713,73 @@ export default function PetsIndex({
                                             ),
                                         )}
                                     </select>
+                                </div>
+                                <div className="sm:col-span-2 rounded-lg border border-dashed border-gray-200 bg-gray-50/60 p-4">
+                                    <p className="text-sm font-medium text-gray-700">
+                                        PCCI Registration (optional)
+                                    </p>
+                                    {/* <p className="mt-1 text-xs text-gray-500">
+                                        For purebred record-keeping. Leave blank
+                                        if the pet is not PCCI registered.
+                                    </p> */}
+                                    <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                                        <div>
+                                            <InputLabel value="PCCI Registration Number" />
+                                            <TextInput
+                                                className="mt-1 block w-full"
+                                                value={form.data.pcci_reg_no}
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        "pcci_reg_no",
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="PCCI-2026-987654"
+                                            />
+                                            <InputError
+                                                message={
+                                                    form.errors.pcci_reg_no
+                                                }
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                        <div>
+                                            <InputLabel value="PCCI Certificate Photo / File" />
+                                            <input
+                                                type="file"
+                                                accept="image/png,image/jpeg,image/webp,application/pdf"
+                                                className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                                                onChange={(e) =>
+                                                    form.setData(
+                                                        "pcci_certificate",
+                                                        e.target.files?.[0] ??
+                                                            null,
+                                                    )
+                                                }
+                                            />
+                                            {editingPet?.pcci_certificate_url && (
+                                                <p className="mt-2 text-xs text-gray-600">
+                                                    Current certificate:{" "}
+                                                    <a
+                                                        href={
+                                                            editingPet.pcci_certificate_url
+                                                        }
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="font-medium text-indigo-600 hover:underline"
+                                                    >
+                                                        View uploaded file
+                                                    </a>
+                                                </p>
+                                            )}
+                                            <InputError
+                                                message={
+                                                    form.errors.pcci_certificate
+                                                }
+                                                className="mt-1"
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="sm:col-span-2">
                                     <InputLabel value="Pet Photo (optional)" />
@@ -768,7 +851,7 @@ export default function PetsIndex({
                                     className="mt-1 block w-full"
                                     value={search}
                                     onChange={(e) => setSearch(e.target.value)}
-                                    placeholder=""
+                                    placeholder="Name, owner, microchip, PCCI no…"
                                 />
                             </div>
                             <div>
@@ -827,154 +910,186 @@ export default function PetsIndex({
                     </div>
 
                     <div className="overflow-hidden rounded-lg bg-white shadow">
-                        <table className="min-w-full divide-y divide-gray-200 text-sm">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-4 py-3 text-left">
-                                        Photo
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Name
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Species
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Microchip
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Vaccination
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Pet Owner
-                                    </th>
-                                    <th className="px-4 py-3 text-left">
-                                        Status
-                                    </th>
-                                    <th className="px-4 py-3 text-right">
-                                        Actions
-                                    </th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                                {filteredPets.length === 0 ? (
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200 text-sm">
+                                <thead className="bg-gray-50">
                                     <tr>
-                                        <td
-                                            colSpan={8}
-                                            className="px-4 py-8 text-center text-sm text-gray-500"
-                                        >
-                                            No pets match your filters.
-                                        </td>
+                                        <th className="px-4 py-3 text-left">
+                                            Photo
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Name
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Species
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Microchip
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            PCCI Reg. No.
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Vaccination
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Pet Owner
+                                        </th>
+                                        <th className="px-4 py-3 text-left">
+                                            Status
+                                        </th>
+                                        <th className="px-4 py-3 text-right">
+                                            Actions
+                                        </th>
                                     </tr>
-                                ) : (
-                                    filteredPets.map((p) => (
-                                        <tr
-                                            key={p.id}
-                                            className={
-                                                p.is_active === false
-                                                    ? "bg-gray-50/80"
-                                                    : ""
-                                            }
-                                        >
-                                            <td className="px-4 py-3">
-                                                {p.photo_url ? (
-                                                    <ImageLightbox
-                                                        src={p.photo_url}
-                                                        alt={p.pet_name}
-                                                        title={`${p.pet_name} — Pet Photo`}
-                                                        className="h-10 w-10 rounded object-cover"
-                                                        hint="View photo"
-                                                    />
-                                                ) : (
-                                                    <span className="text-xs text-gray-400">
-                                                        No photo
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {p.pet_name}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {p.species}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {p.microchip_no || "—"}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {vaccinationStatusOptions.find(
-                                                    (option) =>
-                                                        option.value ===
-                                                        p.vaccination_status,
-                                                )?.label ?? "Unknown"}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {p.client?.name}
-                                            </td>
-                                            <td className="px-4 py-3">
-                                                {p.is_active === false ? (
-                                                    <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                                                        Deactivated
-                                                    </span>
-                                                ) : (
-                                                    <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-                                                        Active
-                                                    </span>
-                                                )}
-                                            </td>
-                                            <td className="px-4 py-3 text-right">
-                                                <Link
-                                                    href={route(
-                                                        "pets.show",
-                                                        p.id,
-                                                    )}
-                                                    className="text-indigo-600 hover:underline"
-                                                >
-                                                    View
-                                                </Link>
-                                                {canEditPet(p) && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            startEdit(p)
-                                                        }
-                                                        className="ms-3 text-amber-600 hover:underline"
-                                                    >
-                                                        Edit
-                                                    </button>
-                                                )}
-                                                <Link
-                                                    href={route(
-                                                        "pets.client-record",
-                                                        p.id,
-                                                    )}
-                                                    className="ms-3 text-green-600 hover:underline"
-                                                >
-                                                    Client Record
-                                                </Link>
-                                                {can_toggle_pet_status && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() =>
-                                                            togglePetStatus(p)
-                                                        }
-                                                        className={`ms-3 hover:underline ${
-                                                            p.is_active ===
-                                                            false
-                                                                ? "text-emerald-600"
-                                                                : "text-red-600"
-                                                        }`}
-                                                    >
-                                                        {p.is_active === false
-                                                            ? "Activate"
-                                                            : "Deactivate"}
-                                                    </button>
-                                                )}
+                                </thead>
+                                <tbody className="divide-y divide-gray-200">
+                                    {filteredPets.length === 0 ? (
+                                        <tr>
+                                            <td
+                                                colSpan={9}
+                                                className="px-4 py-8 text-center text-sm text-gray-500"
+                                            >
+                                                No pets match your filters.
                                             </td>
                                         </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                                    ) : (
+                                        filteredPets.map((p) => (
+                                            <tr
+                                                key={p.id}
+                                                className={
+                                                    p.is_active === false
+                                                        ? "bg-gray-50/80"
+                                                        : ""
+                                                }
+                                            >
+                                                <td className="px-4 py-3">
+                                                    {p.photo_url ? (
+                                                        <ImageLightbox
+                                                            src={p.photo_url}
+                                                            alt={p.pet_name}
+                                                            title={`${p.pet_name} — Pet Photo`}
+                                                            className="h-10 w-10 rounded object-cover"
+                                                            hint="View photo"
+                                                        />
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400">
+                                                            No photo
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.pet_name}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.species}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.microchip_no || "—"}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.pcci_reg_no ? (
+                                                        <span className="flex flex-col gap-0.5">
+                                                            <span>
+                                                                {p.pcci_reg_no}
+                                                            </span>
+                                                            {p.pcci_certificate_url && (
+                                                                <a
+                                                                    href={
+                                                                        p.pcci_certificate_url
+                                                                    }
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    className="text-xs font-medium text-indigo-600 hover:underline"
+                                                                >
+                                                                    View
+                                                                    certificate
+                                                                </a>
+                                                            )}
+                                                        </span>
+                                                    ) : (
+                                                        "—"
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {vaccinationStatusOptions.find(
+                                                        (option) =>
+                                                            option.value ===
+                                                            p.vaccination_status,
+                                                    )?.label ?? "Unknown"}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.client?.name}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {p.is_active === false ? (
+                                                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+                                                            Deactivated
+                                                        </span>
+                                                    ) : (
+                                                        <span className="rounded bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+                                                            Active
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    <Link
+                                                        href={route(
+                                                            "pets.show",
+                                                            p.id,
+                                                        )}
+                                                        className="text-indigo-600 hover:underline"
+                                                    >
+                                                        View
+                                                    </Link>
+                                                    {canEditPet(p) && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                startEdit(p)
+                                                            }
+                                                            className="ms-3 text-amber-600 hover:underline"
+                                                        >
+                                                            Edit
+                                                        </button>
+                                                    )}
+                                                    <Link
+                                                        href={route(
+                                                            "pets.client-record",
+                                                            p.id,
+                                                        )}
+                                                        className="ms-3 text-green-600 hover:underline"
+                                                    >
+                                                        Client Record
+                                                    </Link>
+                                                    {can_toggle_pet_status && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() =>
+                                                                togglePetStatus(
+                                                                    p,
+                                                                )
+                                                            }
+                                                            className={`ms-3 hover:underline ${
+                                                                p.is_active ===
+                                                                false
+                                                                    ? "text-emerald-600"
+                                                                    : "text-red-600"
+                                                            }`}
+                                                        >
+                                                            {p.is_active ===
+                                                            false
+                                                                ? "Activate"
+                                                                : "Deactivate"}
+                                                        </button>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </div>

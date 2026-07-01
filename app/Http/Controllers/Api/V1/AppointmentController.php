@@ -8,6 +8,7 @@ use App\Http\Resources\PetResource;
 use App\Models\Appointment;
 use App\Models\Client;
 use App\Models\Pet;
+use App\Support\AppointmentCancellationNotes;
 use App\Support\ClinicDateTime;
 use App\Support\ClinicServices;
 use App\Support\NoShowAppointmentCancellation;
@@ -101,7 +102,20 @@ class AppointmentController extends Controller
 
         if ($user?->isCustomer()) {
             $validated['client_id'] = $this->customerClientId($user);
-            $validated['status'] = 'cancelled';
+
+            if ($appointment->status !== 'cancelled') {
+                $validated['status'] = 'cancelled';
+                $validated['notes'] = AppointmentCancellationNotes::appendSelfCancelNote(
+                    $validated['notes'] ?? $appointment->notes,
+                );
+            }
+        } elseif (
+            ($validated['status'] ?? $appointment->status) === 'cancelled'
+            && $appointment->status !== 'cancelled'
+        ) {
+            $validated['notes'] = AppointmentCancellationNotes::appendStaffCancelNote(
+                $validated['notes'] ?? $appointment->notes,
+            );
         }
 
         $pet = Pet::findOrFail($validated['pet_id']);
@@ -123,8 +137,25 @@ class AppointmentController extends Controller
         $user = $this->currentUser();
         $this->ensureCustomerOwnsAppointment($user, $appointment);
 
-        $appointment->delete();
+        if ($appointment->status === 'cancelled') {
+            return $this->success(
+                ['appointment' => new AppointmentResource($appointment->fresh()->load(['pet', 'client']))],
+                'Appointment already cancelled.',
+            );
+        }
 
-        return $this->deleted('Appointment cancelled.');
+        $notes = $user?->isCustomer()
+            ? AppointmentCancellationNotes::appendSelfCancelNote($appointment->notes)
+            : AppointmentCancellationNotes::appendStaffCancelNote($appointment->notes);
+
+        $appointment->update([
+            'status' => 'cancelled',
+            'notes' => $notes,
+        ]);
+
+        return $this->success(
+            ['appointment' => new AppointmentResource($appointment->fresh()->load(['pet', 'client']))],
+            'Appointment cancelled.',
+        );
     }
 }

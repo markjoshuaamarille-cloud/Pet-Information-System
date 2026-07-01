@@ -4,6 +4,7 @@ import AdminClinicMonitor from "@/Components/AdminClinicMonitor";
 import Dropdown from "@/Components/Dropdown";
 import NavLink from "@/Components/NavLink";
 import ResponsiveNavLink from "@/Components/ResponsiveNavLink";
+import AdminSidebar from "@/Layouts/AdminSidebar";
 import { formatClinicDateTime } from "@/utils/formatDateTime";
 import { Link, usePage, router } from "@inertiajs/react";
 import { useState } from "react";
@@ -284,6 +285,11 @@ const navItems = [
         roles: ["super_admin"],
     },
     {
+        href: "admin.platform-activity.index",
+        label: "Platform Activity",
+        roles: ["super_admin"],
+    },
+    {
         href: "admin.platform-commissions.index",
         label: "Platform Commissions",
         roles: ["super_admin"],
@@ -376,6 +382,103 @@ function navBadgeCount(item, platformAdminAlerts) {
     return 0;
 }
 
+function isNavItemActive(href) {
+    return (
+        route().current(href) ||
+        route().current(`${href.split(".")[0]}.*`)
+    );
+}
+
+function UserAccountMenu({
+    user,
+    isCustomer,
+    customerAlerts,
+    upcomingAppointmentAlerts,
+    healthMonitoringAlerts,
+    openCustomerAlerts,
+    compact = false,
+}) {
+    if (compact) {
+        return (
+            <div className="space-y-1">
+                <Link
+                    href={route("profile.edit")}
+                    className="block rounded-lg px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                >
+                    Profile
+                </Link>
+                <Link
+                    href={route("logout")}
+                    method="post"
+                    as="button"
+                    className="block w-full rounded-lg px-3 py-2 text-left text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                >
+                    Log Out
+                </Link>
+            </div>
+        );
+    }
+
+    return (
+        <Dropdown>
+            <Dropdown.Trigger>
+                <span className="inline-flex rounded-md">
+                    <button
+                        type="button"
+                        className="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
+                    >
+                        {user.name}
+                        <svg
+                            className="-me-0.5 ms-2 h-4 w-4"
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20"
+                            fill="currentColor"
+                        >
+                            <path
+                                fillRule="evenodd"
+                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                clipRule="evenodd"
+                            />
+                        </svg>
+                    </button>
+                </span>
+            </Dropdown.Trigger>
+            <Dropdown.Content width="56">
+                {isCustomer && customerAlerts && (
+                    <>
+                        <Dropdown.Button
+                            onClick={() => openCustomerAlerts("appointments")}
+                        >
+                            <span>Upcoming Appointments</span>
+                            {upcomingAppointmentAlerts.length > 0 && (
+                                <span className="ms-2 shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                                    {upcomingAppointmentAlerts.length}
+                                </span>
+                            )}
+                        </Dropdown.Button>
+                        <Dropdown.Button
+                            onClick={() => openCustomerAlerts("health")}
+                        >
+                            <span>Health Monitoring</span>
+                            {healthMonitoringAlerts.length > 0 && (
+                                <span className="ms-2 shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                                    {healthMonitoringAlerts.length}
+                                </span>
+                            )}
+                        </Dropdown.Button>
+                    </>
+                )}
+                <Dropdown.Link href={route("profile.edit")}>
+                    Profile
+                </Dropdown.Link>
+                <Dropdown.Link href={route("logout")} method="post" as="button">
+                    Log Out
+                </Dropdown.Link>
+            </Dropdown.Content>
+        </Dropdown>
+    );
+}
+
 function ClinicSwitcher({ activeClinic, assignedClinics, isPlatformAdmin }) {
     const switchClinic = (clinicId) => {
         router.post(
@@ -429,6 +532,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const platformAdminAlerts = page.props.platformAdminAlerts ?? null;
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
+    const [sidebarOpen, setSidebarOpen] = useState(false);
     const [customerAlertModal, setCustomerAlertModal] = useState(null);
     const allowedNavItems = filterNavItems(
         navItems,
@@ -441,7 +545,99 @@ export default function AuthenticatedLayout({ header, children }) {
     const openCustomerAlerts = (type) => {
         setCustomerAlertModal(type);
         setShowingNavigationDropdown(false);
+        setSidebarOpen(false);
     };
+
+    const layoutAlerts = (
+        <>
+            <AdminClinicMonitor />
+
+            {hasDeactivatedClinicOnly && (
+                <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900 sm:px-6 lg:px-8">
+                    Your assigned clinic has been deactivated by the
+                    administrator. Appointments, transactions, and other clinic
+                    activity are disabled until it is reactivated.
+                </div>
+            )}
+        </>
+    );
+
+    const pageHeader = header && (
+        <header className="relative z-40 border-b border-white/60 bg-white/80 shadow-sm backdrop-blur-sm">
+            <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8 [&_h2]:text-lg [&_h2]:sm:text-xl">
+                {header}
+            </div>
+        </header>
+    );
+
+    if (isPlatformAdmin) {
+        return (
+            <ModuleBackground>
+                <AdminSidebar
+                    allowedNavItems={allowedNavItems}
+                    platformAdminAlerts={platformAdminAlerts}
+                    activeClinic={activeClinic}
+                    assignedClinics={assignedClinics}
+                    user={user}
+                    sidebarOpen={sidebarOpen}
+                    onClose={() => setSidebarOpen(false)}
+                    userMenu={
+                        <UserAccountMenu
+                            user={user}
+                            isCustomer={isCustomer}
+                            customerAlerts={customerAlerts}
+                            upcomingAppointmentAlerts={upcomingAppointmentAlerts}
+                            healthMonitoringAlerts={healthMonitoringAlerts}
+                            openCustomerAlerts={openCustomerAlerts}
+                            compact
+                        />
+                    }
+                />
+
+                <div className="relative z-0 lg:pl-64">
+                    <div className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-gray-100 bg-white/95 px-4 backdrop-blur-sm lg:hidden">
+                        <button
+                            type="button"
+                            onClick={() => setSidebarOpen(true)}
+                            className="inline-flex items-center justify-center rounded-md p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                            aria-label="Open navigation"
+                        >
+                            <svg
+                                className="h-6 w-6"
+                                stroke="currentColor"
+                                fill="none"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M4 6h16M4 12h16M4 18h16"
+                                />
+                            </svg>
+                        </button>
+                        <Link href={route("dashboard")} className="flex items-center gap-2">
+                            <ApplicationLogo className="block h-8 w-8 object-contain" />
+                            <span className="text-sm font-semibold text-gray-900">PAWGO Admin</span>
+                        </Link>
+                    </div>
+
+                    {layoutAlerts}
+                    {pageHeader}
+                    <main className="relative z-0 min-w-0 overflow-x-hidden">{children}</main>
+                </div>
+
+                {isCustomer && customerAlerts && customerAlertModal && (
+                    <CustomerAlertsModal
+                        type={customerAlertModal}
+                        alerts={customerAlerts}
+                        appTimezone={appTimezone}
+                        onClose={() => setCustomerAlertModal(null)}
+                    />
+                )}
+            </ModuleBackground>
+        );
+    }
 
     return (
         <ModuleBackground>
@@ -466,12 +662,7 @@ export default function AuthenticatedLayout({ header, children }) {
                                         <NavLink
                                             key={item.href}
                                             href={route(item.href)}
-                                            active={
-                                                route().current(item.href) ||
-                                                route().current(
-                                                    `${item.href.split(".")[0]}.*`,
-                                                )
-                                            }
+                                            active={isNavItemActive(item.href)}
                                         >
                                             {item.label}
                                             {badge > 0 && (
@@ -492,86 +683,18 @@ export default function AuthenticatedLayout({ header, children }) {
                                 isPlatformAdmin={isPlatformAdmin}
                             />
                             <div className="relative z-50 ms-3">
-                                <Dropdown>
-                                    <Dropdown.Trigger>
-                                        <span className="inline-flex rounded-md">
-                                            <button
-                                                type="button"
-                                                className="inline-flex items-center rounded-md border border-transparent bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-500 transition duration-150 ease-in-out hover:text-gray-700 focus:outline-none"
-                                            >
-                                                {user.name}
-                                                <svg
-                                                    className="-me-0.5 ms-2 h-4 w-4"
-                                                    xmlns="http://www.w3.org/2000/svg"
-                                                    viewBox="0 0 20 20"
-                                                    fill="currentColor"
-                                                >
-                                                    <path
-                                                        fillRule="evenodd"
-                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
-                                                        clipRule="evenodd"
-                                                    />
-                                                </svg>
-                                            </button>
-                                        </span>
-                                    </Dropdown.Trigger>
-                                    <Dropdown.Content width="56">
-                                        {isCustomer && customerAlerts && (
-                                            <>
-                                                <Dropdown.Button
-                                                    onClick={() =>
-                                                        openCustomerAlerts(
-                                                            "appointments",
-                                                        )
-                                                    }
-                                                >
-                                                    <span>
-                                                        Upcoming Appointments
-                                                    </span>
-                                                    {upcomingAppointmentAlerts.length >
-                                                        0 && (
-                                                        <span className="ms-2 shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
-                                                            {
-                                                                upcomingAppointmentAlerts.length
-                                                            }
-                                                        </span>
-                                                    )}
-                                                </Dropdown.Button>
-                                                <Dropdown.Button
-                                                    onClick={() =>
-                                                        openCustomerAlerts(
-                                                            "health",
-                                                        )
-                                                    }
-                                                >
-                                                    <span>
-                                                        Health Monitoring
-                                                    </span>
-                                                    {healthMonitoringAlerts.length >
-                                                        0 && (
-                                                        <span className="ms-2 shrink-0 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
-                                                            {
-                                                                healthMonitoringAlerts.length
-                                                            }
-                                                        </span>
-                                                    )}
-                                                </Dropdown.Button>
-                                            </>
-                                        )}
-                                        <Dropdown.Link
-                                            href={route("profile.edit")}
-                                        >
-                                            Profile
-                                        </Dropdown.Link>
-                                        <Dropdown.Link
-                                            href={route("logout")}
-                                            method="post"
-                                            as="button"
-                                        >
-                                            Log Out
-                                        </Dropdown.Link>
-                                    </Dropdown.Content>
-                                </Dropdown>
+                                <UserAccountMenu
+                                    user={user}
+                                    isCustomer={isCustomer}
+                                    customerAlerts={customerAlerts}
+                                    upcomingAppointmentAlerts={
+                                        upcomingAppointmentAlerts
+                                    }
+                                    healthMonitoringAlerts={
+                                        healthMonitoringAlerts
+                                    }
+                                    openCustomerAlerts={openCustomerAlerts}
+                                />
                             </div>
                         </div>
 
@@ -718,25 +841,10 @@ export default function AuthenticatedLayout({ header, children }) {
                 </div>
             </nav>
 
-            <AdminClinicMonitor />
+            {layoutAlerts}
+            {pageHeader}
 
-            {hasDeactivatedClinicOnly && (
-                <div className="border-b border-amber-200 bg-amber-50 px-4 py-3 text-center text-sm text-amber-900 sm:px-6 lg:px-8">
-                    Your assigned clinic has been deactivated by the
-                    administrator. Appointments, transactions, and other clinic
-                    activity are disabled until it is reactivated.
-                </div>
-            )}
-
-            {header && (
-                <header className="relative z-40 border-b border-white/60 bg-white/80 shadow-sm backdrop-blur-sm">
-                    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-                        {header}
-                    </div>
-                </header>
-            )}
-
-            <main className="relative z-0">{children}</main>
+            <main className="relative z-0 min-w-0 overflow-x-hidden">{children}</main>
 
             {isCustomer && customerAlerts && customerAlertModal && (
                 <CustomerAlertsModal

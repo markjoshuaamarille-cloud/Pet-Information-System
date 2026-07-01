@@ -75,7 +75,7 @@ class User extends Authenticatable
 
     public function canSignIn(): bool
     {
-        return $this->isCustomer() || $this->is_active;
+        return (bool) $this->is_active;
     }
 
     public function client(): BelongsTo

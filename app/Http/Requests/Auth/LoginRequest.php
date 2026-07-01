@@ -55,8 +55,12 @@ class LoginRequest extends FormRequest
         if ($user && ! $user->canSignIn()) {
             Auth::logout();
 
+            $message = $user->isCustomer()
+                ? 'Your account has been deactivated. Please contact an administrator.'
+                : 'Your account is pending approval. Please wait for an administrator to activate your account.';
+
             throw ValidationException::withMessages([
-                'email' => 'Your account is pending approval. Please wait for an administrator to activate your account.',
+                'email' => $message,
             ]);
         }
 
